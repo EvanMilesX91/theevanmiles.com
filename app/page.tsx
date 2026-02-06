@@ -14,22 +14,11 @@ declare global {
 
 export default function HomePage() {
   const [randomNumbers, setRandomNumbers] = useState('000000000');
-  const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorActive, setCursorActive] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Check if mobile - use null as initial state to prevent flash
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Random numbers animation
   useEffect(() => {
@@ -42,18 +31,36 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Force video autoplay
+  // Force video autoplay for both videos
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.play().catch((e) => {
-        console.log('Autoplay prevented:', e);
-      });
-    }
+    const playVideos = () => {
+      if (videoRef.current) {
+        videoRef.current.play().catch((e) => {
+          console.log('Background autoplay prevented:', e);
+        });
+      }
+      if (liveVideoRef.current) {
+        liveVideoRef.current.play().catch((e) => {
+          console.log('Live video autoplay prevented:', e);
+        });
+      }
+    };
+    
+    // Try to play immediately
+    playVideos();
+    
+    // Also try after a short delay (helps on mobile)
+    const timeout = setTimeout(playVideos, 500);
+    
+    return () => clearTimeout(timeout);
   }, []);
 
-  // Cursor follower (desktop only)
+  // Cursor follower (desktop only - using media query check)
   useEffect(() => {
-    if (isMobile === null || isMobile) return;
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    
+    if (!mediaQuery.matches) return;
+    
     const handleMouseMove = (e: MouseEvent) => {
       setCursorPos({ x: e.clientX, y: e.clientY });
       setCursorActive(true);
@@ -61,13 +68,15 @@ export default function HomePage() {
     const handleMouseLeave = () => {
       setCursorActive(false);
     };
+    
     window.addEventListener('mousemove', handleMouseMove);
     document.body.addEventListener('mouseleave', handleMouseLeave);
+    
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       document.body.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [isMobile]);
+  }, []);
 
   // Intersection Observer for card animations
   useEffect(() => {
@@ -86,7 +95,7 @@ export default function HomePage() {
     return () => observerRef.current?.disconnect();
   }, []);
 
-  // Sidebar/Profile content component - reused for mobile and desktop
+  // Sidebar/Profile content component
   const ProfileContent = () => (
     <>
       {/* Profile Picture */}
@@ -99,6 +108,7 @@ export default function HomePage() {
             fill
             sizes="128px"
             className="object-cover"
+            priority
           />
         </div>
       </div>
@@ -157,8 +167,13 @@ export default function HomePage() {
     </>
   );
 
-  // Show loading state until we know if mobile or desktop
-  const isLoading = isMobile === null;
+  const socialLinks = [
+    { name: 'Instagram', url: 'https://www.instagram.com/theevanmiles/' },
+    { name: 'TikTok', url: 'https://www.tiktok.com/@yungmiley' },
+    { name: 'SoundCloud', url: 'https://soundcloud.com/theevanmiles' },
+    { name: 'YouTube', url: 'https://www.youtube.com/@theevanmiles' },
+    { name: 'Spotify', url: 'https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l' }
+  ];
 
   return (
     <>
@@ -183,22 +198,20 @@ export default function HomePage() {
       {/* Vignette */}
       <div className="vignette-layer" />
 
-      {/* Cursor Follower - Desktop only */}
-      {isMobile === false && (
-        <div
-          className={`cursor-follower ${cursorActive ? 'active' : ''}`}
-          style={{
-            left: `${cursorPos.x}px`,
-            top: `${cursorPos.y}px`,
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
-      )}
+      {/* Cursor Follower - Desktop only via CSS */}
+      <div
+        className={`cursor-follower hidden lg:block ${cursorActive ? 'active' : ''}`}
+        style={{
+          left: `${cursorPos.x}px`,
+          top: `${cursorPos.y}px`,
+          transform: 'translate(-50%, -50%)',
+        }}
+      />
 
       {/* Content Layer */}
       <div className="content-layer min-h-screen font-mono">
-        {/* Random Numbers - Top Right */}
-        <div className="fixed top-4 right-4 z-40 rounded px-4 py-2"
+        {/* Random Numbers - Top Right - Hidden on mobile */}
+        <div className="fixed top-4 right-16 md:right-4 z-30 rounded px-4 py-2 hidden md:block"
           style={{
             background: 'rgba(24, 23, 33, 0.65)',
             backdropFilter: 'blur(12px)',
@@ -209,58 +222,49 @@ export default function HomePage() {
           </span>
         </div>
 
-        {/* DESKTOP ONLY: Fixed Left Sidebar */}
-        {isMobile === false && (
-          <aside
-            className="fixed top-0 left-0 h-screen z-40 overflow-y-auto"
-            style={{ 
-              width: '320px',
-              borderRight: '1px solid rgba(234, 233, 209, 0.25)',
-              background: 'rgba(24, 23, 33, 0.65)',
-              backdropFilter: 'blur(12px)'
-            }}
-          >
-            <div className="h-full p-10 flex flex-col gap-10">
-              {/* Logo placeholder */}
-              <div className="text-center">
-                <h1 className="text-2xl font-bold tracking-widest"
-                  style={{ color: 'rgba(234, 233, 209, 0.92)' }}>
-                </h1>
-              </div>
-
-              <ProfileContent />
-
-              {/* Logo Again (Bottom) */}
-              <div className="mt-auto text-center">
-                <p className="text-xs tracking-widest"
-                  style={{ color: 'rgba(234, 233, 209, 0.60)' }}>
-                  EVAN MILES
-                </p>
-              </div>
-            </div>
-          </aside>
-        )}
-
-        {/* Main Content */}
-        <div 
-          className={isMobile === false ? 'ml-[320px]' : ''}
-          style={{ opacity: isLoading ? 0 : 1, transition: 'opacity 0.2s ease-in-out' }}
+        {/* DESKTOP ONLY: Fixed Left Sidebar - Using CSS hidden/block */}
+        <aside
+          className="fixed top-0 left-0 h-screen z-40 overflow-y-auto hidden lg:block"
+          style={{ 
+            width: '320px',
+            borderRight: '1px solid rgba(234, 233, 209, 0.25)',
+            background: 'rgba(24, 23, 33, 0.65)',
+            backdropFilter: 'blur(12px)'
+          }}
         >
-          <div className="container mx-auto px-4 lg:px-6 pt-6 lg:pt-20 pb-8 max-w-6xl">
+          <div className="h-full p-10 flex flex-col gap-10">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold tracking-widest"
+                style={{ color: 'rgba(234, 233, 209, 0.92)' }}>
+              </h1>
+            </div>
+
+            <ProfileContent />
+
+            <div className="mt-auto text-center">
+              <p className="text-xs tracking-widest"
+                style={{ color: 'rgba(234, 233, 209, 0.60)' }}>
+                EVAN MILES
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content - margin on desktop only via CSS */}
+        <div className="lg:ml-[320px]">
+          <div className="container mx-auto px-4 lg:px-6 pt-20 lg:pt-20 pb-8 max-w-6xl">
             <div className="space-y-6 lg:space-y-12">
 
-              {/* MOBILE ONLY: Profile Section (replaces sidebar) */}
-              {isMobile === true && (
-                <section className="glossy-border rounded-2xl p-6 space-y-6">
-                  <ProfileContent />
-                  <div className="text-center pt-2">
-                    <p className="text-xs tracking-widest"
-                      style={{ color: 'rgba(234, 233, 209, 0.60)' }}>
-                      EVAN MILES
-                    </p>
-                  </div>
-                </section>
-              )}
+              {/* MOBILE ONLY: Profile Section - Using CSS hidden/block */}
+              <section className="glossy-border rounded-2xl p-6 space-y-6 lg:hidden">
+                <ProfileContent />
+                <div className="text-center pt-2">
+                  <p className="text-xs tracking-widest"
+                    style={{ color: 'rgba(234, 233, 209, 0.60)' }}>
+                    EVAN MILES
+                  </p>
+                </div>
+              </section>
 
               {/* Evan Miles (Live) Section */}
               <section className="glossy-border rounded-2xl p-6 lg:p-10">
@@ -273,6 +277,7 @@ export default function HomePage() {
                 </h2>
                 <div className="aspect-video">
                   <video 
+                    ref={liveVideoRef}
                     className="w-full h-full rounded-xl"
                     autoPlay
                     muted
@@ -371,22 +376,14 @@ export default function HomePage() {
             }}>
             <div className="container mx-auto px-4 lg:px-6 max-w-6xl">
               <div className="flex flex-wrap justify-center gap-4 lg:gap-6 mb-6">
-                {[
-                  { name: 'Instagram', url: 'https://www.instagram.com/theevanmiles/' },
-                  { name: 'TikTok', url: 'https://www.tiktok.com/@yungmiley' },
-                  { name: 'SoundCloud', url: 'https://soundcloud.com/theevanmiles' },
-                  { name: 'YouTube', url: 'https://www.youtube.com/@theevanmiles' },
-                  { name: 'Spotify', url: 'https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l' }
-                ].map((link) => (
+                {socialLinks.map((link) => (
                   <a
                     key={link.name}
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-semibold transition-colors duration-300"
+                    className="text-sm font-semibold transition-colors duration-300 hover:text-white"
                     style={{ color: 'rgba(234, 233, 209, 0.70)' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.95)'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.70)'}
                   >
                     {link.name}
                   </a>

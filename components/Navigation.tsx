@@ -7,24 +7,9 @@ export default function Navigation() {
   const pathname = usePathname();
   const [currentTime, setCurrentTime] = useState('00:00');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [mounted, setMounted] = useState(false);
   
   // Include Press in styled nav pages - gets orange dot and system status
   const isStyledNav = pathname === '/' || pathname === '/mixes' || pathname === '/contact' || pathname === '/downloads' || pathname === '/press';
-  
-  // Check if mobile and set mounted
-  useEffect(() => {
-    setIsMobile(window.innerWidth < 768);
-    setMounted(true);
-    
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   // Close menu when route changes
   useEffect(() => {
@@ -89,28 +74,6 @@ export default function Navigation() {
   // Default styling for other pages
   const defaultClass = isStyledNav ? '' : 'bg-black/50 backdrop-blur-md border-b border-white/50';
 
-  // Don't render mobile-specific elements until mounted to prevent flickering
-  if (!mounted) {
-    return (
-      <nav 
-        className={`fixed top-0 left-0 right-0 z-50 ${defaultClass}`}
-        style={isStyledNav ? styledNavStyles : {}}
-      >
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="flex items-center justify-between h-16">
-            <Link 
-              href="/" 
-              className="text-lg md:text-xl font-bold tracking-widest hover:opacity-80 transition-opacity"
-              style={isStyledNav ? { color: 'rgba(234, 233, 209, 0.92)' } : {}}
-            >
-              EVAN MILES
-            </Link>
-          </div>
-        </div>
-      </nav>
-    );
-  }
-
   return (
     <>
       <nav 
@@ -139,7 +102,6 @@ export default function Navigation() {
                   className="w-2 h-2 rounded-full pulse-orange"
                   style={{ background: '#cf3a00' }}
                 />
-                <span className="hidden sm:inline">system online · </span>
                 <span>{currentTime}</span>
               </div>
             )}
@@ -206,38 +168,35 @@ export default function Navigation() {
             </ul>
 
             {/* Right: Mobile Hamburger Button */}
-            {isMobile && (
-              <button
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="flex flex-col justify-center items-center w-10 h-10 rounded-lg transition-all relative z-[100]"
-                style={{
-                  border: '1px solid rgba(234, 233, 209, 0.35)',
-                  background: 'rgba(24, 23, 33, 0.85)',
-                }}
-                aria-label="Toggle menu"
-              >
-                <span 
-                  className={`block w-5 h-0.5 transition-all duration-300 ${menuOpen ? 'rotate-45 translate-y-1.5' : ''}`}
-                  style={{ background: 'rgba(234, 233, 209, 0.9)' }}
-                />
-                <span 
-                  className={`block w-5 h-0.5 my-1 transition-all duration-300 ${menuOpen ? 'opacity-0' : ''}`}
-                  style={{ background: 'rgba(234, 233, 209, 0.9)' }}
-                />
-                <span 
-                  className={`block w-5 h-0.5 transition-all duration-300 ${menuOpen ? '-rotate-45 -translate-y-1.5' : ''}`}
-                  style={{ background: 'rgba(234, 233, 209, 0.9)' }}
-                />
-              </button>
-            )}
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="md:hidden flex flex-col justify-center items-center w-10 h-10 rounded-lg transition-all relative z-[100]"
+              style={{
+                border: '1px solid rgba(234, 233, 209, 0.35)',
+                background: 'rgba(24, 23, 33, 0.85)',
+              }}
+              aria-label="Toggle menu"
+            >
+              {menuOpen ? (
+                // X icon when menu is open
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 4L16 16M4 16L16 4" stroke="rgba(234, 233, 209, 0.9)" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              ) : (
+                // Hamburger icon when menu is closed
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 5H17M3 10H17M3 15H17" stroke="rgba(234, 233, 209, 0.9)" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </nav>
 
       {/* Mobile Menu Overlay */}
-      {isMobile && menuOpen && (
+      {menuOpen && (
         <div 
-          className="fixed inset-0 z-[90]"
+          className="fixed inset-0 z-[90] md:hidden"
           style={{
             background: 'rgba(24, 23, 33, 0.98)',
             backdropFilter: 'blur(20px)',
