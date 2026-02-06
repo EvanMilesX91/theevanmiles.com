@@ -1,0 +1,393 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply font-mono text-white;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Background Images */
+.homepage-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/EM-Web-Homepage-BG.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+/* HOMEPAGE ONLY - Atmosphere breathing layer */
+@keyframes atmosphere-drift {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(8%, -5%) scale(1.05);
+  }
+  66% {
+    transform: translate(-6%, 8%) scale(0.98);
+  }
+}
+
+.atmosphere-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.atmosphere-gradient-1 {
+  position: absolute;
+  width: 800px;
+  height: 800px;
+  left: 30%;
+  top: 20%;
+  background: radial-gradient(circle, rgba(66, 36, 85, 0.22) 0%, transparent 70%);
+  animation: atmosphere-drift 110s ease-in-out infinite;
+  filter: blur(60px);
+}
+
+.atmosphere-gradient-2 {
+  position: absolute;
+  width: 700px;
+  height: 700px;
+  right: 25%;
+  bottom: 15%;
+  background: radial-gradient(circle, rgba(66, 36, 85, 0.18) 0%, transparent 70%);
+  animation: atmosphere-drift 95s ease-in-out infinite reverse;
+  animation-delay: -30s;
+  filter: blur(70px);
+}
+
+.atmosphere-gradient-3 {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  left: 60%;
+  top: 50%;
+  background: radial-gradient(circle, rgba(66, 36, 85, 0.15) 0%, transparent 70%);
+  animation: atmosphere-drift 120s ease-in-out infinite;
+  animation-delay: -60s;
+  filter: blur(80px);
+}
+
+/* HOMEPAGE ONLY - Noise texture */
+@keyframes noise-step {
+  0% { transform: translate(0, 0); }
+  10% { transform: translate(-2%, 3%); }
+  20% { transform: translate(3%, -2%); }
+  30% { transform: translate(-3%, 2%); }
+  40% { transform: translate(2%, -3%); }
+  50% { transform: translate(-2%, -2%); }
+  60% { transform: translate(3%, 2%); }
+  70% { transform: translate(-3%, -3%); }
+  80% { transform: translate(2%, 3%); }
+  90% { transform: translate(-2%, -3%); }
+  100% { transform: translate(0, 0); }
+}
+
+.noise-layer {
+  position: fixed;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.08;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  animation: noise-step 10s steps(10) infinite;
+}
+
+/* HOMEPAGE ONLY - Vignette */
+.vignette-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: radial-gradient(circle at center, transparent 30%, rgba(0, 0, 0, 0.20) 100%);
+}
+
+/* HOMEPAGE ONLY - Orange pulse */
+@keyframes pulse-orange {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.pulse-orange {
+  animation: pulse-orange 3s ease-in-out infinite;
+}
+
+/* HOMEPAGE ONLY - Cursor follower */
+.cursor-follower {
+  position: fixed;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #cf3a00;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  mix-blend-mode: screen;
+  filter: blur(12px);
+}
+
+.cursor-follower.active {
+  opacity: 0.6;
+}
+
+/* HOMEPAGE ONLY - Card fade-in */
+@keyframes card-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.card-animate {
+  animation: card-fade-in 600ms ease-out forwards;
+}
+
+.animate-on-scroll {
+  opacity: 0;
+}
+
+/* HOMEPAGE ONLY - Content layer */
+.content-layer {
+  position: relative;
+  z-index: 10;
+}
+
+/* HOMEPAGE ONLY - Card border - left and bottom only, orange to bone gradient, rounded */
+.glossy-border {
+  position: relative;
+  backdrop-filter: blur(12px);
+  border: none;
+  box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.35);
+  z-index: 0;
+}
+
+/* Full gradient backdrop - peeks out 2.5px on left and bottom */
+.glossy-border::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -2.5px;
+  right: 0;
+  bottom: -2.5px;
+  background: linear-gradient(
+    to bottom right,
+    rgba(234, 233, 209, 0.85) 0%,
+    rgba(207, 58, 0, 0.7) 50%,
+    #cf3a00 100%
+  );
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Card face - covers the pseudo except left and bottom edges */
+.glossy-border::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #181721;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* MIXES - Wide gradient border variant (5px left + bottom) */
+.glossy-border-wide {
+  position: relative;
+  backdrop-filter: blur(12px);
+  border: none;
+  box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.35);
+  z-index: 0;
+}
+
+.glossy-border-wide::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -5px;
+  right: 0;
+  bottom: -5px;
+  background: linear-gradient(
+    to bottom right,
+    rgba(234, 233, 209, 0.85) 0%,
+    rgba(207, 58, 0, 0.7) 50%,
+    #cf3a00 100%
+  );
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.glossy-border-wide::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #181721;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* HOMEPAGE ONLY - WhatsApp box - same gradient border */
+.glossy-border-gradient {
+  position: relative;
+  background: rgba(24, 23, 33, 0.65);
+  backdrop-filter: blur(12px);
+  border: none;
+  box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.35);
+  z-index: 0;
+}
+
+.glossy-border-gradient::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -2.5px;
+  right: 0;
+  bottom: -2.5px;
+  background: linear-gradient(
+    to bottom right,
+    rgba(234, 233, 209, 0.85) 0%,
+    rgba(207, 58, 0, 0.7) 50%,
+    #cf3a00 100%
+  );
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.glossy-border-gradient::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(24, 23, 33, 0.65);
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@layer components {
+  /* Button styles */
+  .btn-primary {
+    @apply border border-white rounded-lg px-6 py-3 bg-white text-black font-semibold hover:bg-black hover:text-white transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply border border-white rounded-lg px-6 py-3 bg-black text-white font-semibold hover:bg-white hover:text-black transition-colors;
+  }
+  
+  /* Card styles */
+  .card {
+    @apply border border-white rounded-lg p-6 bg-black/40 backdrop-blur-sm;
+  }
+  
+  /* Input styles */
+  .input {
+    @apply w-full border border-white rounded-lg px-4 py-2 bg-black/60 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50;
+  }
+  
+  /* Textarea styles */
+  .textarea {
+    @apply w-full border border-white rounded-lg px-4 py-2 bg-black/60 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 min-h-[120px];
+  }
+  
+  /* Select styles */
+  .select {
+    @apply w-full border border-white rounded-lg px-4 py-2 bg-black/60 text-white focus:outline-none focus:ring-2 focus:ring-white/50;
+  }
+}
+
+/* Smooth scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* DOWNLOADS PAGE - Slow orange pulse for locked files (3s cycle) */
+@keyframes pulse-orange-slow {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+/* DOWNLOADS PAGE - Quick fade-in for access granted checkmark */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

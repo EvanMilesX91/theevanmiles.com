@@ -1,0 +1,15 @@
+.emailInput {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  caret-color: #000000 !important;
+}
+
+.emailInput::placeholder {
+  color: #6b7280 !important;
+  -webkit-text-fill-color: #6b7280 !important;
+}
+
+.emailInput:focus {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
