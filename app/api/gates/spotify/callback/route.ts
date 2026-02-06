@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Update gate completion
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await supabaseAdmin!
       .from('gate_completions')
       .select('*')
       .eq('gate_id', gate_id)
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (existing) {
-      await supabaseAdmin
+      await supabaseAdmin!
         .from('gate_completions')
         .update({
           completed_actions: {
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         })
         .eq('id', existing.id);
     } else {
-      await supabaseAdmin.from('gate_completions').insert({
+      await supabaseAdmin!.from('gate_completions').insert({
         gate_id,
         user_email: email,
         completed_actions: { spotify_follow: true },
