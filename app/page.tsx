@@ -19,9 +19,7 @@ export default function HomePage() {
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -29,28 +27,20 @@ export default function HomePage() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const numbers = Math.floor(Math.random() * 1000000000)
-        .toString()
-        .padStart(9, '0');
-      setRandomNumbers(numbers);
+      setRandomNumbers(Math.floor(Math.random() * 1000000000).toString().padStart(9, '0'));
     }, 100);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (isMobile) return;
-    
     const handleMouseMove = (e: MouseEvent) => {
       setCursorPos({ x: e.clientX, y: e.clientY });
       setCursorActive(true);
     };
-    const handleMouseLeave = () => {
-      setCursorActive(false);
-    };
-    
+    const handleMouseLeave = () => setCursorActive(false);
     window.addEventListener('mousemove', handleMouseMove);
     document.body.addEventListener('mouseleave', handleMouseLeave);
-    
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       document.body.removeEventListener('mouseleave', handleMouseLeave);
@@ -61,23 +51,19 @@ export default function HomePage() {
     observerRef.current = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('card-animate');
-          }
+          if (entry.isIntersecting) entry.target.classList.add('card-animate');
         });
       },
       { threshold: 0.1, rootMargin: '50px' }
     );
-    const cards = document.querySelectorAll('.animate-on-scroll');
-    cards.forEach((card) => observerRef.current?.observe(card));
+    document.querySelectorAll('.animate-on-scroll').forEach((card) => observerRef.current?.observe(card));
     return () => observerRef.current?.disconnect();
   }, []);
 
   const ProfileContent = () => (
     <>
       <div className="flex justify-center">
-        <div className="relative w-32 h-32 rounded-full overflow-hidden"
-          style={{ border: '2px solid rgba(234, 233, 209, 0.35)' }}>
+        <div className="relative w-32 h-32 rounded-full overflow-hidden" style={{ border: '2px solid rgba(234, 233, 209, 0.35)' }}>
           <Image
             src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/EM-ProfilePic.jpg"
             alt="Evan Miles"
@@ -88,16 +74,11 @@ export default function HomePage() {
           />
         </div>
       </div>
-      <p className="text-sm leading-relaxed text-center lg:text-justify"
-        style={{ 
-          color: 'rgba(234, 233, 209, 0.75)',
-          lineHeight: '1.7'
-        }}>
+      <p className="text-sm leading-relaxed text-center lg:text-justify" style={{ color: 'rgba(234, 233, 209, 0.75)', lineHeight: '1.7' }}>
         Evan Miles is an electronic artist and producer from Waterford, Ireland, crafting emotionally driven, dancefloor-focused club music. With over 4 million streams, his work has been supported by Martin Garrix, RÜFÜS DU SOL, Christian Löffler, and Sasha, alongside airplay on BBC Radio 1.
       </p>
       <div className="rounded-lg p-5 space-y-4 glossy-border-gradient">
-        <p className="text-sm text-center"
-          style={{ color: 'rgba(234, 233, 209, 0.80)' }}>
+        <p className="text-sm text-center" style={{ color: 'rgba(234, 233, 209, 0.80)' }}>
           Join The Groupchat for more
         </p>
         <a
@@ -138,63 +119,67 @@ export default function HomePage() {
     </>
   );
 
-  const socialLinks = [
-    { name: 'Instagram', url: 'https://www.instagram.com/theevanmiles/' },
-    { name: 'TikTok', url: 'https://www.tiktok.com/@yungmiley' },
-    { name: 'SoundCloud', url: 'https://soundcloud.com/theevanmiles' },
-    { name: 'YouTube', url: 'https://www.youtube.com/@EvanMiles' },
-    { name: 'Spotify', url: 'https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l' }
-  ];
-
   return (
-    <div className="min-h-screen bg-[#181721] text-[#eae9d1] font-mono relative">
-      {/* Video Background - NOT wrapped in div, matches downloads page */}
+    <>
+      {/* Video Background */}
       <video
         autoPlay
-        muted
         loop
+        muted
         playsInline
         className="fixed inset-0 w-full h-full object-cover"
         style={{ zIndex: 0, opacity: 0.4 }}
       >
-        <source 
-          src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4" 
-          type="video/mp4" 
+        <source
+          src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4"
+          type="video/mp4"
         />
       </video>
 
       {/* Vignette */}
-      <div className="vignette-layer" />
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.20) 100%)',
+          zIndex: 3,
+        }}
+      />
 
-      {/* Cursor Follower - Desktop only */}
+      {/* Cursor follower */}
       {!isMobile && (
         <div
           className={`cursor-follower ${cursorActive ? 'active' : ''}`}
           style={{
-            left: cursorPos.x - 20,
-            top: cursorPos.y - 20,
+            left: `${cursorPos.x}px`,
+            top: `${cursorPos.y}px`,
+            transform: 'translate(-50%, -50%)',
           }}
         />
       )}
 
-      {/* Main Content */}
-      <div className="relative" style={{ zIndex: 10 }}>
-        {/* Random Numbers - Top Right - Desktop only */}
-        <div className="fixed top-4 right-4 z-30 rounded px-4 py-2 hidden lg:block"
+      {/* Main content */}
+      <div
+        className="relative min-h-screen font-mono"
+        style={{ zIndex: 4, color: '#eae9d1' }}
+      >
+        {/* Random Numbers - Desktop only */}
+        <div
+          className="fixed top-4 right-4 z-30 rounded px-4 py-2 hidden lg:block"
           style={{
             background: 'rgba(24, 23, 33, 0.65)',
             backdropFilter: 'blur(12px)',
             border: '1px solid rgba(234, 233, 209, 0.30)'
-          }}>
+          }}
+        >
           <span style={{ color: 'rgba(234, 233, 209, 0.70)' }} className="text-sm tracking-wider">
             {randomNumbers}
           </span>
         </div>
 
-        {/* DESKTOP ONLY: Fixed Left Sidebar */}
+        {/* DESKTOP: Fixed Left Sidebar */}
         <aside
           className="fixed top-0 left-0 h-screen z-40 overflow-y-auto hidden lg:block"
-          style={{ 
+          style={{
             width: '320px',
             borderRight: '1px solid rgba(234, 233, 209, 0.25)',
             background: 'rgba(24, 23, 33, 0.65)',
@@ -203,18 +188,11 @@ export default function HomePage() {
         >
           <div className="h-full p-10 flex flex-col gap-10">
             <div className="text-center">
-              <h1 className="text-2xl font-bold tracking-widest"
-                style={{ color: 'rgba(234, 233, 209, 0.92)' }}>
-              </h1>
+              <h1 className="text-2xl font-bold tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.92)' }}></h1>
             </div>
-
             <ProfileContent />
-
             <div className="mt-auto text-center">
-              <p className="text-xs tracking-widest"
-                style={{ color: 'rgba(234, 233, 209, 0.60)' }}>
-                EVAN MILES
-              </p>
+              <p className="text-xs tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.60)' }}>EVAN MILES</p>
             </div>
           </div>
         </aside>
@@ -224,100 +202,53 @@ export default function HomePage() {
           <div className="container mx-auto px-4 lg:px-6 pt-20 lg:pt-20 pb-8 max-w-6xl">
             <div className="space-y-6 lg:space-y-12">
 
-              {/* MOBILE ONLY: Profile Section */}
+              {/* MOBILE: Profile Section */}
               <section className="glossy-border rounded-2xl p-6 space-y-6 lg:hidden">
                 <ProfileContent />
                 <div className="text-center pt-2">
-                  <p className="text-xs tracking-widest"
-                    style={{ color: 'rgba(234, 233, 209, 0.60)' }}>
-                    EVAN MILES
-                  </p>
+                  <p className="text-xs tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.60)' }}>EVAN MILES</p>
                 </div>
               </section>
 
-              {/* Evan Miles (Live) Section */}
+              {/* COMMENTED OUT FOR TESTING - Evan Miles Live */}
+              {/*
               <section className="glossy-border rounded-2xl p-6 lg:p-10">
-                <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide"
-                  style={{ 
-                    color: 'rgba(234, 233, 209, 0.92)',
-                    letterSpacing: '0.02em'
-                  }}>
+                <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide" style={{ color: 'rgba(234, 233, 209, 0.92)', letterSpacing: '0.02em' }}>
                   Evan Miles (Live)
                 </h2>
                 <div className="aspect-video">
-                  <video 
-                    className="w-full h-full rounded-xl"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    controls
-                  >
-                    <source 
-                      src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/evan-miles-live.mp4" 
-                      type="video/mp4" 
-                    />
-                    Your browser does not support the video tag.
+                  <video className="w-full h-full rounded-xl" autoPlay muted loop playsInline controls>
+                    <source src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/evan-miles-live.mp4" type="video/mp4" />
                   </video>
                 </div>
               </section>
+              */}
 
-              {/* Two Column Section */}
+              {/* Two Column */}
               <div className="grid lg:grid-cols-2 gap-6 lg:gap-12">
-                {/* Latest Release */}
                 <section className="animate-on-scroll glossy-border rounded-2xl p-6 lg:p-10">
-                  <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide"
-                    style={{ 
-                      color: 'rgba(234, 233, 209, 0.92)',
-                      letterSpacing: '0.02em'
-                    }}>
+                  <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide" style={{ color: 'rgba(234, 233, 209, 0.92)', letterSpacing: '0.02em' }}>
                     Latest Release
                   </h2>
-                  <iframe
-                    style={{ borderRadius: '12px' }}
-                    src="https://open.spotify.com/embed/artist/13cCyqArWrwa6aq9enBy8l?utm_source=generator"
-                    width="100%"
-                    height="352"
-                    frameBorder="0"
-                    allowFullScreen
-                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                    loading="lazy"
-                  ></iframe>
+                  <iframe style={{ borderRadius: '12px' }} src="https://open.spotify.com/embed/artist/13cCyqArWrwa6aq9enBy8l?utm_source=generator" width="100%" height="352" frameBorder="0" allowFullScreen allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
                 </section>
-
-                {/* What I'm Feeling Now */}
                 <section className="animate-on-scroll glossy-border rounded-2xl p-6 lg:p-10">
-                  <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide"
-                    style={{ 
-                      color: 'rgba(234, 233, 209, 0.92)',
-                      letterSpacing: '0.02em'
-                    }}>
+                  <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide" style={{ color: 'rgba(234, 233, 209, 0.92)', letterSpacing: '0.02em' }}>
                     What I&apos;m Feeling Now
                   </h2>
-                  <iframe
-                    style={{ borderRadius: '12px' }}
-                    src="https://open.spotify.com/embed/playlist/1UWb5pz1pakw4UCgmj0AR8?utm_source=generator"
-                    width="100%"
-                    height="352"
-                    frameBorder="0"
-                    allowFullScreen
-                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                    loading="lazy"
-                  ></iframe>
+                  <iframe style={{ borderRadius: '12px' }} src="https://open.spotify.com/embed/playlist/1UWb5pz1pakw4UCgmj0AR8?utm_source=generator" width="100%" height="352" frameBorder="0" allowFullScreen allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
                 </section>
               </div>
 
-              {/* Instagram Section */}
+              {/* Instagram - BEHOLD WIDGET COMMENTED OUT FOR TESTING */}
               <section className="animate-on-scroll glossy-border rounded-2xl p-6 lg:p-10">
-                <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide"
-                  style={{ 
-                    color: 'rgba(234, 233, 209, 0.92)',
-                    letterSpacing: '0.02em'
-                  }}>
+                <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide" style={{ color: 'rgba(234, 233, 209, 0.92)', letterSpacing: '0.02em' }}>
                   Instagram
                 </h2>
                 <div className="space-y-6">
-                  <behold-widget feed-id="2Erb63jEyG1F23oxucNP"></behold-widget>
+                  {/* COMMENTED OUT FOR TESTING */}
+                  {/* <behold-widget feed-id="2Erb63jEyG1F23oxucNP"></behold-widget> */}
+                  <p style={{ color: 'rgba(234, 233, 209, 0.5)' }}>Instagram widget temporarily disabled for testing</p>
                   <a
                     href="https://www.instagram.com/theevanmiles/"
                     target="_blank"
@@ -337,45 +268,70 @@ export default function HomePage() {
           </div>
 
           {/* Footer */}
-          <footer 
-            className="py-8 mt-6 lg:mt-12"
-            style={{ 
+          <footer
+            className="font-mono"
+            style={{
+              marginTop: '80px',
               borderTop: '1px solid rgba(234, 233, 209, 0.20)',
               background: 'rgba(24, 23, 33, 0.50)',
+              padding: '32px 24px',
             }}
           >
-            <div className="container mx-auto px-4 lg:px-6 max-w-6xl">
-              <div className="flex flex-wrap justify-center gap-4 lg:gap-6 mb-4">
-                {socialLinks.map((link) => (
+            <div style={{ maxWidth: '72rem', margin: '0 auto', textAlign: 'center' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  gap: '24px',
+                  marginBottom: '16px',
+                }}
+              >
+                {[
+                  { label: 'Instagram', href: 'https://www.instagram.com/theevanmiles/' },
+                  { label: 'TikTok', href: 'https://www.tiktok.com/@yungmiley' },
+                  { label: 'SoundCloud', href: 'https://soundcloud.com/theevanmiles' },
+                  { label: 'YouTube', href: 'https://www.youtube.com/@EvanMiles' },
+                  { label: 'Spotify', href: 'https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l' },
+                ].map((link) => (
                   <a
-                    key={link.name}
-                    href={link.url}
+                    key={link.label}
+                    href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-semibold text-sm transition-colors duration-200"
-                    style={{ color: 'rgba(234, 233, 209, 0.70)' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.95)'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.70)'}
+                    className="font-mono font-semibold"
+                    style={{
+                      color: 'rgba(234, 233, 209, 0.70)',
+                      textDecoration: 'none',
+                      transition: 'color 0.2s',
+                      fontWeight: 600,
+                    }}
+                    onMouseEnter={(e) =>
+                      ((e.target as HTMLAnchorElement).style.color = 'rgba(234, 233, 209, 0.95)')
+                    }
+                    onMouseLeave={(e) =>
+                      ((e.target as HTMLAnchorElement).style.color = 'rgba(234, 233, 209, 0.70)')
+                    }
                   >
-                    {link.name}
+                    {link.label}
                   </a>
                 ))}
               </div>
-              <div className="text-center">
-                <Link
-                  href="/privacy"
-                  className="text-xs transition-colors duration-200"
-                  style={{ color: 'rgba(234, 233, 209, 0.50)' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.70)'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.50)'}
-                >
-                  Privacy Policy
-                </Link>
-              </div>
+              <a
+                href="/privacy"
+                className="font-mono"
+                style={{
+                  color: 'rgba(234, 233, 209, 0.50)',
+                  fontSize: '0.75rem',
+                  textDecoration: 'none',
+                }}
+              >
+                Privacy Policy
+              </a>
             </div>
           </footer>
         </div>
       </div>
-    </div>
+    </>
   );
 }
