@@ -26,20 +26,24 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'Evan Miles' }],
   creator: 'Evan Miles',
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png',
+  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: 'https://theevanmiles.com',
     title: 'Evan Miles | Electronic Music Producer & DJ',
     description:
-      'Official website of Evan Miles - electronic music producer and DJ',
+      'Website of Evan Miles - electronic music producer and DJ',
     siteName: 'Evan Miles',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Evan Miles | Electronic Music Producer & DJ',
     description:
-      'Official website of Evan Miles - electronic music producer and DJ',
+      'Website of Evan Miles - electronic music producer and DJ',
   },
 };
 
