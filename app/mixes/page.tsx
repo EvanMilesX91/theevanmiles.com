@@ -146,7 +146,7 @@ export default function MixesPage() {
           {mixes.map((mix, i) => (
             <div
               key={i}
-              className={`glossy-border-wide ${i === 0 ? '' : 'animate-on-scroll'}`}
+              className={`glossy-border-wide mixcloud-card ${i === 0 ? '' : 'animate-on-scroll'}`}
               style={{
                 borderRadius: '16px',
                 padding: '40px',
@@ -158,7 +158,9 @@ export default function MixesPage() {
                 height="120"
                 src={mix.src}
                 frameBorder="0"
-                allow="encrypted-media; fullscreen; autoplay; idle-detection; speaker-selection; web-share;"
+                allow="autoplay; encrypted-media; fullscreen"
+                allowFullScreen
+                loading="lazy"
                 style={{ borderRadius: '8px', position: 'relative', zIndex: 1 }}
               />
             </div>

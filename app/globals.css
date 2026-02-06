@@ -327,6 +327,13 @@ html, body {
   pointer-events: none;
 }
 
+@media (max-width: 1023px) {
+  .mixcloud-card {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
 /* HOMEPAGE ONLY - WhatsApp box - same gradient border */
 .glossy-border-gradient {
   position: relative;
