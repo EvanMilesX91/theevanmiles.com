@@ -109,10 +109,12 @@ export default function HomePage() {
         {/* WhatsApp - NO JS hover handlers */}
         <a
           href="https://chat.whatsapp.com/Ii2btqwN8oR4uRnnezEJfu"
-          target="_blank"
-          rel="noopener noreferrer"
           className="whatsapp-btn block w-full rounded-lg px-4 py-2 text-center text-sm font-semibold"
-          onTouchEnd={handleLinkTouch('https://chat.whatsapp.com/Ii2btqwN8oR4uRnnezEJfu')}
+          onTouchStart={(e) => {
+            markTouch();
+            e.preventDefault();
+            window.location.href = 'https://chat.whatsapp.com/Ii2btqwN8oR4uRnnezEJfu';
+          }}
           onClick={handleExternalClick}
         >
           WhatsApp

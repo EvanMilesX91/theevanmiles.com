@@ -1,10 +1,11 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 export default function Navigation() {
   const pathname = usePathname();
+  const router = useRouter();
   const [currentTime, setCurrentTime] = useState('00:00');
   const [menuOpen, setMenuOpen] = useState(false);
   const lastTouchRef = useRef(0);
@@ -69,6 +70,22 @@ export default function Navigation() {
       return;
     }
     toggleMenu();
+  };
+
+  const handleNavTouch = (href: string) => (e: React.TouchEvent<HTMLAnchorElement>) => {
+    markTouch();
+    e.preventDefault();
+    setMenuOpen(false);
+    router.push(href);
+  };
+
+  const handleNavClick = (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (isRecentTouch()) {
+      e.preventDefault();
+      return;
+    }
+    setMenuOpen(false);
+    router.push(href);
   };
 
   useEffect(() => {
@@ -197,7 +214,7 @@ export default function Navigation() {
                 className="text-xl font-light"
                 style={{ color: 'rgba(234, 233, 209, 0.9)' }}
               >
-                {menuOpen ? 'X' : '☰'}
+                {menuOpen ? 'X' : 'MENU'}
               </span>
             </button>
           </div>
@@ -226,7 +243,8 @@ export default function Navigation() {
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      onClick={() => setMenuOpen(false)}
+                      onTouchEnd={handleNavTouch(link.href)}
+                      onClick={handleNavClick(link.href)}
                       className="relative text-2xl font-bold tracking-wide flex items-center gap-3 py-3 px-6"
                       style={{ 
                         color: isActive 
