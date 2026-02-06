@@ -15,7 +15,7 @@ export default function HomePage() {
   const [randomNumbers, setRandomNumbers] = useState('000000000');
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorActive, setCursorActive] = useState(false);
-  const [isMobile, setIsMobile] = useState(true); // Default to mobile to avoid flash
+  const [isMobile, setIsMobile] = useState(true);
   const [mounted, setMounted] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -83,26 +83,12 @@ export default function HomePage() {
         <p className="text-sm text-center" style={{ color: 'rgba(234, 233, 209, 0.80)' }}>
           Join The Groupchat for more
         </p>
+        {/* WhatsApp - NO JS hover handlers */}
         <a
           href="https://chat.whatsapp.com/Ii2btqwN8oR4uRnnezEJfu"
           target="_blank"
           rel="noopener noreferrer"
-          className="block w-full rounded-lg px-4 py-2 text-center text-sm font-semibold transition-all duration-300"
-          style={{
-            border: '1px solid rgba(234, 233, 209, 0.35)',
-            background: 'rgba(234, 233, 209, 0.08)',
-            color: 'rgba(234, 233, 209, 0.92)'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#cf3a00';
-            e.currentTarget.style.borderColor = '#cf3a00';
-            e.currentTarget.style.color = '#eae9d1';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(234, 233, 209, 0.08)';
-            e.currentTarget.style.borderColor = 'rgba(234, 233, 209, 0.35)';
-            e.currentTarget.style.color = 'rgba(234, 233, 209, 0.92)';
-          }}
+          className="whatsapp-btn block w-full rounded-lg px-4 py-2 text-center text-sm font-semibold"
         >
           WhatsApp
         </a>
@@ -123,6 +109,47 @@ export default function HomePage() {
 
   return (
     <>
+      {/* CSS for hover states - NO JS needed */}
+      <style jsx global>{`
+        .whatsapp-btn {
+          border: 1px solid rgba(234, 233, 209, 0.35);
+          background: rgba(234, 233, 209, 0.08);
+          color: rgba(234, 233, 209, 0.92);
+          transition: all 0.3s;
+        }
+        .whatsapp-btn:hover {
+          background: #cf3a00;
+          border-color: #cf3a00;
+          color: #eae9d1;
+        }
+        .social-link {
+          color: rgba(234, 233, 209, 0.70);
+          text-decoration: none;
+          transition: color 0.2s;
+          font-weight: 600;
+        }
+        .social-link:hover {
+          color: rgba(234, 233, 209, 0.95);
+        }
+        .privacy-link {
+          color: rgba(234, 233, 209, 0.50);
+          font-size: 0.75rem;
+          text-decoration: none;
+        }
+        .privacy-link:hover {
+          color: rgba(234, 233, 209, 0.70);
+        }
+        .insta-btn {
+          border: 1px solid rgba(234, 233, 209, 0.35);
+          background: rgba(234, 233, 209, 0.08);
+          color: rgba(234, 233, 209, 0.92);
+          transition: all 0.3s;
+        }
+        .insta-btn:hover {
+          background: rgba(234, 233, 209, 0.15);
+        }
+      `}</style>
+
       {/* Video Background */}
       <video
         autoPlay
@@ -180,7 +207,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* DESKTOP ONLY: Fixed Left Sidebar - conditionally rendered, not just hidden */}
+        {/* DESKTOP ONLY: Fixed Left Sidebar */}
         {mounted && !isMobile && (
           <aside
             className="fixed top-0 left-0 h-screen z-40 overflow-y-auto"
@@ -208,7 +235,7 @@ export default function HomePage() {
           <div className="container mx-auto px-4 lg:px-6 pt-20 lg:pt-20 pb-8 max-w-6xl">
             <div className="space-y-6 lg:space-y-12">
 
-              {/* MOBILE ONLY: Profile Section - conditionally rendered */}
+              {/* MOBILE ONLY: Profile Section */}
               {mounted && isMobile && (
                 <section className="glossy-border rounded-2xl p-6 space-y-6">
                   <ProfileContent />
@@ -253,16 +280,12 @@ export default function HomePage() {
                 </h2>
                 <div className="space-y-6">
                   <behold-widget feed-id="2Erb63jEyG1F23oxucNP"></behold-widget>
+                  {/* NO JS hover handlers */}
                   <a
                     href="https://www.instagram.com/theevanmiles/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block w-full rounded-lg px-6 py-3 text-center font-semibold transition-all duration-300"
-                    style={{
-                      border: '1px solid rgba(234, 233, 209, 0.35)',
-                      background: 'rgba(234, 233, 209, 0.08)',
-                      color: 'rgba(234, 233, 209, 0.92)'
-                    }}
+                    className="insta-btn block w-full rounded-lg px-6 py-3 text-center font-semibold"
                   >
                     View on Instagram →
                   </a>
@@ -271,7 +294,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Footer */}
+          {/* Footer - NO JS hover handlers, using CSS classes */}
           <footer
             className="font-mono"
             style={{
@@ -291,47 +314,13 @@ export default function HomePage() {
                   marginBottom: '16px',
                 }}
               >
-                {[
-                  { label: 'Instagram', href: 'https://www.instagram.com/theevanmiles/' },
-                  { label: 'TikTok', href: 'https://www.tiktok.com/@yungmiley' },
-                  { label: 'SoundCloud', href: 'https://soundcloud.com/theevanmiles' },
-                  { label: 'YouTube', href: 'https://www.youtube.com/@EvanMiles' },
-                  { label: 'Spotify', href: 'https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l' },
-                ].map((link) => (
-                  <a
-                    key={link.label}
-                    href={link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono font-semibold"
-                    style={{
-                      color: 'rgba(234, 233, 209, 0.70)',
-                      textDecoration: 'none',
-                      transition: 'color 0.2s',
-                      fontWeight: 600,
-                    }}
-                    onMouseEnter={(e) =>
-                      ((e.target as HTMLAnchorElement).style.color = 'rgba(234, 233, 209, 0.95)')
-                    }
-                    onMouseLeave={(e) =>
-                      ((e.target as HTMLAnchorElement).style.color = 'rgba(234, 233, 209, 0.70)')
-                    }
-                  >
-                    {link.label}
-                  </a>
-                ))}
+                <a href="https://www.instagram.com/theevanmiles/" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">Instagram</a>
+                <a href="https://www.tiktok.com/@yungmiley" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">TikTok</a>
+                <a href="https://soundcloud.com/theevanmiles" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">SoundCloud</a>
+                <a href="https://www.youtube.com/@EvanMiles" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">YouTube</a>
+                <a href="https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">Spotify</a>
               </div>
-              <a
-                href="/privacy"
-                className="font-mono"
-                style={{
-                  color: 'rgba(234, 233, 209, 0.50)',
-                  fontSize: '0.75rem',
-                  textDecoration: 'none',
-                }}
-              >
-                Privacy Policy
-              </a>
+              <a href="/privacy" className="privacy-link font-mono">Privacy Policy</a>
             </div>
           </footer>
         </div>
