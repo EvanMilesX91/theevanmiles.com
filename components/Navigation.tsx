@@ -8,15 +8,12 @@ export default function Navigation() {
   const [currentTime, setCurrentTime] = useState('00:00');
   const [menuOpen, setMenuOpen] = useState(false);
   
-  // Include Press in styled nav pages - gets orange dot and system status
   const isStyledNav = pathname === '/' || pathname === '/mixes' || pathname === '/contact' || pathname === '/downloads' || pathname === '/press';
 
-  // Close menu when route changes
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
 
-  // Prevent scroll when menu is open
   useEffect(() => {
     if (menuOpen) {
       document.body.style.overflow = 'hidden';
@@ -28,7 +25,6 @@ export default function Navigation() {
     };
   }, [menuOpen]);
   
-  // Update time for system status
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -50,28 +46,23 @@ export default function Navigation() {
     { name: 'Contact', href: '/contact' },
   ];
 
-  // Admin link separate
   const adminLink = { name: 'Admin', href: '/admin' };
 
-  // Auto-logout when navigating away from admin area
   useEffect(() => {
     if (pathname && !pathname.startsWith('/admin')) {
       const wasAuthenticated = localStorage.getItem('admin_authenticated');
       if (wasAuthenticated) {
         localStorage.removeItem('admin_authenticated');
-        console.log('Auto-logged out from admin');
       }
     }
   }, [pathname]);
 
-  // Styled nav styling
   const styledNavStyles = isStyledNav ? {
     background: 'rgba(24, 23, 33, 0.65)',
     backdropFilter: 'blur(12px)',
     borderBottom: '1px solid rgba(234, 233, 209, 0.25)'
   } : {};
 
-  // Default styling for other pages
   const defaultClass = isStyledNav ? '' : 'bg-black/50 backdrop-blur-md border-b border-white/50';
 
   return (
@@ -91,7 +82,7 @@ export default function Navigation() {
               EVAN MILES
             </Link>
 
-            {/* Center: System Status - Shows on all screen sizes for styled nav */}
+            {/* Center: System Status */}
             {isStyledNav && (
               <div className="flex items-center gap-2 text-xs uppercase tracking-wider"
                 style={{ 
@@ -102,6 +93,7 @@ export default function Navigation() {
                   className="w-2 h-2 rounded-full pulse-orange"
                   style={{ background: '#cf3a00' }}
                 />
+                <span className="hidden sm:inline">system online · </span>
                 <span>{currentTime}</span>
               </div>
             )}
@@ -170,24 +162,21 @@ export default function Navigation() {
             {/* Right: Mobile Hamburger Button */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="md:hidden flex flex-col justify-center items-center w-10 h-10 rounded-lg transition-all relative z-[100]"
+              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg relative z-[100]"
               style={{
                 border: '1px solid rgba(234, 233, 209, 0.35)',
                 background: 'rgba(24, 23, 33, 0.85)',
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               aria-label="Toggle menu"
             >
-              {menuOpen ? (
-                // X icon when menu is open
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M4 4L16 16M4 16L16 4" stroke="rgba(234, 233, 209, 0.9)" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              ) : (
-                // Hamburger icon when menu is closed
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 5H17M3 10H17M3 15H17" stroke="rgba(234, 233, 209, 0.9)" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              )}
+              <span 
+                className="text-xl font-light"
+                style={{ color: 'rgba(234, 233, 209, 0.9)' }}
+              >
+                {menuOpen ? '✕' : '☰'}
+              </span>
             </button>
           </div>
         </div>
@@ -207,7 +196,6 @@ export default function Navigation() {
             className="flex flex-col items-center justify-center h-full"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Navigation Links */}
             <ul className="flex flex-col items-center gap-8">
               {navLinks.map((link) => {
                 const isActive = pathname === link.href;
@@ -217,12 +205,13 @@ export default function Navigation() {
                     <Link
                       href={link.href}
                       onClick={() => setMenuOpen(false)}
-                      className="relative text-2xl font-bold tracking-wide flex items-center gap-3 py-2 px-4"
+                      className="relative text-2xl font-bold tracking-wide flex items-center gap-3 py-3 px-6"
                       style={{ 
                         color: isActive 
                           ? 'rgba(234, 233, 209, 0.95)' 
                           : 'rgba(234, 233, 209, 0.65)',
-                        letterSpacing: '0.05em'
+                        letterSpacing: '0.05em',
+                        touchAction: 'manipulation',
                       }}
                     >
                       {isActive && (

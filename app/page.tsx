@@ -16,9 +16,18 @@ export default function HomePage() {
   const [randomNumbers, setRandomNumbers] = useState('000000000');
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorActive, setCursorActive] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Check if mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Random numbers animation
   useEffect(() => {
@@ -31,35 +40,9 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Force video autoplay for both videos
+  // Cursor follower (desktop only)
   useEffect(() => {
-    const playVideos = () => {
-      if (videoRef.current) {
-        videoRef.current.play().catch((e) => {
-          console.log('Background autoplay prevented:', e);
-        });
-      }
-      if (liveVideoRef.current) {
-        liveVideoRef.current.play().catch((e) => {
-          console.log('Live video autoplay prevented:', e);
-        });
-      }
-    };
-    
-    // Try to play immediately
-    playVideos();
-    
-    // Also try after a short delay (helps on mobile)
-    const timeout = setTimeout(playVideos, 500);
-    
-    return () => clearTimeout(timeout);
-  }, []);
-
-  // Cursor follower (desktop only - using media query check)
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 1024px)');
-    
-    if (!mediaQuery.matches) return;
+    if (isMobile) return;
     
     const handleMouseMove = (e: MouseEvent) => {
       setCursorPos({ x: e.clientX, y: e.clientY });
@@ -76,7 +59,7 @@ export default function HomePage() {
       window.removeEventListener('mousemove', handleMouseMove);
       document.body.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, []);
+  }, [isMobile]);
 
   // Intersection Observer for card animations
   useEffect(() => {
@@ -95,7 +78,7 @@ export default function HomePage() {
     return () => observerRef.current?.disconnect();
   }, []);
 
-  // Sidebar/Profile content component
+  // Profile content component
   const ProfileContent = () => (
     <>
       {/* Profile Picture */}
@@ -132,7 +115,7 @@ export default function HomePage() {
           href="https://chat.whatsapp.com/Ii2btqwN8oR4uRnnezEJfu"
           target="_blank"
           rel="noopener noreferrer"
-          className="block w-full rounded-lg px-4 py-2 text-center text-sm font-semibold transition-all duration-300 whatsapp-hover"
+          className="block w-full rounded-lg px-4 py-2 text-center text-sm font-semibold transition-all duration-300"
           style={{
             border: '1px solid rgba(234, 233, 209, 0.35)',
             background: 'rgba(234, 233, 209, 0.08)',
@@ -162,6 +145,7 @@ export default function HomePage() {
           height={80}
           className="object-contain"
           style={{ opacity: 0.85 }}
+          priority
         />
       </div>
     </>
@@ -176,17 +160,16 @@ export default function HomePage() {
   ];
 
   return (
-    <>
+    <div className="min-h-screen bg-[#181721] text-[#eae9d1] font-mono relative">
       {/* Video Background */}
-      <div className="fixed inset-0 w-full h-full" style={{ zIndex: 0 }}>
+      <div className="fixed inset-0" style={{ zIndex: 0 }}>
         <video
-          ref={videoRef}
           autoPlay
           muted
           loop
           playsInline
           className="w-full h-full object-cover"
-          style={{ position: 'absolute', top: 0, left: 0, opacity: 0.4 }}
+          style={{ opacity: 0.4 }}
         >
           <source 
             src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4" 
@@ -198,20 +181,21 @@ export default function HomePage() {
       {/* Vignette */}
       <div className="vignette-layer" />
 
-      {/* Cursor Follower - Desktop only via CSS */}
-      <div
-        className={`cursor-follower hidden lg:block ${cursorActive ? 'active' : ''}`}
-        style={{
-          left: `${cursorPos.x}px`,
-          top: `${cursorPos.y}px`,
-          transform: 'translate(-50%, -50%)',
-        }}
-      />
+      {/* Cursor Follower - Desktop only */}
+      {!isMobile && (
+        <div
+          className={`cursor-follower ${cursorActive ? 'active' : ''}`}
+          style={{
+            left: cursorPos.x - 20,
+            top: cursorPos.y - 20,
+          }}
+        />
+      )}
 
-      {/* Content Layer */}
-      <div className="content-layer min-h-screen font-mono">
-        {/* Random Numbers - Top Right - Hidden on mobile */}
-        <div className="fixed top-4 right-16 md:right-4 z-30 rounded px-4 py-2 hidden md:block"
+      {/* Main Content */}
+      <div className="relative" style={{ zIndex: 10 }}>
+        {/* Random Numbers - Top Right - Desktop only */}
+        <div className="fixed top-4 right-4 z-30 rounded px-4 py-2 hidden lg:block"
           style={{
             background: 'rgba(24, 23, 33, 0.65)',
             backdropFilter: 'blur(12px)',
@@ -222,7 +206,7 @@ export default function HomePage() {
           </span>
         </div>
 
-        {/* DESKTOP ONLY: Fixed Left Sidebar - Using CSS hidden/block */}
+        {/* DESKTOP ONLY: Fixed Left Sidebar */}
         <aside
           className="fixed top-0 left-0 h-screen z-40 overflow-y-auto hidden lg:block"
           style={{ 
@@ -250,12 +234,12 @@ export default function HomePage() {
           </div>
         </aside>
 
-        {/* Main Content - margin on desktop only via CSS */}
+        {/* Main Content Area */}
         <div className="lg:ml-[320px]">
           <div className="container mx-auto px-4 lg:px-6 pt-20 lg:pt-20 pb-8 max-w-6xl">
             <div className="space-y-6 lg:space-y-12">
 
-              {/* MOBILE ONLY: Profile Section - Using CSS hidden/block */}
+              {/* MOBILE ONLY: Profile Section */}
               <section className="glossy-border rounded-2xl p-6 space-y-6 lg:hidden">
                 <ProfileContent />
                 <div className="text-center pt-2">
@@ -277,7 +261,6 @@ export default function HomePage() {
                 </h2>
                 <div className="aspect-video">
                   <video 
-                    ref={liveVideoRef}
                     className="w-full h-full rounded-xl"
                     autoPlay
                     muted
@@ -369,21 +352,25 @@ export default function HomePage() {
           </div>
 
           {/* Footer */}
-          <footer className="mt-6 lg:mt-12 py-8"
-            style={{
+          <footer 
+            className="py-8 mt-6 lg:mt-12"
+            style={{ 
               borderTop: '1px solid rgba(234, 233, 209, 0.20)',
-              background: 'rgba(24, 23, 33, 0.50)'
-            }}>
+              background: 'rgba(24, 23, 33, 0.50)',
+            }}
+          >
             <div className="container mx-auto px-4 lg:px-6 max-w-6xl">
-              <div className="flex flex-wrap justify-center gap-4 lg:gap-6 mb-6">
+              <div className="flex flex-wrap justify-center gap-4 lg:gap-6 mb-4">
                 {socialLinks.map((link) => (
                   <a
                     key={link.name}
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-semibold transition-colors duration-300 hover:text-white"
+                    className="font-semibold text-sm transition-colors duration-200"
                     style={{ color: 'rgba(234, 233, 209, 0.70)' }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.95)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.70)'}
                   >
                     {link.name}
                   </a>
@@ -392,8 +379,10 @@ export default function HomePage() {
               <div className="text-center">
                 <Link
                   href="/privacy"
-                  className="text-xs font-semibold transition-colors duration-300"
+                  className="text-xs transition-colors duration-200"
                   style={{ color: 'rgba(234, 233, 209, 0.50)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.70)'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(234, 233, 209, 0.50)'}
                 >
                   Privacy Policy
                 </Link>
@@ -402,6 +391,6 @@ export default function HomePage() {
           </footer>
         </div>
       </div>
-    </>
+    </div>
   );
 }
