@@ -66,8 +66,8 @@ function FileRow({
         }}
       />
 
-      <div className="relative flex items-center justify-between px-6 py-4">
-        <div className="flex-1 flex items-center gap-6">
+      <div className="relative flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex-1 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
           <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
             {isLocked ? (
               <div
@@ -91,7 +91,7 @@ function FileRow({
           </div>
 
           <div
-            className="font-mono text-sm tracking-wide flex-1"
+            className="font-mono text-sm tracking-wide flex-1 break-words"
             style={{
               color: isLocked
                 ? 'rgba(234, 233, 209, 0.50)'
@@ -101,7 +101,7 @@ function FileRow({
             {filename}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <span
               className="font-mono text-xs uppercase tracking-widest"
               style={{ color: 'rgba(234, 233, 209, 0.40)' }}
@@ -117,11 +117,11 @@ function FileRow({
           </div>
         </div>
 
-        <div className="flex-shrink-0 ml-8">
+        <div className="flex-shrink-0 sm:ml-8">
           {isLocked ? (
             <button
               onClick={onUnlockClick}
-              className="font-mono text-xs uppercase tracking-widest px-4 py-2 rounded transition-all duration-200"
+              className="font-mono text-xs uppercase tracking-widest px-4 py-2 rounded transition-all duration-200 w-full sm:w-auto"
               style={{
                 background: isHovered ? '#cf3a00' : 'rgba(207, 58, 0, 0.15)',
                 border: isHovered
@@ -135,7 +135,7 @@ function FileRow({
           ) : (
             <button
               onClick={onDownloadClick}
-              className="font-mono text-xs uppercase tracking-widest px-4 py-2 rounded transition-all duration-200"
+              className="font-mono text-xs uppercase tracking-widest px-4 py-2 rounded transition-all duration-200 w-full sm:w-auto"
               style={{
                 background: isHovered
                   ? 'rgba(234, 233, 209, 0.12)'
@@ -419,7 +419,7 @@ export default function DownloadsPage() {
               Free Downloads
             </h1>
             <p
-              className="text-sm tracking-wider max-w-2xl"
+              className="text-sm tracking-normal sm:tracking-wider max-w-2xl"
               style={{
                 color: 'rgba(234, 233, 209, 0.50)',
                 lineHeight: '1.8',
