@@ -6,7 +6,6 @@ export default function MixesPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorActive, setCursorActive] = useState(false);
-  const [embedsEnabled, setEmbedsEnabled] = useState(true);
 
   // ── Mobile check ──
   useEffect(() => {
@@ -15,17 +14,6 @@ export default function MixesPage() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-
-  useEffect(() => {
-    if (!isMobile) {
-      setEmbedsEnabled(true);
-      return;
-    }
-    setEmbedsEnabled(false);
-    const enable = () => setEmbedsEnabled(true);
-    window.addEventListener('touchstart', enable, { once: true, passive: true });
-    return () => window.removeEventListener('touchstart', enable);
-  }, [isMobile]);
 
   // ── Cursor follower (identical to homepage) ──
   useEffect(() => {
@@ -66,17 +54,17 @@ export default function MixesPage() {
 
   const mixes = [
     {
-      src: 'https://www.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-007%2F',
+      src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-007%2F',
       href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-007/',
       title: 'Afters Mix 007',
     },
     {
-      src: 'https://www.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-006%2F',
+      src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-006%2F',
       href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-006/',
       title: 'Afters Mix 006',
     },
     {
-      src: 'https://www.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-005%2F',
+      src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-005%2F',
       href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-005/',
       title: 'Afters Mix 005',
     },
@@ -177,50 +165,15 @@ export default function MixesPage() {
                 marginBottom: '40px',
               }}
             >
-              {embedsEnabled ? (
-                <iframe
-                  width="100%"
-                  height="120"
-                  src={mix.src}
-                  frameBorder="0"
-                  allow="autoplay; encrypted-media; fullscreen"
-                  allowFullScreen
-                  loading={isMobile ? 'eager' : 'lazy'}
-                  title={mix.title}
-                  style={{ borderRadius: '8px', position: 'relative', zIndex: 1 }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="w-full text-center font-mono font-semibold"
-                  onTouchStart={() => setEmbedsEnabled(true)}
-                  onClick={() => setEmbedsEnabled(true)}
-                  style={{
-                    border: '1px solid rgba(234, 233, 209, 0.35)',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    color: 'rgba(234, 233, 209, 0.85)',
-                    background: 'rgba(24, 23, 33, 0.55)',
-                    position: 'relative',
-                    zIndex: 1,
-                  }}
-                >
-                  Tap to load player
-                </button>
-              )}
-              {isMobile && (
-                <div style={{ marginTop: '16px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
-                  <a
-                    href={mix.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="social-link font-mono font-semibold"
-                    style={{ color: 'rgba(234, 233, 209, 0.85)' }}
-                  >
-                    Open on Mixcloud →
-                  </a>
-                </div>
-              )}
+              <iframe
+                width="100%"
+                height="120"
+                src={mix.src}
+                frameBorder="0"
+                allow="encrypted-media; fullscreen; autoplay; idle-detection; speaker-selection; web-share;"
+                title={mix.title}
+                style={{ border: 0, borderRadius: '8px', position: 'relative', zIndex: 1 }}
+              />
             </div>
           ))}
 
