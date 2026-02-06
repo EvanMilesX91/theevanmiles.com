@@ -116,7 +116,7 @@ export default function HomePage() {
         muted
         playsInline
         className="fixed inset-0 w-full h-full object-cover"
-        style={{ zIndex: 0, opacity: 0.4 }}
+        style={{ zIndex: 0, opacity: 0.4, pointerEvents: 'none' }}
       >
         <source
           src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4"
