@@ -56,17 +56,17 @@ export default function MixesPage() {
     {
       src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-007%2F',
       href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-007/',
-      title: 'Afters Mix 007',
+      title: 'Afters Mix 007 by Evan Miles',
     },
     {
       src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-006%2F',
       href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-006/',
-      title: 'Afters Mix 006',
+      title: 'Afters Mix 006 by Evan Miles',
     },
     {
       src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-005%2F',
       href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-005/',
-      title: 'Afters Mix 005',
+      title: 'Afters Mix 005 by Evan Miles',
     },
   ];
 
@@ -167,15 +167,42 @@ export default function MixesPage() {
                 border: isMobile ? '1px solid rgba(234, 233, 209, 0.25)' : undefined,
               }}
             >
-              <iframe
-                width="100%"
-                height="120"
-                src={mix.src}
-                frameBorder="0"
-                allow="encrypted-media; fullscreen; autoplay; idle-detection; speaker-selection; web-share;"
-                title={mix.title}
-                style={{ border: 0, borderRadius: '8px', position: 'relative', zIndex: 1 }}
-              />
+              {isMobile ? (
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div
+                    className="font-mono font-semibold text-center"
+                    style={{
+                      color: 'rgba(234, 233, 209, 0.92)',
+                      fontSize: '1rem',
+                      letterSpacing: '0.02em',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    {mix.title}
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <a
+                      href={mix.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="social-link font-mono font-semibold"
+                      style={{ color: 'rgba(234, 233, 209, 0.85)' }}
+                    >
+                      Open on Mixcloud →
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <iframe
+                  width="100%"
+                  height="120"
+                  src={mix.src}
+                  frameBorder="0"
+                  allow="encrypted-media; fullscreen; autoplay; idle-detection; speaker-selection; web-share;"
+                  title={mix.title}
+                  style={{ border: 0, borderRadius: '8px', position: 'relative', zIndex: 1 }}
+                />
+              )}
             </div>
           ))}
 
