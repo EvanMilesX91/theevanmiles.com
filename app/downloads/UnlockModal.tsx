@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { X, Lock, Mail, Music } from 'lucide-react';
 import Image from 'next/image';
@@ -46,35 +45,33 @@ export default function UnlockModal({ itemType, itemId, onClose, onSuccess }: Un
     }
   };
 
-  const handleSpotifyUnlock = async () => {
-    setLoading(true);
-    setError('');
-    
-    try {
-      // Initialize Spotify OAuth flow
-      const res = await fetch('/api/downloads/spotify-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: itemId, item_type: itemType })
-      });
-      
-      const data = await res.json();
-      
-      if (data.authUrl) {
-        // Store item ID for callback
-        localStorage.setItem('unlock_item_id', itemId);
-        localStorage.setItem('unlock_item_type', itemType);
-        // Redirect to Spotify OAuth
-        window.location.href = data.authUrl;
-      } else {
-        throw new Error('Failed to initiate Spotify authentication');
-      }
-    } catch (error) {
-      console.error('Spotify unlock error:', error);
-      setError('Failed to connect to Spotify. Please try email instead.');
-      setLoading(false);
-    }
-  };
+  // Spotify unlock - temporarily disabled until Spotify Developer account is set up
+  // const handleSpotifyUnlock = async () => {
+  //   setLoading(true);
+  //   setError('');
+  //   
+  //   try {
+  //     const res = await fetch('/api/downloads/spotify-auth', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ item_id: itemId, item_type: itemType })
+  //     });
+  //     
+  //     const data = await res.json();
+  //     
+  //     if (data.authUrl) {
+  //       localStorage.setItem('unlock_item_id', itemId);
+  //       localStorage.setItem('unlock_item_type', itemType);
+  //       window.location.href = data.authUrl;
+  //     } else {
+  //       throw new Error('Failed to initiate Spotify authentication');
+  //     }
+  //   } catch (error) {
+  //     console.error('Spotify unlock error:', error);
+  //     setError('Failed to connect to Spotify. Please try email instead.');
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleEmailUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,7 +147,7 @@ export default function UnlockModal({ itemType, itemId, onClose, onSuccess }: Un
             <Lock className="w-8 h-8" />
           </div>
           <h2 className="text-2xl font-bold font-mono mb-2">UNLOCK DOWNLOAD</h2>
-          <p className="text-white/70">Choose one option to unlock this file</p>
+          <p className="text-white/70">Enter your email to unlock this file</p>
         </div>
 
         {error && (
@@ -159,7 +156,7 @@ export default function UnlockModal({ itemType, itemId, onClose, onSuccess }: Un
           </div>
         )}
 
-        {/* Spotify Option */}
+        {/* Spotify Option - Temporarily hidden until Spotify Developer account is set up
         <div className="mb-6">
           <button
             onClick={handleSpotifyUnlock}
@@ -178,7 +175,6 @@ export default function UnlockModal({ itemType, itemId, onClose, onSuccess }: Un
           </button>
         </div>
 
-        {/* Divider */}
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-white/30"></div>
@@ -187,6 +183,7 @@ export default function UnlockModal({ itemType, itemId, onClose, onSuccess }: Un
             <span className="bg-black px-4 text-white/70 font-mono text-sm">OR</span>
           </div>
         </div>
+        */}
 
         {/* Email Option */}
         <form onSubmit={handleEmailUnlock}>
@@ -202,6 +199,7 @@ export default function UnlockModal({ itemType, itemId, onClose, onSuccess }: Un
               className="w-full border border-white rounded-lg px-4 py-3 bg-black/60 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50"
             />
           </div>
+
           <button
             type="submit"
             disabled={loading}
