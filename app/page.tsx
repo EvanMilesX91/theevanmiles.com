@@ -210,8 +210,7 @@ export default function HomePage() {
                 </div>
               </section>
 
-              {/* COMMENTED OUT FOR TESTING - Evan Miles Live */}
-              {/*
+              {/* Evan Miles Live */}
               <section className="glossy-border rounded-2xl p-6 lg:p-10">
                 <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide" style={{ color: 'rgba(234, 233, 209, 0.92)', letterSpacing: '0.02em' }}>
                   Evan Miles (Live)
@@ -222,7 +221,6 @@ export default function HomePage() {
                   </video>
                 </div>
               </section>
-              */}
 
               {/* Two Column */}
               <div className="grid lg:grid-cols-2 gap-6 lg:gap-12">
@@ -240,15 +238,13 @@ export default function HomePage() {
                 </section>
               </div>
 
-              {/* Instagram - BEHOLD WIDGET COMMENTED OUT FOR TESTING */}
+              {/* Instagram */}
               <section className="animate-on-scroll glossy-border rounded-2xl p-6 lg:p-10">
                 <h2 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-8 tracking-wide" style={{ color: 'rgba(234, 233, 209, 0.92)', letterSpacing: '0.02em' }}>
                   Instagram
                 </h2>
                 <div className="space-y-6">
-                  {/* COMMENTED OUT FOR TESTING */}
-                  {/* <behold-widget feed-id="2Erb63jEyG1F23oxucNP"></behold-widget> */}
-                  <p style={{ color: 'rgba(234, 233, 209, 0.5)' }}>Instagram widget temporarily disabled for testing</p>
+                  <behold-widget feed-id="2Erb63jEyG1F23oxucNP"></behold-widget>
                   <a
                     href="https://www.instagram.com/theevanmiles/"
                     target="_blank"

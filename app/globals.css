@@ -4,6 +4,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* MOBILE TOUCH FIX - Forces single-tap on all interactive elements */
+a, button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 @layer base {
   * {
     @apply border-border;
