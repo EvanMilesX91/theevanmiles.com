@@ -196,7 +196,7 @@ export default function Navigation() {
               aria-label="Toggle menu"
             >
               <span 
-                className={`block w-5 h-0.5 transition-all duration-300 ${menuOpen ? 'rotate-45 translate-y-1' : ''}`}
+                className={`block w-5 h-0.5 transition-all duration-300 ${menuOpen ? 'rotate-45 translate-y-1.5' : ''}`}
                 style={{ background: 'rgba(234, 233, 209, 0.9)' }}
               />
               <span 
@@ -204,7 +204,7 @@ export default function Navigation() {
                 style={{ background: 'rgba(234, 233, 209, 0.9)' }}
               />
               <span 
-                className={`block w-5 h-0.5 transition-all duration-300 ${menuOpen ? '-rotate-45 -translate-y-1' : ''}`}
+                className={`block w-5 h-0.5 transition-all duration-300 ${menuOpen ? '-rotate-45 -translate-y-1.5' : ''}`}
                 style={{ background: 'rgba(234, 233, 209, 0.9)' }}
               />
             </button>
