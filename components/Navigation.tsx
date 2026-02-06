@@ -203,18 +203,14 @@ export default function Navigation() {
             <button
               onTouchEnd={handleMenuTouch}
               onClick={handleMenuClick}
-              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg relative z-[100]"
-              style={{
-                border: '1px solid rgba(234, 233, 209, 0.35)',
-                background: 'rgba(24, 23, 33, 0.85)',
-              }}
-              aria-label="Toggle menu"
+              className="md:hidden flex items-center justify-center relative z-[100] px-1"
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             >
-              <span 
-                className="text-xl font-light"
+              <span
+                className="text-xs font-semibold tracking-[0.2em]"
                 style={{ color: 'rgba(234, 233, 209, 0.9)' }}
               >
-                {menuOpen ? 'X' : 'MENU'}
+                {menuOpen ? 'CLOSE' : 'MENU'}
               </span>
             </button>
           </div>
@@ -224,7 +220,7 @@ export default function Navigation() {
       {/* Mobile Menu Overlay */}
       {menuOpen && (
         <div 
-          className="fixed inset-0 z-[90] md:hidden"
+          className="fixed inset-0 z-[40] md:hidden"
           style={{
             background: 'rgba(24, 23, 33, 0.98)',
             backdropFilter: 'blur(20px)',
