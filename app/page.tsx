@@ -109,47 +109,6 @@ export default function HomePage() {
 
   return (
     <>
-      {/* CSS for hover states - NO JS needed */}
-      <style jsx global>{`
-        .whatsapp-btn {
-          border: 1px solid rgba(234, 233, 209, 0.35);
-          background: rgba(234, 233, 209, 0.08);
-          color: rgba(234, 233, 209, 0.92);
-          transition: all 0.3s;
-        }
-        .whatsapp-btn:hover {
-          background: #cf3a00;
-          border-color: #cf3a00;
-          color: #eae9d1;
-        }
-        .social-link {
-          color: rgba(234, 233, 209, 0.70);
-          text-decoration: none;
-          transition: color 0.2s;
-          font-weight: 600;
-        }
-        .social-link:hover {
-          color: rgba(234, 233, 209, 0.95);
-        }
-        .privacy-link {
-          color: rgba(234, 233, 209, 0.50);
-          font-size: 0.75rem;
-          text-decoration: none;
-        }
-        .privacy-link:hover {
-          color: rgba(234, 233, 209, 0.70);
-        }
-        .insta-btn {
-          border: 1px solid rgba(234, 233, 209, 0.35);
-          background: rgba(234, 233, 209, 0.08);
-          color: rgba(234, 233, 209, 0.92);
-          transition: all 0.3s;
-        }
-        .insta-btn:hover {
-          background: rgba(234, 233, 209, 0.15);
-        }
-      `}</style>
-
       {/* Video Background */}
       <video
         autoPlay
