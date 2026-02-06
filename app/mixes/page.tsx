@@ -6,6 +6,7 @@ export default function MixesPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorActive, setCursorActive] = useState(false);
+  const [embedsEnabled, setEmbedsEnabled] = useState(true);
 
   // ── Mobile check ──
   useEffect(() => {
@@ -14,6 +15,17 @@ export default function MixesPage() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setEmbedsEnabled(true);
+      return;
+    }
+    setEmbedsEnabled(false);
+    const enable = () => setEmbedsEnabled(true);
+    window.addEventListener('touchstart', enable, { once: true, passive: true });
+    return () => window.removeEventListener('touchstart', enable);
+  }, [isMobile]);
 
   // ── Cursor follower (identical to homepage) ──
   useEffect(() => {
@@ -82,40 +94,26 @@ export default function MixesPage() {
     <>
       {/* ── Video Background ── */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 1, overflow: 'hidden' }}>
-        {isMobile ? (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage:
-                "url('https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/EM-Web-Homepage-BG.jpg')",
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              opacity: 0.4,
-            }}
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            opacity: 0.4,
+          }}
+        >
+          <source
+            src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4"
+            type="video/mp4"
           />
-        ) : (
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              opacity: 0.4,
-            }}
-          >
-            <source
-              src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4"
-              type="video/mp4"
-            />
-          </video>
-        )}
+        </video>
       </div>
 
       {/* ── Noise ── */}
@@ -179,17 +177,37 @@ export default function MixesPage() {
                 marginBottom: '40px',
               }}
             >
-              <iframe
-                width="100%"
-                height="120"
-                src={mix.src}
-                frameBorder="0"
-                allow="autoplay; encrypted-media; fullscreen"
-                allowFullScreen
-                loading={isMobile ? 'eager' : 'lazy'}
-                title={mix.title}
-                style={{ borderRadius: '8px', position: 'relative', zIndex: 1 }}
-              />
+              {embedsEnabled ? (
+                <iframe
+                  width="100%"
+                  height="120"
+                  src={mix.src}
+                  frameBorder="0"
+                  allow="autoplay; encrypted-media; fullscreen"
+                  allowFullScreen
+                  loading={isMobile ? 'eager' : 'lazy'}
+                  title={mix.title}
+                  style={{ borderRadius: '8px', position: 'relative', zIndex: 1 }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="w-full text-center font-mono font-semibold"
+                  onTouchStart={() => setEmbedsEnabled(true)}
+                  onClick={() => setEmbedsEnabled(true)}
+                  style={{
+                    border: '1px solid rgba(234, 233, 209, 0.35)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    color: 'rgba(234, 233, 209, 0.85)',
+                    background: 'rgba(24, 23, 33, 0.55)',
+                    position: 'relative',
+                    zIndex: 1,
+                  }}
+                >
+                  Tap to load player
+                </button>
+              )}
               {isMobile && (
                 <div style={{ marginTop: '16px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
                   <a
