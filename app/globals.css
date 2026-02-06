@@ -309,6 +309,13 @@
   pointer-events: none;
 }
 
+/* Behold Instagram Widget - ensure it displays properly */
+behold-widget {
+  display: block;
+  width: 100%;
+  min-height: 300px;
+}
+
 @layer components {
   /* Button styles */
   .btn-primary {
