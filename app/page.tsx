@@ -17,7 +17,7 @@ export default function HomePage() {
   const [cursorActive, setCursorActive] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [tapDebug, setTapDebug] = useState({ type: '', tag: '', id: '', classes: '', href: '', x: 0, y: 0 });
+  const lastTouchRef = useRef(0);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
@@ -63,28 +63,27 @@ export default function HomePage() {
     return () => observerRef.current?.disconnect();
   }, []);
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      const anchor = target.closest('a') as HTMLAnchorElement | null;
-      setTapDebug({
-        type: e.type,
-        tag: target.tagName,
-        id: target.id || '',
-        classes: target.className?.toString?.() || '',
-        href: anchor?.href || '',
-        x: (e as TouchEvent).touches?.[0]?.clientX ?? (e as MouseEvent).clientX ?? 0,
-        y: (e as TouchEvent).touches?.[0]?.clientY ?? (e as MouseEvent).clientY ?? 0,
-      });
-    };
-    window.addEventListener('touchstart', handler, { capture: true });
-    window.addEventListener('click', handler, { capture: true });
-    return () => {
-      window.removeEventListener('touchstart', handler, { capture: true } as EventListenerOptions);
-      window.removeEventListener('click', handler, { capture: true } as EventListenerOptions);
-    };
-  }, []);
+  const markTouch = () => {
+    lastTouchRef.current = Date.now();
+  };
+
+  const isRecentTouch = () => Date.now() - lastTouchRef.current < 700;
+
+  const handleLinkTouch = (href: string, newTab = true) => (e: React.TouchEvent<HTMLAnchorElement>) => {
+    markTouch();
+    e.preventDefault();
+    if (newTab) {
+      window.open(href, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.href = href;
+    }
+  };
+
+  const handleExternalClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (isRecentTouch()) {
+      e.preventDefault();
+    }
+  };
 
   const ProfileContent = () => (
     <>
@@ -113,6 +112,8 @@ export default function HomePage() {
           target="_blank"
           rel="noopener noreferrer"
           className="whatsapp-btn block w-full rounded-lg px-4 py-2 text-center text-sm font-semibold"
+          onTouchEnd={handleLinkTouch('https://chat.whatsapp.com/Ii2btqwN8oR4uRnnezEJfu')}
+          onClick={handleExternalClick}
         >
           WhatsApp
         </a>
@@ -174,25 +175,6 @@ export default function HomePage() {
         className="relative min-h-screen font-mono"
         style={{ zIndex: 4, color: '#eae9d1' }}
       >
-        {/* Tap Debug Overlay (temporary) */}
-        <div
-          className="fixed bottom-4 left-4 z-[9999] rounded-lg px-3 py-2 text-xs"
-          style={{
-            background: 'rgba(0,0,0,0.75)',
-            border: '1px solid rgba(234, 233, 209, 0.25)',
-            color: 'rgba(234, 233, 209, 0.9)',
-            pointerEvents: 'none',
-            maxWidth: '90vw',
-            wordBreak: 'break-all',
-          }}
-        >
-          <div>type: {tapDebug.type}</div>
-          <div>tag: {tapDebug.tag}</div>
-          <div>id: {tapDebug.id}</div>
-          <div>class: {tapDebug.classes}</div>
-          <div>href: {tapDebug.href}</div>
-          <div>pos: {tapDebug.x},{tapDebug.y}</div>
-        </div>
         {/* Random Numbers - Desktop only */}
         {mounted && !isMobile && (
           <div
@@ -288,6 +270,8 @@ export default function HomePage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="insta-btn block w-full rounded-lg px-6 py-3 text-center font-semibold"
+                    onTouchEnd={handleLinkTouch('https://www.instagram.com/theevanmiles/')}
+                    onClick={handleExternalClick}
                   >
                     View on Instagram →
                   </a>
@@ -316,13 +300,13 @@ export default function HomePage() {
                   marginBottom: '16px',
                 }}
               >
-                <a href="https://www.instagram.com/theevanmiles/" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">Instagram</a>
-                <a href="https://www.tiktok.com/@yungmiley" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">TikTok</a>
-                <a href="https://soundcloud.com/theevanmiles" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">SoundCloud</a>
-                <a href="https://www.youtube.com/@EvanMiles" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">YouTube</a>
-                <a href="https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold">Spotify</a>
+                <a href="https://www.instagram.com/theevanmiles/" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold" onTouchEnd={handleLinkTouch('https://www.instagram.com/theevanmiles/')} onClick={handleExternalClick}>Instagram</a>
+                <a href="https://www.tiktok.com/@yungmiley" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold" onTouchEnd={handleLinkTouch('https://www.tiktok.com/@yungmiley')} onClick={handleExternalClick}>TikTok</a>
+                <a href="https://soundcloud.com/theevanmiles" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold" onTouchEnd={handleLinkTouch('https://soundcloud.com/theevanmiles')} onClick={handleExternalClick}>SoundCloud</a>
+                <a href="https://www.youtube.com/@EvanMiles" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold" onTouchEnd={handleLinkTouch('https://www.youtube.com/@EvanMiles')} onClick={handleExternalClick}>YouTube</a>
+                <a href="https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l" target="_blank" rel="noopener noreferrer" className="social-link font-mono font-semibold" onTouchEnd={handleLinkTouch('https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l')} onClick={handleExternalClick}>Spotify</a>
               </div>
-              <a href="/privacy" className="privacy-link font-mono">Privacy Policy</a>
+              <a href="/privacy" className="privacy-link font-mono" onTouchEnd={handleLinkTouch('/privacy', false)} onClick={handleExternalClick}>Privacy Policy</a>
             </div>
           </footer>
         </div>

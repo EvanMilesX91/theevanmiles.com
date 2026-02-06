@@ -1,12 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function Navigation() {
   const pathname = usePathname();
   const [currentTime, setCurrentTime] = useState('00:00');
   const [menuOpen, setMenuOpen] = useState(false);
+  const lastTouchRef = useRef(0);
   
   const isStyledNav = pathname === '/' || pathname === '/mixes' || pathname === '/contact' || pathname === '/downloads' || pathname === '/press';
 
@@ -47,6 +48,28 @@ export default function Navigation() {
   ];
 
   const adminLink = { name: 'Admin', href: '/admin' };
+
+  const markTouch = () => {
+    lastTouchRef.current = Date.now();
+  };
+
+  const isRecentTouch = () => Date.now() - lastTouchRef.current < 700;
+
+  const toggleMenu = () => setMenuOpen((open) => !open);
+
+  const handleMenuTouch = (e: React.TouchEvent<HTMLButtonElement>) => {
+    markTouch();
+    e.preventDefault();
+    toggleMenu();
+  };
+
+  const handleMenuClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isRecentTouch()) {
+      e.preventDefault();
+      return;
+    }
+    toggleMenu();
+  };
 
   useEffect(() => {
     if (pathname && !pathname.startsWith('/admin')) {
@@ -161,7 +184,8 @@ export default function Navigation() {
 
             {/* Right: Mobile Hamburger Button */}
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
+              onTouchEnd={handleMenuTouch}
+              onClick={handleMenuClick}
               className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg relative z-[100]"
               style={{
                 border: '1px solid rgba(234, 233, 209, 0.35)',
