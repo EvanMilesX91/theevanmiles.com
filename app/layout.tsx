@@ -14,6 +14,8 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export const metadata: Metadata = {
