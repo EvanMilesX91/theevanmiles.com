@@ -53,9 +53,21 @@ export default function MixesPage() {
   }, []);
 
   const mixes = [
-    { src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-007%2F' },
-    { src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-006%2F' },
-    { src: 'https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-005%2F' },
+    {
+      src: 'https://www.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-007%2F',
+      href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-007/',
+      title: 'Afters Mix 007',
+    },
+    {
+      src: 'https://www.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-006%2F',
+      href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-006/',
+      title: 'Afters Mix 006',
+    },
+    {
+      src: 'https://www.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fevanmilesx91%2Fafters-mix-005%2F',
+      href: 'https://www.mixcloud.com/evanmilesx91/afters-mix-005/',
+      title: 'Afters Mix 005',
+    },
   ];
 
   const socialLinks = [
@@ -70,26 +82,40 @@ export default function MixesPage() {
     <>
       {/* ── Video Background ── */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 1, overflow: 'hidden' }}>
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            opacity: 0.4,
-          }}
-        >
-          <source 
-            src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4" 
-            type="video/mp4" 
+        {isMobile ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage:
+                "url('https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/EM-Web-Homepage-BG.jpg')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              opacity: 0.4,
+            }}
           />
-        </video>
+        ) : (
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              opacity: 0.4,
+            }}
+          >
+            <source
+              src="https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4"
+              type="video/mp4"
+            />
+          </video>
+        )}
       </div>
 
       {/* ── Noise ── */}
@@ -160,9 +186,23 @@ export default function MixesPage() {
                 frameBorder="0"
                 allow="autoplay; encrypted-media; fullscreen"
                 allowFullScreen
-                loading="lazy"
+                loading={isMobile ? 'eager' : 'lazy'}
+                title={mix.title}
                 style={{ borderRadius: '8px', position: 'relative', zIndex: 1 }}
               />
+              {isMobile && (
+                <div style={{ marginTop: '16px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+                  <a
+                    href={mix.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="social-link font-mono font-semibold"
+                    style={{ color: 'rgba(234, 233, 209, 0.85)' }}
+                  >
+                    Open on Mixcloud →
+                  </a>
+                </div>
+              )}
             </div>
           ))}
 
