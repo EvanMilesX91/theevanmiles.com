@@ -73,6 +73,7 @@ export default function Navigation() {
       >
         <div className="container mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
+            {/* Left: Logo */}
             <Link 
               href="/" 
               className="text-lg md:text-xl font-bold tracking-widest hover:opacity-80 transition-opacity"
@@ -81,6 +82,7 @@ export default function Navigation() {
               EVAN MILES
             </Link>
 
+            {/* Center: System Status */}
             {isStyledNav && (
               <div className="flex items-center gap-2 text-xs uppercase tracking-wider"
                 style={{ 
@@ -96,6 +98,7 @@ export default function Navigation() {
               </div>
             )}
 
+            {/* Right: Desktop Navigation Links */}
             <ul className="hidden md:flex items-center gap-8">
               {navLinks.map((link) => {
                 const isActive = pathname === link.href;
@@ -156,6 +159,7 @@ export default function Navigation() {
               </li>
             </ul>
 
+            {/* Right: Mobile Hamburger Button */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg relative z-[100]"
@@ -176,6 +180,7 @@ export default function Navigation() {
         </div>
       </nav>
 
+      {/* Mobile Menu Overlay */}
       {menuOpen && (
         <div 
           className="fixed inset-0 z-[90] md:hidden"
