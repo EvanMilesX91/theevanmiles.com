@@ -14,22 +14,19 @@ declare global {
 
 export default function HomePage() {
   const [randomNumbers, setRandomNumbers] = useState('000000000');
-  const [isMobile, setIsMobile] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorActive, setCursorActive] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Check if mobile and set mounted
+  // Check if mobile - use null as initial state to prevent flash
   useEffect(() => {
-    setIsMobile(window.innerWidth < 1024);
-    setMounted(true);
-    
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024);
     };
     
+    checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
@@ -56,7 +53,7 @@ export default function HomePage() {
 
   // Cursor follower (desktop only)
   useEffect(() => {
-    if (isMobile) return;
+    if (isMobile === null || isMobile) return;
     const handleMouseMove = (e: MouseEvent) => {
       setCursorPos({ x: e.clientX, y: e.clientY });
       setCursorActive(true);
@@ -160,6 +157,9 @@ export default function HomePage() {
     </>
   );
 
+  // Show loading state until we know if mobile or desktop
+  const isLoading = isMobile === null;
+
   return (
     <>
       {/* Video Background */}
@@ -184,7 +184,7 @@ export default function HomePage() {
       <div className="vignette-layer" />
 
       {/* Cursor Follower - Desktop only */}
-      {mounted && !isMobile && (
+      {isMobile === false && (
         <div
           className={`cursor-follower ${cursorActive ? 'active' : ''}`}
           style={{
@@ -210,7 +210,7 @@ export default function HomePage() {
         </div>
 
         {/* DESKTOP ONLY: Fixed Left Sidebar */}
-        {mounted && !isMobile && (
+        {isMobile === false && (
           <aside
             className="fixed top-0 left-0 h-screen z-40 overflow-y-auto"
             style={{ 
@@ -242,12 +242,15 @@ export default function HomePage() {
         )}
 
         {/* Main Content */}
-        <div className={mounted && !isMobile ? 'ml-[320px]' : ''}>
+        <div 
+          className={isMobile === false ? 'ml-[320px]' : ''}
+          style={{ opacity: isLoading ? 0 : 1, transition: 'opacity 0.2s ease-in-out' }}
+        >
           <div className="container mx-auto px-4 lg:px-6 pt-6 lg:pt-20 pb-8 max-w-6xl">
             <div className="space-y-6 lg:space-y-12">
 
               {/* MOBILE ONLY: Profile Section (replaces sidebar) */}
-              {mounted && isMobile && (
+              {isMobile === true && (
                 <section className="glossy-border rounded-2xl p-6 space-y-6">
                   <ProfileContent />
                   <div className="text-center pt-2">
