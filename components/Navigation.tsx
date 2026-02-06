@@ -57,42 +57,22 @@ export default function Navigation() {
     }
   }, [pathname]);
 
-  const styledNavStyles = isStyledNav ? {
-    background: 'rgba(24, 23, 33, 0.65)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(234, 233, 209, 0.25)'
-  } : {};
-
-  const defaultClass = isStyledNav ? '' : 'bg-black/50 backdrop-blur-md border-b border-white/50';
-
   return (
     <>
       <nav 
-        className={`fixed top-0 left-0 right-0 z-50 ${defaultClass}`}
-        style={isStyledNav ? styledNavStyles : {}}
+        className={`fixed top-0 left-0 right-0 z-50 ${isStyledNav ? 'nav-styled' : 'bg-black/50 backdrop-blur-md border-b border-white/50'}`}
       >
         <div className="container mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             {/* Left: Logo */}
-            <Link 
-              href="/" 
-              className="text-lg md:text-xl font-bold tracking-widest hover:opacity-80 transition-opacity"
-              style={isStyledNav ? { color: 'rgba(234, 233, 209, 0.92)' } : {}}
-            >
+            <Link href="/" className="nav-logo text-lg md:text-xl font-bold tracking-widest">
               EVAN MILES
             </Link>
 
             {/* Center: System Status */}
             {isStyledNav && (
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wider"
-                style={{ 
-                  color: 'rgba(234, 233, 209, 0.50)',
-                  letterSpacing: '0.08em'
-                }}>
-                <div 
-                  className="w-2 h-2 rounded-full pulse-orange"
-                  style={{ background: '#cf3a00' }}
-                />
+              <div className="nav-status flex items-center gap-2 text-xs uppercase tracking-wider">
+                <div className="w-2 h-2 rounded-full pulse-orange" style={{ background: '#cf3a00' }} />
                 <span className="hidden sm:inline">system online · </span>
                 <span>{currentTime}</span>
               </div>
@@ -102,58 +82,20 @@ export default function Navigation() {
             <ul className="hidden md:flex items-center gap-8">
               {navLinks.map((link) => {
                 const isActive = pathname === link.href;
-                
-                if (isStyledNav) {
-                  return (
-                    <li key={link.href}>
-                      <Link
-                        href={link.href}
-                        className="relative text-sm font-medium tracking-wide transition-all duration-300 flex items-center gap-2"
-                        style={{ 
-                          color: isActive 
-                            ? 'rgba(234, 233, 209, 0.95)' 
-                            : 'rgba(234, 233, 209, 0.65)',
-                          letterSpacing: '0.02em'
-                        }}
-                      >
-                        {isActive && (
-                          <div 
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: '#cf3a00' }}
-                          />
-                        )}
-                        {link.name}
-                      </Link>
-                    </li>
-                  );
-                }
-                
                 return (
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      className={`text-sm font-medium tracking-wide transition-all ${
-                        isActive
-                          ? 'text-white'
-                          : 'text-white/70 hover:text-white/90'
-                      }`}
+                      className={`nav-link text-sm font-medium tracking-wide flex items-center gap-2 ${isActive ? 'active' : ''}`}
                     >
+                      {isActive && <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#cf3a00' }} />}
                       {link.name}
                     </Link>
                   </li>
                 );
               })}
               <li>
-                <Link
-                  href={adminLink.href}
-                  className="text-sm font-medium tracking-wide transition-all"
-                  style={isStyledNav ? { 
-                    color: pathname === adminLink.href 
-                      ? 'rgba(234, 233, 209, 0.95)' 
-                      : 'rgba(234, 233, 209, 0.65)',
-                    letterSpacing: '0.02em'
-                  } : {}}
-                >
+                <Link href={adminLink.href} className={`nav-link text-sm font-medium tracking-wide ${pathname === adminLink.href ? 'active' : ''}`}>
                   {adminLink.name}
                 </Link>
               </li>
@@ -161,22 +103,20 @@ export default function Navigation() {
 
             {/* Right: Mobile Hamburger Button */}
             <button
+              type="button"
               onClick={() => setMenuOpen(!menuOpen)}
-              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg relative z-[100]"
-              style={{
-                border: '1px solid rgba(234, 233, 209, 0.35)',
-                background: 'rgba(24, 23, 33, 0.85)',
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
+              className="hamburger-btn md:hidden flex items-center justify-center w-10 h-10 rounded-lg"
               aria-label="Toggle menu"
             >
-              <span 
-                className="text-xl font-light"
-                style={{ color: 'rgba(234, 233, 209, 0.9)' }}
-              >
-                {menuOpen ? '✕' : '☰'}
-              </span>
+              {menuOpen ? (
+                <span className="text-lg font-bold">X</span>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <span className="hamburger-line"></span>
+                  <span className="hamburger-line"></span>
+                  <span className="hamburger-line"></span>
+                </div>
+              )}
             </button>
           </div>
         </div>
@@ -184,42 +124,19 @@ export default function Navigation() {
 
       {/* Mobile Menu Overlay */}
       {menuOpen && (
-        <div 
-          className="fixed inset-0 z-[90] md:hidden"
-          style={{
-            background: 'rgba(24, 23, 33, 0.98)',
-            backdropFilter: 'blur(20px)',
-          }}
-          onClick={() => setMenuOpen(false)}
-        >
-          <div 
-            className="flex flex-col items-center justify-center h-full"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="mobile-menu fixed inset-0 md:hidden" onClick={() => setMenuOpen(false)}>
+          <div className="flex flex-col items-center justify-center h-full" onClick={(e) => e.stopPropagation()}>
             <ul className="flex flex-col items-center gap-8">
               {navLinks.map((link) => {
                 const isActive = pathname === link.href;
-                
                 return (
                   <li key={link.href}>
                     <Link
                       href={link.href}
                       onClick={() => setMenuOpen(false)}
-                      className="relative text-2xl font-bold tracking-wide flex items-center gap-3 py-3 px-6"
-                      style={{ 
-                        color: isActive 
-                          ? 'rgba(234, 233, 209, 0.95)' 
-                          : 'rgba(234, 233, 209, 0.65)',
-                        letterSpacing: '0.05em',
-                        touchAction: 'manipulation',
-                      }}
+                      className={`mobile-nav-link text-2xl font-bold tracking-wide flex items-center gap-3 py-3 px-6 ${isActive ? 'active' : ''}`}
                     >
-                      {isActive && (
-                        <div 
-                          className="w-2 h-2 rounded-full"
-                          style={{ background: '#cf3a00' }}
-                        />
-                      )}
+                      {isActive && <div className="w-2 h-2 rounded-full" style={{ background: '#cf3a00' }} />}
                       {link.name}
                     </Link>
                   </li>
@@ -229,6 +146,58 @@ export default function Navigation() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .nav-styled {
+          background: rgba(24, 23, 33, 0.65);
+          backdrop-filter: blur(12px);
+          border-bottom: 1px solid rgba(234, 233, 209, 0.25);
+        }
+        .nav-logo {
+          color: rgba(234, 233, 209, 0.92);
+          transition: opacity 0.2s;
+        }
+        .nav-logo:hover {
+          opacity: 0.8;
+        }
+        .nav-status {
+          color: rgba(234, 233, 209, 0.50);
+          letter-spacing: 0.08em;
+        }
+        .nav-link {
+          color: rgba(234, 233, 209, 0.65);
+          transition: color 0.2s;
+        }
+        .nav-link:hover,
+        .nav-link.active {
+          color: rgba(234, 233, 209, 0.95);
+        }
+        .hamburger-btn {
+          border: 1px solid rgba(234, 233, 209, 0.35);
+          background: rgba(24, 23, 33, 0.85);
+          color: rgba(234, 233, 209, 0.9);
+          position: relative;
+          z-index: 100;
+        }
+        .hamburger-line {
+          display: block;
+          width: 18px;
+          height: 2px;
+          background: rgba(234, 233, 209, 0.9);
+        }
+        .mobile-menu {
+          background: rgba(24, 23, 33, 0.98);
+          backdrop-filter: blur(20px);
+          z-index: 90;
+        }
+        .mobile-nav-link {
+          color: rgba(234, 233, 209, 0.65);
+          letter-spacing: 0.05em;
+        }
+        .mobile-nav-link.active {
+          color: rgba(234, 233, 209, 0.95);
+        }
+      `}</style>
     </>
   );
 }
