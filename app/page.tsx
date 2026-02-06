@@ -15,10 +15,12 @@ export default function HomePage() {
   const [randomNumbers, setRandomNumbers] = useState('000000000');
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorActive, setCursorActive] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(true); // Default to mobile to avoid flash
+  const [mounted, setMounted] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -145,8 +147,8 @@ export default function HomePage() {
         }}
       />
 
-      {/* Cursor follower */}
-      {!isMobile && (
+      {/* Cursor follower - only on desktop */}
+      {mounted && !isMobile && (
         <div
           className={`cursor-follower ${cursorActive ? 'active' : ''}`}
           style={{
@@ -163,52 +165,58 @@ export default function HomePage() {
         style={{ zIndex: 4, color: '#eae9d1' }}
       >
         {/* Random Numbers - Desktop only */}
-        <div
-          className="fixed top-4 right-4 z-30 rounded px-4 py-2 hidden lg:block"
-          style={{
-            background: 'rgba(24, 23, 33, 0.65)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(234, 233, 209, 0.30)'
-          }}
-        >
-          <span style={{ color: 'rgba(234, 233, 209, 0.70)' }} className="text-sm tracking-wider">
-            {randomNumbers}
-          </span>
-        </div>
-
-        {/* DESKTOP: Fixed Left Sidebar */}
-        <aside
-          className="fixed top-0 left-0 h-screen z-40 overflow-y-auto hidden lg:block"
-          style={{
-            width: '320px',
-            borderRight: '1px solid rgba(234, 233, 209, 0.25)',
-            background: 'rgba(24, 23, 33, 0.65)',
-            backdropFilter: 'blur(12px)'
-          }}
-        >
-          <div className="h-full p-10 flex flex-col gap-10">
-            <div className="text-center">
-              <h1 className="text-2xl font-bold tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.92)' }}></h1>
-            </div>
-            <ProfileContent />
-            <div className="mt-auto text-center">
-              <p className="text-xs tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.60)' }}>EVAN MILES</p>
-            </div>
+        {mounted && !isMobile && (
+          <div
+            className="fixed top-4 right-4 z-30 rounded px-4 py-2"
+            style={{
+              background: 'rgba(24, 23, 33, 0.65)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(234, 233, 209, 0.30)'
+            }}
+          >
+            <span style={{ color: 'rgba(234, 233, 209, 0.70)' }} className="text-sm tracking-wider">
+              {randomNumbers}
+            </span>
           </div>
-        </aside>
+        )}
+
+        {/* DESKTOP ONLY: Fixed Left Sidebar - conditionally rendered, not just hidden */}
+        {mounted && !isMobile && (
+          <aside
+            className="fixed top-0 left-0 h-screen z-40 overflow-y-auto"
+            style={{
+              width: '320px',
+              borderRight: '1px solid rgba(234, 233, 209, 0.25)',
+              background: 'rgba(24, 23, 33, 0.65)',
+              backdropFilter: 'blur(12px)'
+            }}
+          >
+            <div className="h-full p-10 flex flex-col gap-10">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.92)' }}></h1>
+              </div>
+              <ProfileContent />
+              <div className="mt-auto text-center">
+                <p className="text-xs tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.60)' }}>EVAN MILES</p>
+              </div>
+            </div>
+          </aside>
+        )}
 
         {/* Main Content Area */}
-        <div className="lg:ml-[320px]">
+        <div className={mounted && !isMobile ? 'ml-[320px]' : ''}>
           <div className="container mx-auto px-4 lg:px-6 pt-20 lg:pt-20 pb-8 max-w-6xl">
             <div className="space-y-6 lg:space-y-12">
 
-              {/* MOBILE: Profile Section */}
-              <section className="glossy-border rounded-2xl p-6 space-y-6 lg:hidden">
-                <ProfileContent />
-                <div className="text-center pt-2">
-                  <p className="text-xs tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.60)' }}>EVAN MILES</p>
-                </div>
-              </section>
+              {/* MOBILE ONLY: Profile Section - conditionally rendered */}
+              {mounted && isMobile && (
+                <section className="glossy-border rounded-2xl p-6 space-y-6">
+                  <ProfileContent />
+                  <div className="text-center pt-2">
+                    <p className="text-xs tracking-widest" style={{ color: 'rgba(234, 233, 209, 0.60)' }}>EVAN MILES</p>
+                  </div>
+                </section>
+              )}
 
               {/* Evan Miles Live */}
               <section className="glossy-border rounded-2xl p-6 lg:p-10">
