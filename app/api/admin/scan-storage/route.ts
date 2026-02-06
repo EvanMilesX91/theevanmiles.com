@@ -6,6 +6,28 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+interface StorageFile {
+  name: string;
+  metadata?: {
+    size: number;
+  };
+}
+
+interface TrackFile {
+  name: string;
+  size: number;
+  path: string;
+  type: string;
+  bucket: string;
+  exists_in_db: boolean;
+}
+
+interface Track {
+  track_name: string;
+  track_slug: string;
+  files: TrackFile[];
+}
+
 export async function GET() {
   try {
     console.log('=== SCAN STORAGE (Using RPC) ===');
@@ -30,42 +52,12 @@ export async function GET() {
       throw tunesResult.error;
     }
 
-    const stemsFiles = stemsResult.data || [];
-    const editsFiles = editsResult.data || [];
-    const tunesFiles = tunesResult.data || [];
+    const stemsFiles: StorageFile[] = stemsResult.data || [];
+    const editsFiles: StorageFile[] = editsResult.data || [];
+    const tunesFiles: StorageFile[] = tunesResult.data || [];
 
     console.log(`Found files - Stems: ${stemsFiles.length}, Edits: ${editsFiles.length}, Tunes: ${tunesFiles.length}`);
-    console.log('Edits files:', editsFiles.map(f => f.name));
-
-    interface StorageFile {
-      name: string;
-      metadata?: {
-        size: number;
-      };
-    }
-
-    interface TrackFile {
-      name: string;
-      size: number;
-      path: string;
-      type: string;
-      bucket: string;
-      exists_in_db: boolean;
-    }
-
-    interface Track {
-      track_name: string;
-      track_slug: string;
-      files: TrackFile[];
-    }
-
-    interface StorageResponse {
-      stems: {
-        tracks: Track[];
-      };
-      edits: TrackFile[];
-      tunes: TrackFile[];
-    }
+    console.log('Edits files:', editsFiles.map((f: StorageFile) => f.name));
 
     // Get existing data from database
     const { data: existingTracks } = await supabase.from('tracks').select('slug');
@@ -80,7 +72,7 @@ export async function GET() {
     );
 
     // Process stems - group by folder (track)
-    const trackMap = new Map<string, any[]>();
+    const trackMap = new Map<string, TrackFile[]>();
 
     for (const file of stemsFiles) {
       if (!file.name.includes('.')) continue; // Skip folders
@@ -118,7 +110,7 @@ export async function GET() {
     }
 
     // Convert track map to array
-    const tracks = Array.from(trackMap.entries()).map(([trackName, files]) => {
+    const tracks: Track[] = Array.from(trackMap.entries()).map(([trackName, files]) => {
       const slug = trackName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -135,9 +127,9 @@ export async function GET() {
     });
 
     // Process edits
-    const edits = editsFiles
-      .filter((file) => file.name.includes('.'))
-      .map((file) => {
+    const edits: TrackFile[] = editsFiles
+      .filter((file: StorageFile) => file.name.includes('.'))
+      .map((file: StorageFile) => {
         const fileType = file.name.split('.').pop()?.toLowerCase() || 'unknown';
         const fileSize = file.metadata?.size || 0;
         const existsCheck = existingEditPaths.has(`edits:${file.name}`);
@@ -153,9 +145,9 @@ export async function GET() {
       });
 
     // Process tunes
-    const tunes = tunesFiles
-      .filter((file) => file.name.includes('.'))
-      .map((file) => {
+    const tunes: TrackFile[] = tunesFiles
+      .filter((file: StorageFile) => file.name.includes('.'))
+      .map((file: StorageFile) => {
         const fileType = file.name.split('.').pop()?.toLowerCase() || 'unknown';
         const fileSize = file.metadata?.size || 0;
         
@@ -177,6 +169,7 @@ export async function GET() {
       edits,
       tunes,
     });
+
   } catch (error: any) {
     console.error('Error scanning storage:', error);
     return NextResponse.json(
