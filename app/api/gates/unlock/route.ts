@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const { gate_id, email, completed_actions } = await request.json();
 
     // Get gate requirements
-    const { data: gate } = await supabaseAdmin
+    const { data: gate } = await supabaseAdmin!
       .from('gates')
       .select('*')
       .eq('id', gate_id)
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Mark as unlocked
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await supabaseAdmin!
       .from('gate_completions')
       .select('*')
       .eq('gate_id', gate_id)
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existing) {
-      await supabaseAdmin
+      await supabaseAdmin!
         .from('gate_completions')
         .update({
           unlocked: true,
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', existing.id);
     } else {
-      await supabaseAdmin.from('gate_completions').insert({
+      await supabaseAdmin!.from('gate_completions').insert({
         gate_id,
         user_email: email,
         completed_actions,
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate signed URL for file download (if using private storage)
-    const { data: signedUrl } = await supabaseAdmin.storage
+    const { data: signedUrl } = await supabaseAdmin!.storage
       .from('downloads')
       .createSignedUrl(gate.file_url, 3600); // 1 hour expiry
 

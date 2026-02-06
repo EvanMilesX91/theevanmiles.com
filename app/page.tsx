@@ -1,8 +1,16 @@
 'use client';
-
 import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+
+// Declare behold-widget as a valid JSX element
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'behold-widget': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & { 'feed-id': string }, HTMLElement>;
+    }
+  }
+}
 
 export default function HomePage() {
   const [randomNumbers, setRandomNumbers] = useState('000000000');
@@ -31,26 +39,21 @@ export default function HomePage() {
         .padStart(9, '0');
       setRandomNumbers(numbers);
     }, 100);
-
     return () => clearInterval(interval);
   }, []);
 
   // Cursor follower
   useEffect(() => {
     if (isMobile) return;
-
     const handleMouseMove = (e: MouseEvent) => {
       setCursorPos({ x: e.clientX, y: e.clientY });
       setCursorActive(true);
     };
-
     const handleMouseLeave = () => {
       setCursorActive(false);
     };
-
     window.addEventListener('mousemove', handleMouseMove);
     document.body.addEventListener('mouseleave', handleMouseLeave);
-
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       document.body.removeEventListener('mouseleave', handleMouseLeave);
@@ -69,10 +72,8 @@ export default function HomePage() {
       },
       { threshold: 0.1, rootMargin: '50px' }
     );
-
     const cards = document.querySelectorAll('.animate-on-scroll');
     cards.forEach((card) => observerRef.current?.observe(card));
-
     return () => observerRef.current?.disconnect();
   }, []);
 
