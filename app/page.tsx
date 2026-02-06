@@ -17,6 +17,7 @@ export default function HomePage() {
   const [cursorActive, setCursorActive] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [tapDebug, setTapDebug] = useState({ type: '', tag: '', id: '', classes: '', href: '', x: 0, y: 0 });
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
@@ -60,6 +61,29 @@ export default function HomePage() {
     );
     document.querySelectorAll('.animate-on-scroll').forEach((card) => observerRef.current?.observe(card));
     return () => observerRef.current?.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const anchor = target.closest('a') as HTMLAnchorElement | null;
+      setTapDebug({
+        type: e.type,
+        tag: target.tagName,
+        id: target.id || '',
+        classes: target.className?.toString?.() || '',
+        href: anchor?.href || '',
+        x: (e as TouchEvent).touches?.[0]?.clientX ?? (e as MouseEvent).clientX ?? 0,
+        y: (e as TouchEvent).touches?.[0]?.clientY ?? (e as MouseEvent).clientY ?? 0,
+      });
+    };
+    window.addEventListener('touchstart', handler, { capture: true });
+    window.addEventListener('click', handler, { capture: true });
+    return () => {
+      window.removeEventListener('touchstart', handler, { capture: true } as EventListenerOptions);
+      window.removeEventListener('click', handler, { capture: true } as EventListenerOptions);
+    };
   }, []);
 
   const ProfileContent = () => (
@@ -150,6 +174,25 @@ export default function HomePage() {
         className="relative min-h-screen font-mono"
         style={{ zIndex: 4, color: '#eae9d1' }}
       >
+        {/* Tap Debug Overlay (temporary) */}
+        <div
+          className="fixed bottom-4 left-4 z-[9999] rounded-lg px-3 py-2 text-xs"
+          style={{
+            background: 'rgba(0,0,0,0.75)',
+            border: '1px solid rgba(234, 233, 209, 0.25)',
+            color: 'rgba(234, 233, 209, 0.9)',
+            pointerEvents: 'none',
+            maxWidth: '90vw',
+            wordBreak: 'break-all',
+          }}
+        >
+          <div>type: {tapDebug.type}</div>
+          <div>tag: {tapDebug.tag}</div>
+          <div>id: {tapDebug.id}</div>
+          <div>class: {tapDebug.classes}</div>
+          <div>href: {tapDebug.href}</div>
+          <div>pos: {tapDebug.x},{tapDebug.y}</div>
+        </div>
         {/* Random Numbers - Desktop only */}
         {mounted && !isMobile && (
           <div
