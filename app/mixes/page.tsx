@@ -158,11 +158,13 @@ export default function MixesPage() {
           {mixes.map((mix, i) => (
             <div
               key={i}
-              className={`glossy-border-wide mixcloud-card ${i === 0 ? '' : 'animate-on-scroll'}`}
+              className={`${isMobile ? '' : 'glossy-border-wide'} mixcloud-card ${i === 0 ? '' : 'animate-on-scroll'}`}
               style={{
                 borderRadius: '16px',
-                padding: '40px',
+                padding: isMobile ? '24px' : '40px',
                 marginBottom: '40px',
+                background: isMobile ? 'rgba(24, 23, 33, 0.65)' : undefined,
+                border: isMobile ? '1px solid rgba(234, 233, 209, 0.25)' : undefined,
               }}
             >
               <iframe
