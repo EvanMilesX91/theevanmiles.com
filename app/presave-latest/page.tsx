@@ -3,11 +3,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 
-const RELEASE_DATE = new Date(2025, 1, 27, 0, 0, 0); // Midnight local time
+const RELEASE_DATE = new Date(2026, 1, 27, 0, 0, 0); // Midnight local time, Feb 27 2026
 const ARTWORK_URL =
   'https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/Evan%20Miles%20-%20I%20Know%20You%20Hate%20It%20(ART).jpg';
 const AUDIO_URL =
   'https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/Evan%20Miles%20-%20I%20Know%20You%20Hate%20It%20(Preview).mp3';
+const VIDEO_BG_URL =
+  'https://finaclzgxelyyaxoioyh.supabase.co/storage/v1/object/public/website-assets/WebsiteBG.mp4';
+
+const SOCIAL_LINKS = [
+  { name: 'Instagram', url: 'https://www.instagram.com/theevanmiles/' },
+  { name: 'TikTok', url: 'https://www.tiktok.com/@yungmiley' },
+  { name: 'SoundCloud', url: 'https://soundcloud.com/theevanmiles' },
+  { name: 'YouTube', url: 'https://www.youtube.com/@EvanMiles' },
+  { name: 'Spotify', url: 'https://open.spotify.com/artist/13cCyqArWrwa6aq9enBy8l' },
+];
 
 interface TimeLeft {
   days: number;
@@ -55,6 +65,10 @@ export default function PresaveLatest() {
 
   useEffect(() => {
     setMounted(true);
+    const tl = getTimeLeft();
+    if (!tl) {
+      setReleased(true);
+    }
     const timer = setInterval(() => {
       const tl = getTimeLeft();
       if (!tl) {
@@ -181,272 +195,321 @@ export default function PresaveLatest() {
   if (!mounted) return null;
 
   return (
-    <>
-      {/* Background video */}
-      <div className="fixed inset-0 z-0">
+    <div className="min-h-screen bg-[#181721] text-[#eae9d1] font-mono relative overflow-hidden">
+      {/* Video Background */}
+      <div className="fixed inset-0" style={{ zIndex: 0 }}>
         <video
           autoPlay
-          muted
           loop
+          muted
           playsInline
-          className="absolute inset-0 w-full h-full object-cover"
+          className="w-full h-full object-cover"
+          style={{ opacity: 0.4 }}
         >
-          <source src="/WebsiteBG.mp4" type="video/mp4" />
+          <source src={VIDEO_BG_URL} type="video/mp4" />
         </video>
-        <div className="absolute inset-0 bg-[#181721]/80" />
-        <div className="vignette-layer" />
       </div>
 
+      {/* Noise Texture */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          zIndex: 2,
+          width: '120%',
+          height: '120%',
+          top: '-10%',
+          left: '-10%',
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' /%3E%3C/svg%3E")`,
+          opacity: 0.06,
+          animation: 'noise-step 10s steps(10) infinite',
+        }}
+      />
+
+      {/* Vignette */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          zIndex: 3,
+          background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.20) 100%)',
+        }}
+      />
+
       {/* Content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-20">
-        <div className="w-full max-w-md mx-auto text-center">
-          {/* Artwork */}
-          <div className="relative mx-auto mb-8 w-[280px] h-[280px] sm:w-[340px] sm:h-[340px]">
-            <div className="glossy-border rounded-sm overflow-hidden">
-              <Image
-                src={ARTWORK_URL}
-                alt="Evan Miles - I Know You Hate It"
-                width={340}
-                height={340}
-                className="w-full h-full object-cover"
-                priority
-              />
+      <div className="relative" style={{ zIndex: 10 }}>
+        <div className="min-h-screen flex items-center justify-center px-4 py-20">
+          <div className="w-full max-w-md mx-auto text-center">
+            {/* Artwork */}
+            <div className="relative mx-auto mb-8 w-[280px] h-[280px] sm:w-[340px] sm:h-[340px]">
+              <div className="glossy-border-presave rounded-sm overflow-hidden">
+                <Image
+                  src={ARTWORK_URL}
+                  alt="Evan Miles - I Know You Hate It"
+                  width={340}
+                  height={340}
+                  className="w-full h-full object-cover"
+                  priority
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Title */}
-          <p
-            className="text-xs tracking-[0.3em] uppercase mb-1"
-            style={{ color: 'rgba(234, 233, 209, 0.5)' }}
-          >
-            Evan Miles
-          </p>
-          <h1
-            className="text-2xl sm:text-3xl font-light tracking-widest uppercase mb-1"
-            style={{ color: '#eae9d1' }}
-          >
-            I Know You Hate It
-          </h1>
-          <p
-            className="text-xs tracking-[0.2em] uppercase mb-8"
-            style={{ color: 'rgba(234, 233, 209, 0.35)' }}
-          >
-            {released ? 'Out Now' : 'February 27, 2025'}
-          </p>
+            {/* Title */}
+            <p
+              className="text-xs tracking-[0.3em] uppercase mb-1"
+              style={{ color: 'rgba(234, 233, 209, 0.5)' }}
+            >
+              Evan Miles
+            </p>
+            <h1
+              className="text-2xl sm:text-3xl font-light tracking-widest uppercase mb-1"
+              style={{ color: '#eae9d1' }}
+            >
+              I Know You Hate It
+            </h1>
+            <p
+              className="text-xs tracking-[0.2em] uppercase mb-8"
+              style={{ color: 'rgba(234, 233, 209, 0.35)' }}
+            >
+              {released ? 'Out Now' : 'February 27, 2026'}
+            </p>
 
-          {/* Audio Preview Player */}
-          <div
-            className="mb-10 mx-auto rounded-sm px-4 py-3"
-            style={{
-              background: 'rgba(234, 233, 209, 0.05)',
-              border: '1px solid rgba(234, 233, 209, 0.08)',
-            }}
-          >
-            <audio
-              ref={audioRef}
-              src={AUDIO_URL}
-              preload="metadata"
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              onEnded={handleEnded}
-            />
+            {/* Audio Preview Player */}
+            <div
+              className="mb-10 mx-auto rounded-sm px-4 py-3"
+              style={{
+                background: 'rgba(234, 233, 209, 0.05)',
+                border: '1px solid rgba(234, 233, 209, 0.08)',
+              }}
+            >
+              <audio
+                ref={audioRef}
+                src={AUDIO_URL}
+                preload="metadata"
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onEnded={handleEnded}
+              />
 
-            <div className="flex items-center gap-3">
-              {/* Play / Pause */}
-              <button
-                onClick={togglePlay}
-                className="presave-play-btn flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
-                style={{
-                  background: 'rgba(207, 58, 0, 0.9)',
-                }}
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-              >
-                {isPlaying ? (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <rect x="2" y="1" width="3.5" height="12" rx="0.5" fill="#eae9d1" />
-                    <rect x="8.5" y="1" width="3.5" height="12" rx="0.5" fill="#eae9d1" />
-                  </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M3 1.5L12 7L3 12.5V1.5Z" fill="#eae9d1" />
-                  </svg>
-                )}
-              </button>
-
-              {/* Progress bar + times */}
-              <div className="flex-1 min-w-0">
-                <div
-                  ref={progressRef}
-                  className="relative h-1.5 rounded-full cursor-pointer"
-                  style={{ background: 'rgba(234, 233, 209, 0.12)' }}
-                  onClick={handleProgressClick}
-                  onMouseDown={() => setIsDragging(true)}
-                  onTouchStart={handleTouchStart}
+              <div className="flex items-center gap-3">
+                {/* Play / Pause */}
+                <button
+                  onClick={togglePlay}
+                  className="presave-play-btn flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'rgba(207, 58, 0, 0.9)',
+                  }}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
                 >
+                  {isPlaying ? (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <rect x="2" y="1" width="3.5" height="12" rx="0.5" fill="#eae9d1" />
+                      <rect x="8.5" y="1" width="3.5" height="12" rx="0.5" fill="#eae9d1" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 1.5L12 7L3 12.5V1.5Z" fill="#eae9d1" />
+                    </svg>
+                  )}
+                </button>
+
+                {/* Progress bar + times */}
+                <div className="flex-1 min-w-0">
                   <div
-                    className="absolute top-0 left-0 h-full rounded-full"
-                    style={{
-                      width: `${progress}%`,
-                      background: '#cf3a00',
-                      transition: isDragging ? 'none' : 'width 0.1s linear',
-                    }}
-                  />
-                  {/* Scrubber handle */}
+                    ref={progressRef}
+                    className="relative h-1.5 rounded-full cursor-pointer"
+                    style={{ background: 'rgba(234, 233, 209, 0.12)' }}
+                    onClick={handleProgressClick}
+                    onMouseDown={() => setIsDragging(true)}
+                    onTouchStart={handleTouchStart}
+                  >
+                    <div
+                      className="absolute top-0 left-0 h-full rounded-full"
+                      style={{
+                        width: `${progress}%`,
+                        background: '#cf3a00',
+                        transition: isDragging ? 'none' : 'width 0.1s linear',
+                      }}
+                    />
+                    {/* Scrubber handle */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full"
+                      style={{
+                        left: `${progress}%`,
+                        transform: `translate(-50%, -50%)`,
+                        background: '#eae9d1',
+                        opacity: isDragging || isPlaying ? 1 : 0,
+                        transition: 'opacity 0.2s',
+                      }}
+                    />
+                  </div>
                   <div
-                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full"
-                    style={{
-                      left: `${progress}%`,
-                      transform: `translate(-50%, -50%)`,
-                      background: '#eae9d1',
-                      opacity: isDragging || isPlaying ? 1 : 0,
-                      transition: 'opacity 0.2s',
-                    }}
-                  />
-                </div>
-                <div
-                  className="flex justify-between mt-1.5 text-[10px] tracking-wider"
-                  style={{ color: 'rgba(234, 233, 209, 0.35)' }}
-                >
-                  <span>{formatTime(currentTime)}</span>
-                  <span className="uppercase tracking-[0.15em]">Preview</span>
-                  <span>{duration > 0 ? formatTime(duration) : '-:--'}</span>
+                    className="flex justify-between mt-1.5 text-[10px] tracking-wider"
+                    style={{ color: 'rgba(234, 233, 209, 0.35)' }}
+                  >
+                    <span>{formatTime(currentTime)}</span>
+                    <span className="uppercase tracking-[0.15em]">Preview</span>
+                    <span>{duration > 0 ? formatTime(duration) : '-:--'}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Countdown or Released State */}
-          {released ? (
-            <div className="space-y-3 mb-10">
+            {/* Countdown + Presave OR Released State */}
+            {released ? (
+              <div>
+                <p
+                  className="text-sm tracking-[0.15em] uppercase mb-6"
+                  style={{ color: 'rgba(234, 233, 209, 0.6)' }}
+                >
+                  Available everywhere now
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Countdown */}
+                {timeLeft && (
+                  <div className="flex justify-center gap-4 sm:gap-6 mb-10">
+                    {[
+                      { value: timeLeft.days, label: 'Days' },
+                      { value: timeLeft.hours, label: 'Hrs' },
+                      { value: timeLeft.minutes, label: 'Min' },
+                      { value: timeLeft.seconds, label: 'Sec' },
+                    ].map((unit) => (
+                      <div key={unit.label} className="text-center">
+                        <div
+                          className="text-3xl sm:text-4xl font-light tracking-wider tabular-nums"
+                          style={{ color: '#eae9d1' }}
+                        >
+                          {unit.value.toString().padStart(2, '0')}
+                        </div>
+                        <div
+                          className="text-[10px] tracking-[0.25em] uppercase mt-1"
+                          style={{ color: 'rgba(234, 233, 209, 0.35)' }}
+                        >
+                          {unit.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Email Presave Form */}
+                {submitted ? (
+                  <div
+                    className="py-4 px-5 rounded-sm text-sm tracking-wide"
+                    style={{
+                      background: 'rgba(207, 58, 0, 0.1)',
+                      border: '1px solid rgba(207, 58, 0, 0.25)',
+                      color: '#eae9d1',
+                    }}
+                  >
+                    You&apos;re in. We&apos;ll send you a link when it drops.
+                  </div>
+                ) : (
+                  <div>
+                    <p
+                      className="text-xs tracking-[0.15em] uppercase mb-4"
+                      style={{ color: 'rgba(234, 233, 209, 0.5)' }}
+                    >
+                      Get notified on release day
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          setError('');
+                        }}
+                        placeholder="your@email.com"
+                        className="flex-1 min-w-0 px-4 py-3 rounded-sm text-sm tracking-wide outline-none"
+                        style={{
+                          background: 'rgba(234, 233, 209, 0.06)',
+                          border: '1px solid rgba(234, 233, 209, 0.1)',
+                          color: '#eae9d1',
+                        }}
+                      />
+                      <button
+                        onClick={handleSubmit}
+                        disabled={submitting}
+                        className="presave-submit-btn px-5 py-3 rounded-sm text-xs tracking-[0.2em] uppercase font-medium flex-shrink-0"
+                        style={{
+                          background: '#cf3a00',
+                          color: '#eae9d1',
+                          opacity: submitting ? 0.5 : 1,
+                        }}
+                      >
+                        {submitting ? '...' : 'Notify Me'}
+                      </button>
+                    </div>
+                    {error && (
+                      <p
+                        className="text-xs mt-2 tracking-wide"
+                        style={{ color: '#cf3a00' }}
+                      >
+                        {error}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer
+          className="py-8"
+          style={{
+            borderTop: '1px solid rgba(234, 233, 209, 0.20)',
+            background: 'rgba(24, 23, 33, 0.50)',
+          }}
+        >
+          <div className="container mx-auto px-6 max-w-6xl">
+            <div className="flex flex-wrap justify-center gap-6 mb-4">
+              {SOCIAL_LINKS.map((link) => (
+                <a
+                  key={link.name}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="presave-social-link font-semibold text-sm"
+                >
+                  {link.name}
+                </a>
+              ))}
+            </div>
+            <div className="text-center">
               <a
-                href="#"
-                className="presave-stream-btn block w-full py-3 rounded-sm text-xs tracking-[0.25em] uppercase font-medium"
-                style={{
-                  background: '#cf3a00',
-                  color: '#eae9d1',
-                }}
+                href="/privacy"
+                className="presave-privacy-link text-xs"
               >
-                Listen on Spotify
-              </a>
-              <a
-                href="#"
-                className="presave-stream-btn block w-full py-3 rounded-sm text-xs tracking-[0.25em] uppercase font-medium"
-                style={{
-                  background: 'rgba(234, 233, 209, 0.08)',
-                  color: '#eae9d1',
-                  border: '1px solid rgba(234, 233, 209, 0.12)',
-                }}
-              >
-                Listen on Apple Music
+                Privacy Policy
               </a>
             </div>
-          ) : (
-            <>
-              {/* Countdown */}
-              {timeLeft && (
-                <div className="flex justify-center gap-4 sm:gap-6 mb-10">
-                  {[
-                    { value: timeLeft.days, label: 'Days' },
-                    { value: timeLeft.hours, label: 'Hrs' },
-                    { value: timeLeft.minutes, label: 'Min' },
-                    { value: timeLeft.seconds, label: 'Sec' },
-                  ].map((unit) => (
-                    <div key={unit.label} className="text-center">
-                      <div
-                        className="text-3xl sm:text-4xl font-light tracking-wider tabular-nums"
-                        style={{ color: '#eae9d1' }}
-                      >
-                        {unit.value.toString().padStart(2, '0')}
-                      </div>
-                      <div
-                        className="text-[10px] tracking-[0.25em] uppercase mt-1"
-                        style={{ color: 'rgba(234, 233, 209, 0.35)' }}
-                      >
-                        {unit.label}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Email Presave Form */}
-              {submitted ? (
-                <div
-                  className="py-4 px-5 rounded-sm text-sm tracking-wide"
-                  style={{
-                    background: 'rgba(207, 58, 0, 0.1)',
-                    border: '1px solid rgba(207, 58, 0, 0.25)',
-                    color: '#eae9d1',
-                  }}
-                >
-                  You&apos;re in. We&apos;ll send you a link when it drops.
-                </div>
-              ) : (
-                <div>
-                  <p
-                    className="text-xs tracking-[0.15em] uppercase mb-4"
-                    style={{ color: 'rgba(234, 233, 209, 0.5)' }}
-                  >
-                    Get notified on release day
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setError('');
-                      }}
-                      placeholder="your@email.com"
-                      className="flex-1 min-w-0 px-4 py-3 rounded-sm text-sm tracking-wide outline-none"
-                      style={{
-                        background: 'rgba(234, 233, 209, 0.06)',
-                        border: '1px solid rgba(234, 233, 209, 0.1)',
-                        color: '#eae9d1',
-                      }}
-                    />
-                    <button
-                      onClick={handleSubmit}
-                      disabled={submitting}
-                      className="presave-submit-btn px-5 py-3 rounded-sm text-xs tracking-[0.2em] uppercase font-medium flex-shrink-0"
-                      style={{
-                        background: '#cf3a00',
-                        color: '#eae9d1',
-                        opacity: submitting ? 0.5 : 1,
-                      }}
-                    >
-                      {submitting ? '...' : 'Notify Me'}
-                    </button>
-                  </div>
-                  {error && (
-                    <p
-                      className="text-xs mt-2 tracking-wide"
-                      style={{ color: '#cf3a00' }}
-                    >
-                      {error}
-                    </p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Footer link */}
-          <p
-            className="mt-12 text-[10px] tracking-[0.2em] uppercase"
-            style={{ color: 'rgba(234, 233, 209, 0.2)' }}
-          >
-            <a
-              href="https://theevanmiles.com"
-              className="presave-footer-link"
-            >
-              theevanmiles.com
-            </a>
-          </p>
-        </div>
+          </div>
+        </footer>
       </div>
 
+      {/* Styles */}
       <style jsx global>{`
+        @keyframes noise-step {
+          0%, 100% { transform: translate(0, 0); }
+          10% { transform: translate(-5%, -5%); }
+          20% { transform: translate(-10%, 5%); }
+          30% { transform: translate(5%, -10%); }
+          40% { transform: translate(-5%, 10%); }
+          50% { transform: translate(10%, -5%); }
+          60% { transform: translate(5%, 10%); }
+          70% { transform: translate(-10%, -5%); }
+          80% { transform: translate(10%, 5%); }
+          90% { transform: translate(-5%, -10%); }
+        }
+        .glossy-border-presave {
+          position: relative;
+          background: rgba(24, 23, 33, 0.65);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(234, 233, 209, 0.30);
+        }
         .presave-play-btn {
           transition: transform 0.15s, opacity 0.15s;
         }
@@ -465,21 +528,21 @@ export default function PresaveLatest() {
         .presave-submit-btn:active {
           transform: scale(0.97);
         }
-        .presave-stream-btn {
-          transition: opacity 0.2s, transform 0.15s;
-          text-align: center;
-        }
-        .presave-stream-btn:hover {
-          opacity: 0.85;
-        }
-        .presave-footer-link {
-          color: rgba(234, 233, 209, 0.2);
+        .presave-social-link {
+          color: rgba(234, 233, 209, 0.70);
           transition: color 0.2s;
         }
-        .presave-footer-link:hover {
-          color: rgba(234, 233, 209, 0.5);
+        .presave-social-link:hover {
+          color: rgba(234, 233, 209, 0.95);
+        }
+        .presave-privacy-link {
+          color: rgba(234, 233, 209, 0.50);
+          transition: color 0.2s;
+        }
+        .presave-privacy-link:hover {
+          color: rgba(234, 233, 209, 0.70);
         }
       `}</style>
-    </>
+    </div>
   );
 }
