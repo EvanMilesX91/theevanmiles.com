@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { error } = await supabase.from('presaves').upsert(
+    const { error } = await supabase.from('presave_latest').upsert(
       {
         email: email.toLowerCase().trim(),
         release,
