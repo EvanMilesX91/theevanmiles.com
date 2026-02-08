@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client with service role
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+const BUCKET = 'website-assets';
+const FILE_PATH = 'mailinglist-signup.txt';
 
 // Basic email format validation
 function isValidEmailFormat(email: string): boolean {
@@ -93,21 +101,51 @@ async function verifyEmailWithAPI(email: string): Promise<{ valid: boolean; mess
   }
 }
 
-// Read emails from file
-async function getEmailsFromFile(): Promise<string[]> {
+// Read emails from Supabase Storage
+async function getEmailsFromStorage(): Promise<string[]> {
   try {
-    const filePath = path.join(process.cwd(), 'mailinglist-signup.txt');
-    const content = await fs.readFile(filePath, 'utf-8');
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from(BUCKET)
+      .download(FILE_PATH);
+
+    if (downloadError) {
+      console.log('File does not exist yet, starting fresh');
+      return [];
+    }
+
+    const content = await fileData.text();
     return content.split('\n').map(e => e.trim().toLowerCase()).filter(e => e !== '');
   } catch (error) {
+    console.error('Error reading emails from storage:', error);
     return [];
   }
 }
 
-// Add email to file
-async function addEmailToFile(email: string): Promise<void> {
-  const filePath = path.join(process.cwd(), 'mailinglist-signup.txt');
-  await fs.appendFile(filePath, `${email}\n`, 'utf-8');
+// Add email to Supabase Storage
+async function addEmailToStorage(email: string, existingEmails: string[]): Promise<void> {
+  try {
+    // Add new email to list
+    const allEmails = [...existingEmails, email];
+    const updatedContent = allEmails.join('\n') + '\n';
+
+    // Upload updated file (upsert = overwrite if exists)
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(FILE_PATH, new Blob([updatedContent], { type: 'text/plain' }), {
+        upsert: true,
+        contentType: 'text/plain',
+      });
+
+    if (uploadError) {
+      console.error('Error uploading to storage:', uploadError);
+      throw uploadError;
+    }
+
+    console.log('Successfully updated mailinglist-signup.txt in Supabase Storage');
+  } catch (error) {
+    console.error('Error adding email to storage:', error);
+    throw error;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -131,8 +169,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 2: Check if already subscribed
-    const existingEmails = await getEmailsFromFile();
+    // Step 2: Check if already subscribed (from Supabase Storage)
+    const existingEmails = await getEmailsFromStorage();
     const alreadySubscribed = existingEmails.includes(normalizedEmail);
 
     if (alreadySubscribed) {
@@ -155,10 +193,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 4: Add to file
-    await addEmailToFile(normalizedEmail);
+    // Step 4: Add to Supabase Storage file
+    await addEmailToStorage(normalizedEmail, existingEmails);
+    console.log(`New subscriber added to storage: ${normalizedEmail}`);
 
-    console.log(`New subscriber added: ${normalizedEmail}`);
+    // Step 5: Save to database
+    try {
+      const { error: dbError } = await supabase
+        .from('download_unlocks')
+        .insert({
+          item_type: item_type,
+          item_id: item_id,
+          unlock_method: 'email',
+          user_identifier: normalizedEmail,
+        });
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        // Don't fail the request if database insert fails - storage write succeeded
+      } else {
+        console.log(`Unlock saved to database for ${normalizedEmail}`);
+      }
+    } catch (dbException) {
+      console.error('Database exception:', dbException);
+      // Continue - storage write succeeded
+    }
 
     return NextResponse.json({
       success: true,
