@@ -1,0 +1,5 @@
+# Private page — keep it out of search indexes.
+# If theevanmiles.com already serves a root /robots.txt, that file takes
+# precedence: add the Disallow line below to it instead of using this file.
+User-agent: *
+Disallow: /em-music-tracker98/

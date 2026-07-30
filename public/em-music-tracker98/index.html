@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>EM · Music Tracker</title>
+
+  <!-- Private page: keep it out of search indexes. Pair with the X-Robots-Tag
+       header and robots.txt described in the README for belt-and-braces. -->
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="theme-color" content="#386641">
+  <meta name="description" content="Private goal tracker for Evan Miles.">
+
+  <!-- IBM Plex Mono, matching theevanmiles.com. Falls back to system mono. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <div class="mark">EM</div>
+        <h1>Music Tracker</h1>
+        <span class="private">Private</span>
+      </div>
+      <nav class="tabs" id="tabs"><!-- tabs injected by app.js --></nav>
+    </header>
+
+    <main id="view"><!-- active section injected by app.js --></main>
+  </div>
+
+  <!-- end-of-month reminder popup mounts here -->
+  <div id="modal-root"></div>
+
+  <!-- Load order matters: seed defines defaults, store reads them, app renders. -->
+  <script src="js/seed.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
