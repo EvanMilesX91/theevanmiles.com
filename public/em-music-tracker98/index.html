@@ -2,6 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <script>
+    // Canonicalise to a trailing slash so the relative asset paths below resolve
+    // correctly when this is served from a subpath (e.g. /em-music-tracker98).
+    // Skips file:// and any URL that already ends in a slash or a file name.
+    (function () {
+      var p = location.pathname;
+      if (p.charAt(p.length - 1) !== '/' && !/\.[a-z0-9]+$/i.test(p)) {
+        location.replace(p + '/' + location.search + location.hash);
+      }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>EM · Music Tracker</title>
 
