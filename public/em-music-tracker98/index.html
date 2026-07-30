@@ -2,17 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <script>
-    // Canonicalise to a trailing slash so the relative asset paths below resolve
-    // correctly when this is served from a subpath (e.g. /em-music-tracker98).
-    // Skips file:// and any URL that already ends in a slash or a file name.
-    (function () {
-      var p = location.pathname;
-      if (p.charAt(p.length - 1) !== '/' && !/\.[a-z0-9]+$/i.test(p)) {
-        location.replace(p + '/' + location.search + location.hash);
-      }
-    })();
-  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>EM · Music Tracker</title>
 
@@ -27,7 +16,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css">
+  <!-- Absolute paths under the deploy route: the host (Vercel) serves this page
+       at /em-music-tracker98 with NO trailing slash, so relative paths would
+       resolve against the site root. -->
+  <link rel="stylesheet" href="/em-music-tracker98/styles.css">
 </head>
 <body>
   <div class="app">
@@ -47,8 +39,8 @@
   <div id="modal-root"></div>
 
   <!-- Load order matters: seed defines defaults, store reads them, app renders. -->
-  <script src="js/seed.js"></script>
-  <script src="js/store.js"></script>
-  <script src="js/app.js"></script>
+  <script src="/em-music-tracker98/js/seed.js"></script>
+  <script src="/em-music-tracker98/js/store.js"></script>
+  <script src="/em-music-tracker98/js/app.js"></script>
 </body>
 </html>
