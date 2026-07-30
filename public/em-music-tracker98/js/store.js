@@ -99,6 +99,15 @@
     } catch (e) {
       console.error('Save failed', e);
     }
+    // Schedule a debounced cloud push (no-op unless signed in to sync).
+    if (window.Sync) window.Sync.schedulePush();
+  }
+
+  // Replace the whole state (used by the sync layer when adopting a cloud copy).
+  // Runs it through migrate() so a copy saved by an older build is normalised.
+  function replaceState(obj) {
+    state = migrate(obj);
+    persist();
   }
 
   // Normalise storage on load so removed fields (e.g. an old ledger) don't
@@ -143,6 +152,7 @@
     get seed() { return window.EM_SEED; },
     uid,
     persist,
+    replaceState,
     exportJSON,
     importJSON,
     reset,

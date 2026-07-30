@@ -297,6 +297,29 @@ h3 { font-size: 16px; margin: 0 0 2px; color: var(--green-900); }
 .src-bar > span { display: block; height: 100%; background: var(--green-600); border-radius: 20px; }
 .src-pct { font-size: 11.5px; text-align: right; color: var(--ink-soft); }
 
+/* ---------- sync: header badge + account panel --------------------------- */
+.sync-badge {
+  font-size: 10px; letter-spacing: .5px; color: var(--green-600);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.sync-badge:empty { display: none; }
+.sync-badge::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--green-600);
+}
+.sync-badge.syncing::before { background: var(--green-300); animation: pulse 1s ease-in-out infinite; }
+.sync-badge.error { color: var(--red); }
+.sync-badge.error::before { background: var(--red); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green-600); vertical-align: 1px; }
+.dot.syncing { background: var(--green-300); animation: pulse 1s ease-in-out infinite; }
+.dot.error { background: var(--red); }
+
+.auth-form { margin-top: 12px; }
+.auth-form input { margin-bottom: 8px; }
+.auth-btns { display: flex; gap: 8px; }
+.auth-btns button { flex: 1; }
+
 /* ---------- post log ------------------------------------------------------ */
 .postlog-add { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .postlog-add select { width: auto; min-width: 92px; }

@@ -27,6 +27,7 @@
       <div class="brand">
         <div class="mark">EM</div>
         <h1>Music Tracker</h1>
+        <span class="sync-badge" id="sync-badge" title="Sync status"></span>
         <span class="private">Private</span>
       </div>
       <nav class="tabs" id="tabs"><!-- tabs injected by app.js --></nav>
@@ -38,9 +39,12 @@
   <!-- end-of-month reminder popup mounts here -->
   <div id="modal-root"></div>
 
-  <!-- Load order matters: seed defines defaults, store reads them, app renders. -->
+  <!-- Load order matters: config + seed define globals, store reads them,
+       sync wires cloud sync, app renders. -->
+  <script src="/em-music-tracker98/js/config.js"></script>
   <script src="/em-music-tracker98/js/seed.js"></script>
   <script src="/em-music-tracker98/js/store.js"></script>
+  <script src="/em-music-tracker98/js/sync.js"></script>
   <script src="/em-music-tracker98/js/app.js"></script>
 </body>
 </html>
