@@ -61,6 +61,22 @@
     return list.map((o) => `<option${o === sel ? ' selected' : ''}>${esc(o)}</option>`).join('');
   }
 
+  /* ---------- collapsible sections -----------------------------------------
+     Every section on every page is a <details>. Which ones you've collapsed is
+     remembered per-device (localStorage, not synced) and survives re-renders.
+     `title` may contain HTML; `body` is the section's inner HTML. */
+  const COLLAPSE_KEY = 'em-tracker-collapse';
+  let collapse = {};
+  try { collapse = JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || {}; } catch (e) { collapse = {}; }
+  function saveCollapse() { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapse)); } catch (e) {} }
+  function secOpen(key, defOpen) { return key in collapse ? collapse[key] : defOpen !== false; }
+  function section(key, title, body, defOpen) {
+    return `<details class="sec" data-sec="${esc(key)}"${secOpen(key, defOpen) ? ' open' : ''}>
+      <summary class="sec-head">${title}</summary>
+      <div class="sec-body">${body}</div>
+    </details>`;
+  }
+
   /* ---------- period cursors (which week / month is being viewed) ---------- */
   let weekCursor = toISO(mondayOf(new Date())); // Monday ISO
   let monthCursor = monthKey(new Date());        // YYYY-MM
@@ -105,6 +121,11 @@
     }));
 
     const groups = SEED.weekTemplate.map((g) => {
+      let gdone = 0;
+      g.items.forEach((it) => {
+        if (it.type === 'count') { if ((wk.counts[it.key] || 0) >= it.goal) gdone++; }
+        else if (wk.tasks[it.key]) gdone++;
+      });
       const rows = g.items.map((it) => {
         if (it.type === 'count') {
           const v = wk.counts[it.key] || 0;
@@ -125,9 +146,8 @@
       }).join('');
       const desc = g.desc ? `<div class="group-desc">${esc(g.desc)}</div>` : '';
       const extra = g.engage ? engagementTargets() : '';
-      return `<div class="group">
-        <div class="group-head">${g.group}</div>
-        ${desc}${rows}${extra}</div>`;
+      const title = `${g.group} <span class="sec-tag muted">${gdone}/${g.items.length}</span>`;
+      return section('w-' + g.group, title, `${desc}${rows}${extra}`);
     }).join('');
 
     return `
@@ -151,7 +171,7 @@
       ${bar(done, total)}
     </div>
 
-    <div class="card">${groups}</div>
+    ${groups}
 
     <p class="note">Consistency of presence beats posting brilliantly then vanishing
     for weeks. The profile is the product, not any single post.</p>
@@ -284,24 +304,31 @@
       <p class="sub">What to post, when to post it, and ideas for a blank feed.</p>
     </div></div>
 
-    <div class="card">
-      <div class="progress-title">Log a post <span class="muted">· feeds the monthly review</span></div>
+    ${section('c-postlog', `Log a post <span class="muted">· feeds the monthly review</span>`, `
       <div class="postlog-add">
         <select id="post-type">${options(SEED.postTypes, 'Post')}</select>
         <input id="post-desc" type="text" placeholder="What did you post? e.g. CRT re-film of the new intro">
         <button data-action="post-add">Log it</button>
       </div>
-      <div class="postlog-recent">${recentHtml}</div>
-    </div>
+      <div class="postlog-recent">${recentHtml}</div>`)}
 
-    <div class="card">
-      <div class="progress-title">Best posting times <span class="muted">· from your IG data</span></div>
+    ${section('c-idea', 'Idea generator', `
+      <div class="chip-row">${ideaBtns}</div>
+      ${ideaCard}`)}
+
+    ${section('c-wheel', `Spin the wheel <span class="muted">· genre roulette</span>`, `
+      <div class="wheel-wrap" data-action="wheel-spin" title="tap to spin">
+        <div class="wheel-pointer"></div>
+        ${buildWheel(SEED.wheel)}
+      </div>
+      <button class="wheel-spin" data-action="wheel-spin">Spin</button>
+      <div class="wheel-result" id="wheel-result"></div>`)}
+
+    ${section('c-times', `Best posting times <span class="muted">· from your IG data</span>`, `
       <div class="times-table">${times}</div>
-      <div class="active-note">${esc(SEED.insights.activeWindows)}</div>
-    </div>
+      <div class="active-note">${esc(SEED.insights.activeWindows)}</div>`, false)}
 
-    <div class="card">
-      <div class="progress-title">Audience snapshot <span class="muted">· who you're actually talking to</span></div>
+    ${section('c-audience', `Audience snapshot <span class="muted">· who you're talking to</span>`, `
       <ul class="aud-list">
         <li><b>Age</b> ${esc(SEED.insights.audience.age)}</li>
         <li><b>Gender</b> ${esc(SEED.insights.audience.gender)}</li>
@@ -309,52 +336,21 @@
         <li><b>Spotify</b> ${esc(SEED.insights.audience.spotifyPlaces)}</li>
       </ul>
       <div class="insight">${esc(SEED.insights.audience.crux)}</div>
-      <div class="insight amber">${esc(SEED.insights.contentTakeaway)}</div>
-    </div>
+      <div class="insight amber">${esc(SEED.insights.contentTakeaway)}</div>`, false)}
 
-    <div class="card">
-      <div class="progress-title">Idea generator</div>
-      <div class="chip-row">${ideaBtns}</div>
-      ${ideaCard}
-    </div>
+    ${section('c-series', 'The four series — weekly rotation', series, false)}
 
-    <div class="card">
-      <div class="progress-title">Spin the wheel <span class="muted">· genre roulette</span></div>
-      <div class="wheel-wrap" data-action="wheel-spin" title="tap to spin">
-        <div class="wheel-pointer"></div>
-        ${buildWheel(SEED.wheel)}
-      </div>
-      <button class="wheel-spin" data-action="wheel-spin">Spin</button>
-      <div class="wheel-result" id="wheel-result"></div>
-    </div>
+    ${section('c-formats', 'Format library — what to point a camera at', formats, false)}
 
-    <div class="card">
-      <div class="subhead" style="margin-top:0">The four series — every week, on rotation</div>
-      ${series}
-    </div>
+    ${section('c-stories', `Story ideas <span class="muted">· 8–10 PM, Tue–Thu</span>`, stories, false)}
 
-    <div class="card">
-      <div class="subhead" style="margin-top:0">Format library — what to point a camera at</div>
-      ${formats}
-    </div>
+    ${section('c-language', "Content language — lock once, don't revisit", lang, false)}
 
-    <div class="card">
-      <div class="progress-title">Story ideas <span class="muted">· 8–10 PM, Tue–Thu · keep them rough</span></div>
-      ${stories}
-    </div>
-
-    <div class="card">
-      <div class="subhead" style="margin-top:0">Content language — lock once, don't revisit</div>
-      ${lang}
-    </div>
-
-    <div class="card">
-      <div class="subhead" style="margin-top:0">Being in your own content</div>
+    ${section('c-presence', 'Being in your own content', `
       <div class="do-dont">
         <div><div class="dd-head ok">Do</div><ul>${dos}</ul></div>
         <div><div class="dd-head red">Don't</div><ul>${donts}</ul></div>
-      </div>
-    </div>`;
+      </div>`, false)}`;
   }
 
   /* =========================================================================
@@ -413,21 +409,18 @@
       ${bar(done, tmpl.length)}
     </div>
 
-    <div class="card"><div class="group">${rows}</div></div>
+    ${section('m-tasks', "This month's block", `<div class="group">${rows}</div>`)}
 
-    <div class="card">
-      <div class="progress-title">What you posted <span class="muted">· ${monthLabel(monthCursor)}</span></div>
+    ${section('m-posted', `What you posted <span class="muted">· ${monthLabel(monthCursor)}</span>`, `
       <div class="chip-wrap">${countChips}</div>
-      ${postList ? `<div class="postlog-recent" style="margin-top:12px">${postList}</div>` : ''}
-    </div>
+      ${postList ? `<div class="postlog-recent" style="margin-top:12px">${postList}</div>` : ''}`)}
 
-    <div class="card" id="month-log">
-      <div class="progress-title">End-of-month log</div>
+    ${section('m-log', 'End-of-month log', `
       <div class="subhead2">Spotify numbers</div>
       <div class="grid2">${spInputs}</div>
       <div class="subhead2">Review</div>
-      ${txtInputs}
-    </div>
+      ${txtInputs}`)}
+
     ${isThisMonth ? '' : `<button class="ghost" data-action="month-today">Jump to this month</button>`}
     `;
   }
@@ -478,16 +471,17 @@
     }).join('');
 
     const symphonic = addDays(sp.releaseDate, -21);
-    return `<div class="card">
-      <div class="card-head">
-        <input class="inline-title" type="text" data-k="sprint" data-id="${sp.id}" data-f="title"
-               value="${esc(sp.title)}" placeholder="Track name">
-        <button class="icon-del" data-action="sprint-del" data-id="${sp.id}" aria-label="delete sprint">✕</button>
-      </div>
+    const total = SEED.sprintTemplate.length;
+    const title = `${esc(sp.title || 'New release')}
+      <span class="sec-tag muted">${fmt(sp.releaseDate)} · ${done}/${total}</span>`;
+    const body = `
+      <input class="inline-title" type="text" data-k="sprint" data-id="${sp.id}" data-f="title"
+             value="${esc(sp.title)}" placeholder="Track name">
       <div class="card-sub">Release ${fmt(sp.releaseDate)} · Symphonic deadline ~${fmt(symphonic)}</div>
-      ${bar(done, SEED.sprintTemplate.length)}
+      ${bar(done, total)}
       <div class="group">${rows}</div>
-    </div>`;
+      <div class="cc-foot"><button class="link-del" data-action="sprint-del" data-id="${sp.id}">Delete sprint</button></div>`;
+    return section('sprint-' + sp.id, title, body);
   }
 
   /* =========================================================================
@@ -630,16 +624,14 @@
       <input class="num" type="number" data-k="meta" data-f="monthlyListeners" value="${esc(me)}">
       <span class="muted">— drives the step-above check</span></div>
 
-    <details class="sources">
-      <summary>Where to find targets — best sources, in order of fit</summary>
+    ${section('collab-sources', 'Where to find targets — best sources, in order of fit', `
       <ol class="src-ol">
         ${SEED.collabSourcing.sources.map((x) => `<li><b>${esc(x.t)}</b><span>${esc(x.d)}</span></li>`).join('')}
       </ol>
       <div class="insight">${esc(SEED.collabSourcing.ratio)}</div>
       <ul class="src-filters">
         ${SEED.collabSourcing.filters.map((f) => `<li>${esc(f)}</li>`).join('')}
-      </ul>
-    </details>
+      </ul>`, false)}
     ${groups}`;
   }
 
@@ -669,11 +661,12 @@
       : '';
     const reasonLine = a.reasons.length ? `<div class="assess-why">${esc(a.reasons.join(' · '))}</div>` : '';
 
-    return `<div class="collab-card ${closed ? 'closed' : ''}">
+    const secTitle = `${esc(r.artist || 'New artist')}
+      <span class="stagebadge sec-tag">${esc(stage)}</span>`;
+    const body = `<div class="collab-card ${closed ? 'closed' : ''}">
       <div class="cc-head">
         <input class="lc-name" type="text" data-k="collab" data-id="${r.id}" data-f="artist"
                value="${esc(r.artist)}" placeholder="Artist name">
-        <span class="stagebadge">${esc(stage)}</span>
       </div>
 
       <div class="cc-meta">
@@ -727,6 +720,7 @@
         <button class="link-del" data-action="collab-del" data-id="${r.id}">Delete this artist</button>
       </div>
     </div>`;
+    return section('collab-' + r.id, secTitle, body);
   }
 
   /* =========================================================================
@@ -752,14 +746,14 @@
         <label class="field"><span>${esc(q)}</span>
           <textarea rows="2" data-k="roadmap" data-id="${mk}" data-f="refl:${i}">${esc(st.reflections[i])}</textarea></label>`).join('');
 
-      return `<div class="card roadmap-card">
-        <h3>${esc(d.title)}</h3>
+      const title = `${esc(d.title)} <span class="sec-tag muted">${done}/${d.checks.length}</span>`;
+      const body = `
         <p class="sub">${esc(d.blurb)}</p>
         ${bar(done, d.checks.length)}
-        <div class="group">${checks}</div>
+        <div class="group roadmap-card">${checks}</div>
         ${d.numbers.length ? `<div class="subhead">Numbers</div><div class="grid2">${numbers}</div>` : ''}
-        <div class="subhead">Reflection</div>${refl}
-      </div>`;
+        <div class="subhead">Reflection</div>${refl}`;
+      return section('road-' + mk, title, body, mk === 'm1');
     }).join('');
 
     return `
@@ -875,24 +869,19 @@
       <p class="sub">Track the leading ones. The lagging ones are aims, not promises.</p>
     </div></div>
 
-    <div class="card">
-      <div class="metric-head green">Posted this month · ${monthLabel(mk)}</div>
-      ${monthPosts.length
+    ${section('me-posted', `Posted this month <span class="muted">· ${monthLabel(mk)}</span>`,
+      monthPosts.length
         ? `<div class="stat-grid">${postTiles}</div>`
-        : `<div class="empty small">Nothing logged yet — log posts from the Content tab as you go.</div>`}
-    </div>
+        : `<div class="empty small">Nothing logged yet — log posts from the Content tab as you go.</div>`)}
 
-    <div class="card">
-      <div class="metric-head green">Trend <span class="muted">· from your monthly logs</span></div>
+    ${section('me-trend', `Trend <span class="muted">· from your monthly logs</span>`, `
       <div class="chip-row">
         ${SEED.monthlyLogDef.spotify.map((f) =>
           `<button class="chip-btn ${f.key === trendMetric ? 'primary' : ''}" data-action="trend" data-m="${f.key}">${esc(f.label)}</button>`).join('')}
       </div>
-      ${buildTrend(trendMetric)}
-    </div>
+      ${buildTrend(trendMetric)}`)}
 
-    <div class="card baseline">
-      <div class="metric-head">Starting baseline · ${esc(ins.date)} <span class="muted">— point in time, don't edit</span></div>
+    ${section('me-baseline', `Starting baseline <span class="muted">· ${esc(ins.date)}, don't edit</span>`, `
       <div class="subhead2">Spotify · last 12 months</div>
       <div class="stat-grid">${spTiles}</div>
       <div class="mini-note">${esc(ins.topTrack)}</div>
@@ -900,21 +889,17 @@
       <div class="stat-grid">${igTiles}</div>
       <div class="subhead2">Where your streams come from</div>
       <div class="src-list">${srcRows}</div>
-      <div class="mini-note">${esc(ins.sourceTakeaway)}</div>
-    </div>
+      <div class="mini-note">${esc(ins.sourceTakeaway)}</div>`, false)}
 
-    <div class="card">
-      <div class="metric-head green">LEADING — fully in your control</div>
-      ${leading}
-    </div>
-    <div class="card">
-      <div class="metric-head">LAGGING — aim for, can't force</div>
+    ${section('me-leading', 'Leading — fully in your control', leading)}
+
+    ${section('me-lagging', "Lagging — aim for, can't force", `
       <div class="metric-row lag head">
         <div class="metric-name"></div><div class="lag-track">now</div>
         <div class="lag-track">6mo</div><div class="lag-track">12mo</div><div>actual</div>
       </div>
-      ${lagging}
-    </div>
+      ${lagging}`)}
+
     <p class="note">If the leading targets are consistently hit and the lagging numbers
     still don't move, that's information — the mechanism needs another look, not more effort.</p>`;
   }
@@ -926,24 +911,22 @@
     const st = window.Sync ? window.Sync.status() : 'offline';
     const label = { idle: 'Connecting…', syncing: 'Syncing…', synced: 'Synced',
       error: 'Offline — will retry', offline: 'Sync unavailable' }[st] || '';
-    return `<div class="card">
-      <div class="metric-head green">Cloud sync <span class="dot ${st}"></span></div>
+    return section('d-sync', `Cloud sync <span class="dot ${st} sec-tag"></span>`, `
       <div class="data-row">
         <div><b>${esc(label)}</b>
           <p class="muted">Syncs automatically across every device that opens this page — no login needed.</p></div>
         <button data-action="sync-now">Sync now</button>
-      </div>
-    </div>`;
+      </div>`);
   }
 
   function viewData() {
     return `
     <div class="section-head"><div>
       <h2>Data</h2>
-      <p class="sub">Sign in to sync across devices, or back up locally as JSON.</p>
+      <p class="sub">Your data syncs to the cloud automatically. Back up or restore as JSON here.</p>
     </div></div>
     ${syncCard()}
-    <div class="card">
+    ${section('d-backup', 'Backup & reset', `
       <div class="data-row">
         <div><b>Export</b><p class="muted">Download a full JSON backup.</p></div>
         <button data-action="export">Export JSON</button>
@@ -955,11 +938,9 @@
       <div class="data-row">
         <div><b>Reset</b><p class="muted">Wipe everything and reload the starter data from the guide.</p></div>
         <button class="danger" data-action="reset">Reset all data</button>
-      </div>
-    </div>
-    <p class="note">When signed in, your data lives in the cloud (Supabase) and on
-    each device. Signed out, it stays only in this browser (key
-    <code>em-music-tracker98</code>). Export/import works either way.</p>`;
+      </div>`)}
+    <p class="note">Data syncs to the cloud (Supabase) and is cached in this browser
+    (key <code>em-music-tracker98</code>). Export/import makes a manual backup.</p>`;
   }
 
   /* =========================================================================
@@ -1201,10 +1182,10 @@
       </div>`;
     const done = () => { S.state.ui.lastPrompt = mk; S.persist(); };
     root.querySelector('[data-action="prompt-log"]').onclick = () => {
-      done(); closeModal(); monthCursor = mk; location.hash = '#/monthly';
-      // If already on the monthly route the hash won't fire; render + scroll.
-      render();
-      const el = document.getElementById('month-log');
+      done(); closeModal(); monthCursor = mk;
+      collapse['m-log'] = true; saveCollapse();   // make sure the log is expanded
+      location.hash = '#/monthly'; render();
+      const el = document.querySelector('[data-sec="m-log"]');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
     root.querySelector('[data-action="prompt-later"]').onclick = () => { done(); closeModal(); };
@@ -1243,6 +1224,11 @@
       const el = e.target.closest('[data-action]');
       if (el) { e.preventDefault(); handleAction(el.dataset.action, el); }
     });
+    // Remember which sections are collapsed (toggle doesn't bubble → capture).
+    view.addEventListener('toggle', (e) => {
+      const d = e.target;
+      if (d.tagName === 'DETAILS' && d.dataset.sec) { collapse[d.dataset.sec] = d.open; saveCollapse(); }
+    }, true);
     // Import (change on the hidden file input — handled here, not via mutate).
     view.addEventListener('change', (e) => {
       if (e.target.id !== 'import-file') return;

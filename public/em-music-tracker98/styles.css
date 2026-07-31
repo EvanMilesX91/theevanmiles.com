@@ -99,6 +99,30 @@ h3 { font-size: 16px; margin: 0 0 2px; color: var(--green-900); }
   color: var(--green-600); margin: 16px 0 8px;
 }
 
+/* ---------- collapsible sections ----------------------------------------- */
+.sec {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); box-shadow: var(--shadow); margin-bottom: 12px;
+}
+.sec-head {
+  cursor: pointer; list-style: none; padding: 13px 16px;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; font-weight: 600; color: var(--green-900);
+}
+.sec-head::-webkit-details-marker { display: none; }
+.sec-head::before {
+  content: ''; flex: 0 0 auto; width: 7px; height: 7px;
+  border-right: 2px solid var(--green-600); border-bottom: 2px solid var(--green-600);
+  transform: rotate(-45deg); transition: transform .2s; margin-top: -2px;
+}
+.sec[open] > .sec-head::before { transform: rotate(45deg); }
+.sec-head .muted { font-weight: 400; }
+.sec-head .sec-tag { margin-left: auto; font-weight: 400; }
+.sec-body { padding: 0 16px 15px; }
+.sec-body > .subhead:first-child, .sec-body > .subhead2:first-child { margin-top: 2px; }
+/* cards nested inside a section drop their own frame (the section is the card) */
+.sec-body > .collab-card { border: 0; box-shadow: none; padding: 0; margin: 0; background: transparent; }
+
 /* ---------- cards --------------------------------------------------------- */
 .card {
   background: var(--surface); border: 1px solid var(--line);
