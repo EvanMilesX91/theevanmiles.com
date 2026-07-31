@@ -1,0 +1,16 @@
+{
+  "id": "/em-music-tracker98",
+  "name": "EM Music Tracker",
+  "short_name": "EM Tracker",
+  "description": "Evan Miles' private music-goal tracker.",
+  "start_url": "/em-music-tracker98",
+  "scope": "/em-music-tracker98",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF7EA",
+  "theme_color": "#386641",
+  "icons": [
+    { "src": "/em-music-tracker98/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/em-music-tracker98/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
