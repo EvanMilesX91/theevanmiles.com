@@ -188,11 +188,12 @@
   let wheelRotation = 0;
   let trendMetric = 'listeners'; // which monthly-log number the graph plots
 
-  // A few brand greens cycled so adjacent slices differ; cream labels read on all.
-  const WHEEL_GREENS = ['#2f5a3a', '#386641', '#457a4e'];
+  // Distinct colour per segment via the golden angle — spreads neighbouring
+  // hues far apart so every slice reads as its own colour (the landed genre is
+  // shown in the readout below, so the wheel itself carries no text).
+  const wheelColor = (i) => `hsl(${(i * 137.508) % 360}, 66%, 54%)`;
 
-  // Build the wheel SVG. Labels are drawn radially (hub → rim) so even long
-  // genre names fit in a thin slice; font is sized to the slice count.
+  // Build the wheel SVG — coloured segments only, no labels.
   function buildWheel(list) {
     const n = list.length;
     const slice = 360 / n;
@@ -201,27 +202,13 @@
       const a = (ang - 90) * Math.PI / 180; // ang clockwise from 12 o'clock
       return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)];
     };
-    const rIn = hub + 7, rOut = r - 6, rMid = (rIn + rOut) / 2;
-    const longest = Math.max(...list.map((s) => s.length));
-    let fs = Math.min((rOut - rIn) / (longest * 0.60), rMid * (slice * Math.PI / 180) * 0.82);
-    fs = Math.max(5.5, Math.min(fs, 12));
 
-    const segs = list.map((label, i) => {
-      const a0 = i * slice, a1 = (i + 1) * slice, mid = a0 + slice / 2;
+    const segs = list.map((_, i) => {
+      const a0 = i * slice, a1 = (i + 1) * slice;
       const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r);
       const large = slice > 180 ? 1 : 0;
       const path = `M${cx},${cy} L${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${large} 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z`;
-      const fill = WHEEL_GREENS[i % WHEEL_GREENS.length];
-      // radial label, flipped on the left/bottom half so it stays upright
-      const flip = mid > 90 && mid < 270;
-      const [tx, ty] = flip ? pt(mid, rOut) : pt(mid, rIn);
-      const rot = flip ? mid + 90 : mid - 90;
-      const anchor = flip ? 'end' : 'start';
-      const txt = `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}"
-        transform="rotate(${rot.toFixed(1)} ${tx.toFixed(1)} ${ty.toFixed(1)})"
-        text-anchor="${anchor}" dominant-baseline="central" font-size="${fs.toFixed(1)}"
-        font-family="'IBM Plex Mono', monospace" fill="#F2E8CF">${esc(label)}</text>`;
-      return `<path d="${path}" data-i="${i}" fill="${fill}" stroke="#FBF7EA" stroke-width="0.6"/>${txt}`;
+      return `<path d="${path}" data-i="${i}" fill="${wheelColor(i)}" stroke="#FBF7EA" stroke-width="0.8"/>`;
     }).join('');
 
     return `<svg viewBox="0 0 ${S} ${S}" class="wheel-svg" id="wheel" style="transform:rotate(${wheelRotation}deg)">
