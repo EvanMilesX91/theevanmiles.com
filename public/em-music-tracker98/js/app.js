@@ -929,34 +929,15 @@
      SECTION 8 — DATA
      ========================================================================= */
   function syncCard() {
-    const on = window.Sync && window.Sync.signedIn();
-    if (on) {
-      const st = window.Sync.status();
-      const label = { syncing: 'Syncing…', synced: 'Synced', error: 'Sync error — will retry', signedout: '' }[st] || '';
-      return `<div class="card">
-        <div class="metric-head green">Sync <span class="dot ${st}"></span></div>
-        <div class="data-row">
-          <div><b>Signed in</b><p class="muted">${esc(window.Sync.email() || '')} · ${esc(label)}</p>
-            <p class="muted">Your data syncs to the cloud and to your other devices.</p></div>
-          <button class="ghost" data-action="auth-signout">Sign out</button>
-        </div>
-        <div class="data-row">
-          <div><b>Sync now</b><p class="muted">Pull the latest and push this device's changes.</p></div>
-          <button data-action="sync-now">Sync now</button>
-        </div>
-      </div>`;
-    }
+    const st = window.Sync ? window.Sync.status() : 'offline';
+    const label = { idle: 'Connecting…', syncing: 'Syncing…', synced: 'Synced',
+      error: 'Offline — will retry', offline: 'Sync unavailable' }[st] || '';
     return `<div class="card">
-      <div class="metric-head green">Sync across devices</div>
-      <p class="mini-note" style="margin-top:0">Sign in to keep the tracker in sync between your phone and laptop.
-        No account yet? Enter an email + password (min 6 chars) and hit <b>Create account</b>.</p>
-      <div class="auth-form">
-        <input type="email" id="auth-email" placeholder="email" autocomplete="username">
-        <input type="password" id="auth-pass" placeholder="password" autocomplete="current-password">
-        <div class="auth-btns">
-          <button data-action="auth-signin">Sign in</button>
-          <button class="ghost" data-action="auth-signup">Create account</button>
-        </div>
+      <div class="metric-head green">Cloud sync <span class="dot ${st}"></span></div>
+      <div class="data-row">
+        <div><b>${esc(label)}</b>
+          <p class="muted">Syncs automatically across every device that opens this page — no login needed.</p></div>
+        <button data-action="sync-now">Sync now</button>
       </div>
     </div>`;
   }
@@ -1171,15 +1152,8 @@
         S.state.posts = S.state.posts.filter((p) => p.id !== el.dataset.id);
         S.persist(); return render();
 
-      case 'auth-signin': return doAuth('in', el);
-      case 'auth-signup': return doAuth('up', el);
-      case 'auth-signout':
-        if (confirm('Sign out on this device? Your data stays in the cloud and on your other devices.')) {
-          window.Sync.signOut().then(render);
-        }
-        return;
       case 'sync-now':
-        window.Sync.pull().then(() => window.Sync.pushNow()).then(render);
+        if (window.Sync) window.Sync.pull().then(() => window.Sync.pushNow()).then(render);
         return;
 
       case 'export': return S.exportJSON();
@@ -1197,29 +1171,11 @@
     return monthKey(d);
   }
 
-  // Sign in / create account from the Data tab. The user types their own
-  // credentials; we never store the password, only the returned session token.
-  async function doAuth(mode, btn) {
-    const email = (document.getElementById('auth-email').value || '').trim();
-    const pass = document.getElementById('auth-pass').value || '';
-    if (!email || !pass) { alert('Enter an email and a password.'); return; }
-    if (pass.length < 6) { alert('Password needs at least 6 characters.'); return; }
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    try {
-      if (mode === 'up') await window.Sync.signUp(email, pass);
-      else await window.Sync.signIn(email, pass);
-      render();
-    } catch (e) {
-      alert(e.message || 'Sign in failed.');
-      render();
-    }
-  }
-
   // Reflect sync state in the header badge (and refresh the Data panel if open).
   function onSyncStatus(status) {
     const el = document.getElementById('sync-badge');
     if (el) {
-      const map = { syncing: 'Syncing…', synced: 'Synced', error: 'Sync error', signedout: '' };
+      const map = { idle: 'Connecting…', syncing: 'Syncing…', synced: 'Synced', error: 'Offline', offline: '' };
       el.textContent = map[status] || '';
       el.className = 'sync-badge ' + status;
     }
