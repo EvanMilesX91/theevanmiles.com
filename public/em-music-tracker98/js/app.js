@@ -120,6 +120,13 @@
       else if (wk.tasks[it.key]) done++;
     }));
 
+    // Posting time-of-day, pulled from the same Content data (single source).
+    const pt = (type) => SEED.content.postingTimes.find((t) => t.type === type) || {};
+    const timeBadge = (type) => {
+      const t = pt(type);
+      return t.time ? `<span class="time-hint">${esc(t.time)}</span>` : '';
+    };
+
     const groups = SEED.weekTemplate.map((g) => {
       let gdone = 0;
       g.items.forEach((it) => {
@@ -132,6 +139,7 @@
           const hit = v >= it.goal;
           return `<div class="task ${hit ? 'done' : ''}">
             <span class="task-label">${esc(it.label)}</span>
+            ${it.timeType ? timeBadge(it.timeType) : ''}
             <span class="stepper">
               <button data-action="count" data-key="${it.key}" data-d="-1" aria-label="decrease">–</button>
               <b class="${hit ? 'ok' : ''}">${v}</b>
@@ -142,13 +150,22 @@
         return `<label class="task ${on ? 'done' : ''}">
           <input type="checkbox" data-k="week" data-f="${it.key}" ${on ? 'checked' : ''}>
           <span class="task-label">${esc(it.label)}</span>
+          ${it.timeType ? timeBadge(it.timeType) : ''}
         </label>`;
       }).join('');
-      const desc = g.desc ? `<div class="group-desc">${esc(g.desc)}</div>` : '';
+      // Best-days line, derived from the Content posting-times data.
+      const dayHint = g.timeType ? `Best ${esc(pt(g.timeType).days)}` : '';
+      const descText = [dayHint, g.desc].filter(Boolean).join(' · ');
+      const desc = descText ? `<div class="group-desc">${descText}</div>` : '';
       const extra = g.engage ? engagementTargets() : '';
       const title = `${g.group} <span class="sec-tag muted">${gdone}/${g.items.length}</span>`;
       return section('w-' + g.group, title, `${desc}${rows}${extra}`);
     }).join('');
+
+    // "Every day" — recurring habits as a 2×4 grid (7 + one empty). No ticking.
+    const habits = SEED.dailyHabits.map((h) => `<div class="habit-box">${esc(h)}</div>`).join('') +
+      `<div class="habit-box empty"></div>`;
+    const habitGrid = section('w-daily', 'Every day', `<div class="habit-grid">${habits}</div>`);
 
     return `
     <div class="section-head">
@@ -170,6 +187,8 @@
       <div class="progress-title">Week progress</div>
       ${bar(done, total)}
     </div>
+
+    ${habitGrid}
 
     ${groups}
 

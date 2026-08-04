@@ -475,6 +475,22 @@ h3 { font-size: 16px; margin: 0 0 2px; color: var(--green-900); }
 .trend-svg { width: 100%; height: 120px; display: block; }
 .trend-x { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; }
 
+/* ---------- posting-time badge on This Week tasks ------------------------ */
+.time-hint {
+  flex: 0 0 auto; font-size: 10px; letter-spacing: .3px; white-space: nowrap;
+  color: var(--green-600); background: var(--cream); border-radius: 20px; padding: 2px 8px;
+}
+
+/* ---------- This Week: daily habits grid --------------------------------- */
+.habit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.habit-box {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 12px; min-height: 56px; font-size: 12px; font-weight: 500;
+  color: var(--green-900); line-height: 1.35; display: flex; align-items: center;
+}
+.habit-box.empty { background: transparent; border-style: dashed; }
+@media (min-width: 620px) { .habit-grid { grid-template-columns: repeat(4, 1fr); } }
+
 /* ---------- week / month nav --------------------------------------------- */
 .weeknav { display: flex; align-items: center; gap: 6px; }
 .weeknav button {

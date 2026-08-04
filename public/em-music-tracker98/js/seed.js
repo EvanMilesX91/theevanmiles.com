@@ -14,11 +14,13 @@ window.EM_SEED = {
      Reach rows are flagged `protect` — the guide's rule is: if a week
      collapses, these are the ones you keep. */
   weekTemplate: [
-    { group: 'POST', desc: 'Best 6–8 PM — especially Thu & Sun', items: [
-      { key: 'mon',  label: 'Mon — Working On',        type: 'check' },
-      { key: 'wed',  label: "Wed — What's In My USB",   type: 'check' },
-      { key: 'fri',  label: 'Fri — Making',             type: 'check' },
-      { key: 'sun',  label: 'Sun — Playing',            type: 'check' },
+    // `timeType` links these to the Content posting-times data — the best
+    // time-of-day + days are shown here, pulled from one source.
+    { group: 'POST', timeType: 'Posts', items: [
+      { key: 'mon',  label: 'Mon — Working On',        type: 'check', timeType: 'Posts' },
+      { key: 'wed',  label: "Wed — What's In My USB",   type: 'check', timeType: 'Posts' },
+      { key: 'fri',  label: 'Fri — Making',             type: 'check', timeType: 'Posts' },
+      { key: 'sun',  label: 'Sun — Playing',            type: 'check', timeType: 'Posts' },
     ]},
     { group: 'MAKE', items: [
       { key: 'capture',      label: 'One studio capture (2 min → CAPTURES)', type: 'check' },
@@ -29,9 +31,21 @@ window.EM_SEED = {
       desc: 'Like + comment on your warm-up targets — 15 min, ~10 likes, 5 real comments each.', items: [
       { key: 'engage', label: 'Engagement sessions (aim 3)', type: 'count', goal: 3, max: 5 },
     ]},
-    { group: 'STORIES', desc: '8–10 PM, Tue–Thu · 3–5 across the week, rough is fine', items: [
-      { key: 'stories', label: '3–5 stories across the week', type: 'count', goal: 3, max: 5 },
+    { group: 'STORIES', timeType: 'Stories', desc: '3–5 across the week, rough is fine', items: [
+      { key: 'stories', label: '3–5 stories across the week', type: 'count', goal: 3, max: 5, timeType: 'Stories' },
     ]},
+  ],
+
+  /* Daily rhythm — the recurring reach/content habits to keep doing every day.
+     Shown as a reference grid on This Week (no ticking — just a reminder). */
+  dailyHabits: [
+    'Look for new artists to collab with',
+    'Find a song to edit or remix',
+    'Reach out with engagement',
+    'Work on an edit or a track',
+    'Capture a studio moment → CAPTURES',
+    'Warm up a collab target',
+    'Repost / share from a mutual',
   ],
 
   /* Monthly — the "once a month, on top" block from the guide. */
