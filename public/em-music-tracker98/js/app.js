@@ -817,7 +817,7 @@
 
     const line = pts.map((p, i) => `${i ? 'L' : 'M'}${xs(i).toFixed(1)},${ys(p.v).toFixed(1)}`).join(' ');
     const area = `${line} L${xs(pts.length - 1).toFixed(1)},${H - padB} L${xs(0).toFixed(1)},${H - padB} Z`;
-    const dots = pts.map((p, i) => `<circle cx="${xs(i).toFixed(1)}" cy="${ys(p.v).toFixed(1)}" r="3" fill="#386641"/>`).join('');
+    const dots = pts.map((p, i) => `<circle cx="${xs(i).toFixed(1)}" cy="${ys(p.v).toFixed(1)}" r="3" fill="#A7C957"/>`).join('');
     const first = pts[0], last = pts[pts.length - 1];
     const delta = last.v - first.v;
     const deltaTxt = delta === 0 ? 'flat' : `${delta > 0 ? '+' : ''}${delta.toLocaleString()}`;
@@ -829,8 +829,8 @@
         <span class="muted">since ${monthLabel(first.mk)}</span>
       </div>
       <svg viewBox="0 0 ${W} ${H}" class="trend-svg" preserveAspectRatio="none">
-        <path d="${area}" fill="rgba(106,153,78,.14)"/>
-        <path d="${line}" fill="none" stroke="#6A994E" stroke-width="2" stroke-linejoin="round"/>
+        <path d="${area}" fill="rgba(167,201,87,.15)"/>
+        <path d="${line}" fill="none" stroke="#A7C957" stroke-width="2" stroke-linejoin="round"/>
         ${dots}
       </svg>
       <div class="trend-x"><span>${monthLabel(first.mk)}</span><span>${monthLabel(last.mk)}</span></div>`;
