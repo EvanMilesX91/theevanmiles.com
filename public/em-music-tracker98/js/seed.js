@@ -56,15 +56,46 @@ window.EM_SEED = {
     { key: 'collab_approach', label: 'One Collab Ladder approach' },
   ],
 
-  /* Release sprint post schedule. Offsets are DAYS from the release Friday.
-     Matches the guide's sprint table exactly. */
+  /* Release sprint — the full 19-item workflow. Offsets are DAYS from the
+     release Friday (negative = before). `kind` is 'admin' (a deadline) or
+     'post' (content). `blockedBy` references another item's key. */
   sprintTemplate: [
-    { key: 'teaser1',   label: 'Teaser 1',    offset: -10, note: 'Template 1 · 15–30 sec' },
-    { key: 'teaser2',   label: 'Teaser 2',    offset:  -8, note: 'Different angle · a studio capture works' },
-    { key: 'track_out', label: 'Track out',   offset:   0, note: 'Template 2 + Release Day procedure' },
-    { key: 'round_up',  label: 'Support round-up', offset: 2, note: 'Reposts, reactions, plays' },
-    { key: 'visualiser',label: 'Visualiser',  offset:  11, note: 'TouchDesigner / Stay Asleep loop' },
-    { key: 'clip',      label: 'Clip',         offset:  16, note: 'Second use of the visualiser' },
+    // Pre-release
+    { key: 'submit_distro', label: 'Submit to distro',        offset: -42, kind: 'admin' },
+    { key: 'dsp_pitch',     label: 'DSP submissions / pitch', offset: -38, kind: 'admin' },
+    { key: 'press_release', label: 'Write press release',     offset: -35, kind: 'admin', blockedBy: 'submit_distro' },
+    { key: 'blogs_pr',      label: 'Blogs press release sent', offset: -28, kind: 'admin' },
+    { key: 'canvas',        label: 'Canvas upload',           offset: -14, kind: 'admin' },
+    { key: 'presave',       label: 'Presave link to GC',      offset:  -7, kind: 'admin' },
+    { key: 'artwork',       label: 'Artwork post',            offset:  -5, kind: 'post' },
+    { key: 'selfie',        label: 'Selfie announce post',    offset:  -4, kind: 'post' },
+    { key: 'radio_pr',      label: 'Radio press release sent', offset: -3, kind: 'admin' },
+    { key: 'upcoming',      label: 'Upcoming tune post',      offset:  -3, kind: 'post' },
+    // Post-release
+    { key: 'out_now',       label: 'Out Now post',            offset:   0, kind: 'post' },
+    { key: 'audio_yt',      label: 'Audio video for YT',      offset:   1, kind: 'post' },
+    { key: 'reel1',         label: 'TikTok / Reel 1',         offset:   3, kind: 'post' },
+    { key: 'reel2',         label: 'TikTok / Reel 2',         offset:   6, kind: 'post' },
+    { key: 'lyric',         label: 'Lyric video / visualiser', offset:  8, kind: 'post' },
+    { key: 'reel3',         label: 'TikTok / Reel 3',         offset:  11, kind: 'post' },
+    { key: 'reel4',         label: 'TikTok / Reel 4',         offset:  14, kind: 'post' },
+    { key: 'reel5',         label: 'TikTok / Reel 5',         offset:  18, kind: 'post' },
+    { key: 'reel6',         label: 'TikTok / Reel 6',         offset:  21, kind: 'post' },
+  ],
+
+  /* The four weekly series, on their best days (IG data: Mon 12–3pm peak). */
+  weekSeries: [
+    { day: 'Mon', key: 's_working', label: 'Working On' },
+    { day: 'Thu', key: 's_making',  label: 'Making' },
+    { day: 'Fri', key: 's_usb',     label: "What's In My USB" },
+    { day: 'Sun', key: 's_playing', label: 'Playing' },
+  ],
+  // Story + engagement chips distributed across their best days (muted).
+  weekStories: [
+    { day: 'Tue', key: 'story_tue' }, { day: 'Wed', key: 'story_wed' }, { day: 'Thu', key: 'story_thu' },
+  ],
+  weekEngage: [
+    { day: 'Mon', key: 'eng_mon' }, { day: 'Wed', key: 'eng_wed' }, { day: 'Fri', key: 'eng_fri' },
   ],
 
   /* 90-Day Roadmap — three monthly dashboards, seeded from Part Five.
@@ -134,6 +165,8 @@ window.EM_SEED = {
   metrics: {
     leading: [
       { key: 'reach_released',   label: 'Reach content released', target: '1 edit or playlist / month', auto: false },
+      { key: 'saves',            label: 'Saves',                  target: 'recover — fell 56%', auto: false },
+      { key: 'playlist_adds',    label: 'Playlist adds',          target: 'recover — fell 33%', auto: false },
       { key: 'collab_shortlist', label: 'Collab shortlist size',  target: '3–4 names per tier', auto: 'collabCount' },
     ],
     lagging: [
@@ -154,9 +187,9 @@ window.EM_SEED = {
       { type: 'Reels',   time: '6–8 PM',  days: 'Thu–Sun',   tip: 'Hook fast, keep it under 15 sec' },
     ],
     series: [
-      { day: 'Thu', name: 'Working On',        what: '30 sec of unreleased music, no talking. Cut between hands, Ableton, synth, speaker cone.', caption: '“still working on this”' },
-      { day: 'Fri', name: 'Making',            what: 'Anything being built — an edit, a visual, a melody, a field recording. One idea per post.', caption: 'Edit-lab version works well — “turning this…”, original plays, cut, your version' },
-      { day: 'Sat', name: "What's In My USB",  what: "5 tracks you're actually playing, 10 sec each. The strongest format on the list — people want discovery.", caption: 'One per track, 5 words max — “opening track”, “peak time”, “closer”' },
+      { day: 'Mon', name: 'Working On',        what: '30 sec of unreleased music, no talking. Cut between hands, Ableton, synth, speaker cone.', caption: '“still working on this”' },
+      { day: 'Thu', name: 'Making',            what: 'Anything being built — an edit, a visual, a melody, a field recording. One idea per post.', caption: 'Edit-lab version works well — “turning this…”, original plays, cut, your version' },
+      { day: 'Fri', name: "What's In My USB",  what: "5 tracks you're actually playing, 10 sec each. The strongest format on the list — people want discovery.", caption: 'One per track, 5 words max — “opening track”, “peak time”, “closer”' },
       { day: 'Sun', name: 'Playing',           what: 'A rehearsal, a mix clip, a rooftop, or one unreleased track in your room. One light, one take.', caption: "Timeless — these don't expire the way promo does" },
     ],
     formats: [
@@ -261,11 +294,11 @@ window.EM_SEED = {
   // rows show last-baseline (28 Jul 2026) so you can see movement at a glance.
   monthlyLogDef: {
     spotify: [
-      { key: 'listeners',    label: 'Monthly listeners', base: '2,911' },
-      { key: 'streams',      label: 'Streams (28d)',     base: '—' },
-      { key: 'followers',    label: 'Followers',         base: '1,611' },
-      { key: 'saves',        label: 'Saves',             base: '1,356' },
-      { key: 'playlistAdds', label: 'Playlist adds',     base: '7,083' },
+      { key: 'listeners',    label: 'Monthly listeners', base: '2,911', baseNum: 2911 },
+      { key: 'streams',      label: 'Streams (28d)',     base: null,    baseNum: null },
+      { key: 'followers',    label: 'Followers',         base: '1,611', baseNum: 1611 },
+      { key: 'saves',        label: 'Saves',             base: '1,356', baseNum: 1356 },
+      { key: 'playlistAdds', label: 'Playlist adds',     base: '7,083', baseNum: 7083 },
     ],
     text: [
       { key: 'wentWell',    label: 'What went well on socials this month' },

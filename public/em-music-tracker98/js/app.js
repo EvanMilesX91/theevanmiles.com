@@ -106,98 +106,134 @@
   /* =========================================================================
      SECTION 1 — TODAY / THIS WEEK
      ========================================================================= */
+  const DABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const dateShort = (iso) => fmt(iso).split(' ').slice(1).join(' '); // "03 Aug"
+
+  // One chip on the week grid. `src` carries the data-* to tick its source.
+  function wkChip(c) {
+    const cls = ['wk-chip', c.overdue ? 'overdue' : c.type, c.done ? 'done' : ''].join(' ');
+    return `<label class="${cls}"${c.tip || ''}>
+      <input type="checkbox" hidden ${c.src} ${c.done ? 'checked' : ''}>
+      <span>${esc(c.label)}</span>
+    </label>`;
+  }
+
   function viewToday() {
     const wk = ensureWeek(weekCursor);
     const isThisWeek = weekCursor === toISO(mondayOf(new Date()));
     const weekEnd = addDays(weekCursor, 6);
+    const today = todayISO();
+    const thisMk = monthKey(new Date());
 
-    // Count completion across the permanent week (a counter row counts as done
-    // once it hits its goal).
-    let done = 0, total = 0;
-    SEED.weekTemplate.forEach((g) => g.items.forEach((it) => {
-      total++;
-      if (it.type === 'count') { if ((wk.counts[it.key] || 0) >= it.goal) done++; }
-      else if (wk.tasks[it.key]) done++;
+    // 7 day cells for the visible week.
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekCursor, i);
+      days.push({ abbr: DABBR[i], dateISO: d, chips: [] });
+    }
+    const byAbbr = Object.fromEntries(days.map((d) => [d.abbr, d]));
+    const byDate = Object.fromEntries(days.map((d) => [d.dateISO, d]));
+
+    // Source 1 — the four weekly series (tick → wk.tasks).
+    SEED.weekSeries.forEach((s) => {
+      const d = byAbbr[s.day]; if (!d) return;
+      d.chips.push({ type: 'series', label: s.label, done: !!wk.tasks[s.key],
+        dateISO: d.dateISO, src: `data-k="week" data-f="${s.key}"` });
+    });
+    // Source 2 — active sprint items landing in this week (tick → sprint item).
+    S.state.sprints.forEach((sp) => {
+      (sp.items || []).forEach((it) => {
+        if (it.date < weekCursor || it.date > weekEnd) return;
+        const d = byDate[it.date]; if (!d) return;
+        d.chips.push({ type: it.kind === 'admin' ? 'admin' : 'sprint', label: it.label,
+          done: it.done, dateISO: it.date, sprintPost: it.kind === 'post',
+          src: `data-k="sprint" data-id="${sp.id}" data-item="${it.key}" data-f="done"` });
+      });
+    });
+    // Source 3 — stories + engagement (muted).
+    SEED.weekStories.forEach((s) => { const d = byAbbr[s.day]; if (!d) return;
+      d.chips.push({ type: 'dim', label: 'Story', done: !!wk.tasks[s.key], dateISO: d.dateISO, src: `data-k="week" data-f="${s.key}"` }); });
+    SEED.weekEngage.forEach((s) => { const d = byAbbr[s.day]; if (!d) return;
+      d.chips.push({ type: 'dim', label: 'Engage', done: !!wk.tasks[s.key], dateISO: d.dateISO, src: `data-k="week" data-f="${s.key}"` }); });
+
+    // Merge rule: a sprint post on a day drops that day's series post.
+    days.forEach((d) => {
+      if (d.chips.some((c) => c.sprintPost)) d.chips = d.chips.filter((c) => c.type !== 'series');
+    });
+
+    // Overdue = due before today and not ticked. Count for the header badge.
+    let overdue = 0;
+    days.forEach((d) => d.chips.forEach((c) => {
+      c.overdue = !c.done && c.dateISO < today;
+      if (c.overdue) overdue++;
     }));
 
-    // Posting type + time-of-day, pulled from the same Content data (single source).
-    const pt = (type) => SEED.content.postingTimes.find((t) => t.type === type) || {};
-    const TYPE = { Posts: 'Post', Stories: 'Story', Reels: 'Reel' };
-    const timeBadge = (type) => {
-      const t = pt(type);
-      return t.time ? `<span class="time-hint">${esc(TYPE[type] || '')} · ${esc(t.time)}</span>` : '';
-    };
+    // Today strip.
+    const todayCell = byDate[today];
+    const todayDue = todayCell ? todayCell.chips.filter((c) => !c.done) : [];
+    const todayStrip = isThisWeek ? `
+      <div class="today-strip">
+        <div class="ts-head">Today · ${dateShort(today)}</div>
+        ${todayDue.length
+          ? `<div class="wk-chips">${todayDue.map(wkChip).join('')}</div>`
+          : `<span class="muted">Nothing due today — grab a studio capture (2 min → CAPTURES).</span>`}
+      </div>` : '';
 
-    const groups = SEED.weekTemplate.map((g) => {
-      let gdone = 0;
-      g.items.forEach((it) => {
-        if (it.type === 'count') { if ((wk.counts[it.key] || 0) >= it.goal) gdone++; }
-        else if (wk.tasks[it.key]) gdone++;
-      });
-      const rows = g.items.map((it) => {
-        if (it.type === 'count') {
-          const v = wk.counts[it.key] || 0;
-          const hit = v >= it.goal;
-          return `<div class="task ${hit ? 'done' : ''}">
-            <span class="task-label">${esc(it.label)}</span>
-            ${it.timeType ? timeBadge(it.timeType) : ''}
-            <span class="stepper">
-              <button data-action="count" data-key="${it.key}" data-d="-1" aria-label="decrease">–</button>
-              <b class="${hit ? 'ok' : ''}">${v}</b>
-              <button data-action="count" data-key="${it.key}" data-d="1" aria-label="increase">+</button>
-            </span></div>`;
-        }
-        const on = !!wk.tasks[it.key];
-        return `<label class="task ${on ? 'done' : ''}">
-          <input type="checkbox" data-k="week" data-f="${it.key}" ${on ? 'checked' : ''}>
-          <span class="task-label">${it.day ? `<b>${esc(it.day)}</b> · ` : ''}${esc(it.label)}</span>
-          ${it.timeType ? timeBadge(it.timeType) : ''}
-        </label>`;
-      }).join('');
-      // Best-days line, derived from the Content posting-times data.
-      const dayHint = g.timeType ? `Best ${esc(pt(g.timeType).days)}` : '';
-      const descText = [dayHint, g.desc].filter(Boolean).join(' · ');
-      const desc = descText ? `<div class="group-desc">${descText}</div>` : '';
-      const extra = g.engage ? engagementTargets() : '';
-      const title = `${g.group} <span class="sec-tag muted">${gdone}/${g.items.length}</span>`;
-      return section('w-' + g.group, title, `${desc}${rows}${extra}`);
+    const grid = `<div class="wk-grid">${days.map((d) => `
+      <div class="wk-day ${d.dateISO === today ? 'today' : ''}">
+        <div class="wk-day-head"><b>${d.abbr}</b><span>${dateShort(d.dateISO)}</span></div>
+        <div class="wk-chips">${d.chips.map(wkChip).join('') || '<span class="wk-empty">—</span>'}</div>
+      </div>`).join('')}</div>`;
+
+    const legend = `<div class="wk-legend">
+      <span class="lg series">Series</span>
+      <span class="lg sprint">Sprint</span>
+      <span class="lg admin">Admin</span>
+    </div>`;
+
+    // Footer — sprint status + this month's block.
+    const sprintFoot = S.state.sprints.map((sp) => {
+      const dOut = daysBetween(today, sp.releaseDate);
+      const status = dOut === 0 ? 'Release day — today'
+        : dOut > 0 ? `Releases in ${dOut} day${dOut === 1 ? '' : 's'}`
+        : `Released ${-dOut} day${dOut === -1 ? '' : 's'} ago`;
+      const dn = (sp.items || []).filter((it) => it.done).length;
+      return `<div class="foot-card">
+        <div class="fc-title">${esc(sp.trackName || 'Release')}</div>
+        <div class="fc-status ${dOut === 0 ? 'live' : ''}">${status}</div>
+        <div class="muted">${dn}/${(sp.items || []).length} done · ${fmt(sp.releaseDate)}</div>
+      </div>`;
     }).join('');
-
-    // Day-by-day focus — a 2×4 calendar grid (7 days + one empty). No ticking.
-    const habits = SEED.dailyHabits.map((h) =>
-      `<div class="habit-box"><div class="habit-day">${esc(h.day)}</div><div class="habit-task">${esc(h.task)}</div></div>`).join('') +
-      `<div class="habit-box empty"></div>`;
-    const habitGrid = section('w-daily', 'Daily focus', `<div class="habit-grid">${habits}</div>`);
+    const mBlock = ensureMonth(thisMk);
+    const blockRows = SEED.monthlyTemplate.map((t) => `
+      <label class="task ${mBlock[t.key] ? 'done' : ''}">
+        <input type="checkbox" data-k="monthAt" data-mk="${thisMk}" data-f="${t.key}" ${mBlock[t.key] ? 'checked' : ''}>
+        <span class="task-label">${esc(t.label)}</span></label>`).join('');
+    const footer = `<div class="wk-footer">
+      ${sprintFoot || '<div class="foot-card"><div class="fc-title muted">No active sprint</div><div class="muted">Generate one on the Sprint tab.</div></div>'}
+      <div class="foot-card">
+        <div class="fc-title">This month's block</div>
+        ${blockRows}
+      </div>
+    </div>`;
 
     return `
-    <div class="section-head">
-      <div>
-        <h2>Today / This Week</h2>
-        <p class="sub">The permanent week — runs every week, release or not.</p>
-      </div>
-      <div class="weeknav">
-        <button data-action="week-prev" aria-label="previous week">‹</button>
-        <div class="weeklabel">
-          <b>${isThisWeek ? 'This week' : 'Week of'}</b>
-          <span>${fmt(weekCursor)} – ${fmt(weekEnd)}</span>
+    <div class="wk-header">
+      <div><h2>This week</h2>
+        <p class="sub">${fmt(weekCursor)} – ${fmt(weekEnd)}</p></div>
+      <div class="wk-header-right">
+        ${overdue > 0 ? `<span class="overdue-badge">${overdue} overdue</span>` : ''}
+        <div class="weeknav">
+          <button data-action="week-prev" aria-label="previous week">‹</button>
+          ${isThisWeek ? '' : `<button class="ghost" data-action="week-today" style="padding:6px 10px">Today</button>`}
+          <button data-action="week-next" aria-label="next week">›</button>
         </div>
-        <button data-action="week-next" aria-label="next week">›</button>
       </div>
     </div>
-
-    <div class="card progress-card">
-      <div class="progress-title">Week progress</div>
-      ${bar(done, total)}
-    </div>
-
-    ${habitGrid}
-
-    ${groups}
-
-    <p class="note">Consistency of presence beats posting brilliantly then vanishing
-    for weeks. The profile is the product, not any single post.</p>
-    ${isThisWeek ? '' : `<button class="ghost" data-action="week-today">Jump to this week</button>`}
-    `;
+    ${todayStrip}
+    ${grid}
+    ${legend}
+    ${footer}`;
   }
 
   // Who to spend the engagement blocks on — pulled live from the Collab Ladder
@@ -319,11 +355,19 @@
         </div>`).join('')
       : `<div class="empty small">Nothing logged this month yet.</div>`;
 
+    const jump = [
+      ['c-postlog', 'Log'], ['c-idea', 'Ideas'], ['c-wheel', 'Wheel'], ['c-times', 'Times'],
+      ['c-audience', 'Audience'], ['c-series', 'Series'], ['c-formats', 'Formats'],
+      ['c-stories', 'Stories'], ['c-language', 'Language'], ['c-presence', 'On camera'],
+    ].map(([sec, lab]) => `<button class="chip-btn" data-action="jump" data-sec="${sec}">${lab}</button>`).join('');
+
     return `
     <div class="section-head"><div>
       <h2>Content</h2>
       <p class="sub">What to post, when to post it, and ideas for a blank feed.</p>
     </div></div>
+
+    <div class="content-nav chip-row">${jump}</div>
 
     ${section('c-postlog', `Log a post <span class="muted">· feeds the monthly review</span>`, `
       <div class="postlog-add">
@@ -337,7 +381,7 @@
       <div class="chip-row">${ideaBtns}</div>
       ${ideaCard}`)}
 
-    ${section('c-wheel', `Spin the wheel <span class="muted">· genre roulette</span>`, `
+    ${section('c-wheel', `Spin the wheel <span class="muted">· stuck? spin for an edit direction</span>`, `
       <div class="wheel-wrap" data-action="wheel-spin" title="tap to spin">
         <div class="wheel-pointer"></div>
         ${buildWheel(SEED.wheel)}
@@ -391,11 +435,20 @@
         <span class="task-label">${esc(t.label)}</span></label>`;
     }).join('');
 
-    // End-of-month log — the numbers + the went-well / didn't reflection.
+    // End-of-month log — numbers with an inline delta-vs-baseline badge.
     const def = SEED.monthlyLogDef;
-    const spInputs = def.spotify.map((f) => `
-      <label class="field"><span>${esc(f.label)} <em class="base">was ${esc(f.base)}</em></span>
-        <input type="number" data-k="mlog" data-f="${f.key}" value="${esc(log[f.key] == null ? '' : log[f.key])}"></label>`).join('');
+    const spInputs = def.spotify.map((f) => {
+      const val = log[f.key];
+      const hasVal = val !== '' && val != null && !isNaN(Number(val));
+      let badge = '';
+      if (hasVal && f.baseNum) {
+        const pct = Math.round(((Number(val) - f.baseNum) / f.baseNum) * 100);
+        badge = `<span class="delta ${pct >= 0 ? 'up' : 'down'}">${pct >= 0 ? '+' : ''}${pct}%</span>`;
+      }
+      const baseHint = f.base ? `<em class="base">previous: ${esc(f.base)}</em>` : '';
+      return `<label class="field"><span>${esc(f.label)} ${baseHint} ${badge}</span>
+        <input type="number" data-k="mlog" data-f="${f.key}" value="${esc(val == null ? '' : val)}"></label>`;
+    }).join('');
     const txtInputs = def.text.map((f) => `
       <label class="field"><span>${esc(f.label)}</span>
         <textarea rows="2" data-k="mlog" data-f="${f.key}">${esc(log[f.key] || '')}</textarea></label>`).join('');
@@ -425,12 +478,7 @@
       </div>
     </div>
 
-    <div class="card progress-card">
-      <div class="progress-title">Month progress</div>
-      ${bar(done, tmpl.length)}
-    </div>
-
-    ${section('m-tasks', "This month's block", `<div class="group">${rows}</div>`)}
+    ${section('m-tasks', `This month's block <span class="sec-tag muted">${done}/${tmpl.length}</span>`, `<div class="group">${rows}</div>`)}
 
     ${section('m-posted', `What you posted <span class="muted">· ${monthLabel(monthCursor)}</span>`, `
       <div class="chip-wrap">${countChips}</div>
@@ -453,13 +501,13 @@
     const sprints = S.state.sprints;
     const cards = sprints.length
       ? sprints.map(sprintCard).join('')
-      : `<div class="empty">No sprints yet. Add a release date (a Friday) and the
-         six sprint post dates are generated for you.</div>`;
+      : `<div class="empty">No sprints yet. Enter a release date (a Friday) — the
+         full 19-item release workflow is generated from it.</div>`;
 
     return `
     <div class="section-head">
       <div><h2>Release Sprint</h2>
-        <p class="sub">Three weeks laid over the permanent week. Six posts, all template jobs.</p></div>
+        <p class="sub">The full release workflow — distro, press, and the six-week post run — laid out from your release date.</p></div>
     </div>
 
     <div class="card add-row">
@@ -467,40 +515,71 @@
         <span>New release date (Friday)</span>
         <input type="date" id="new-sprint-date">
       </label>
-      <button data-action="sprint-add">Generate sprint</button>
+      <input type="text" id="new-sprint-name" placeholder="Track name (optional)" style="flex:1;min-width:140px">
+      <button data-action="sprint-add">Generate</button>
     </div>
 
     ${cards}`;
   }
 
+  // Build a sprint's items from the template + a release date.
+  function makeSprintItems(releaseDate) {
+    return SEED.sprintTemplate.map((t) => ({
+      key: t.key, label: t.label, kind: t.kind, blockedBy: t.blockedBy || null,
+      date: addDays(releaseDate, t.offset), done: false,
+    }));
+  }
+
+  function sprintItemRow(sp, it) {
+    const today = todayISO();
+    const blocker = it.blockedBy ? sp.items.find((x) => x.key === it.blockedBy) : null;
+    const blocked = blocker && !blocker.done;
+    const overdue = !it.done && !blocked && it.date < today;
+    const cls = ['sprint-item', it.kind, it.done ? 'done' : '', overdue ? 'overdue' : '', blocked ? 'blocked' : ''].join(' ');
+    const blockTip = blocker ? ` title="unlocks once ${esc(blocker.label)} is done"` : '';
+    return `<div class="${cls}"${blockTip}>
+      <input type="checkbox" data-k="sprint" data-id="${sp.id}" data-item="${it.key}" data-f="done"
+             ${it.done ? 'checked' : ''} ${blocked ? 'disabled' : ''}>
+      <span class="si-label">${esc(it.label)}${it.kind === 'admin' ? '<span class="si-kind">admin</span>' : ''}</span>
+      ${overdue ? '<span class="tag-red si-flag">overdue</span>' : ''}
+      <input type="date" class="si-date" data-k="sprint" data-id="${sp.id}" data-item="${it.key}" data-f="date" value="${esc(it.date)}">
+    </div>`;
+  }
+
   function sprintCard(sp) {
     const today = todayISO();
-    let done = 0;
-    const rows = SEED.sprintTemplate.map((p) => {
-      const date = addDays(sp.releaseDate, p.offset);
-      const on = !!sp.done[p.key];
-      if (on) done++;
-      const overdue = !on && date < today;
-      return `<label class="task ${on ? 'done' : ''} ${overdue ? 'overdue' : ''}">
-        <input type="checkbox" data-k="sprint" data-id="${sp.id}" data-f="${p.key}" ${on ? 'checked' : ''}>
-        <span class="task-label">
-          <b>${esc(p.label)}</b>
-          <span class="task-sub">${fmt(date)} · ${esc(p.note)}</span>
-        </span>
-        ${overdue ? '<span class="tag-red">overdue</span>' : ''}
-      </label>`;
-    }).join('');
+    if (!sp.items) sp.items = makeSprintItems(sp.releaseDate); // migrate old shape
+    const total = sp.items.length;
+    const done = sp.items.filter((it) => it.done).length;
+    const notFriday = fromISO(sp.releaseDate).getDay() !== 5;
+    const daysOut = daysBetween(today, sp.releaseDate);
 
-    const symphonic = addDays(sp.releaseDate, -21);
-    const total = SEED.sprintTemplate.length;
-    const title = `${esc(sp.title || 'New release')}
+    // Warnings.
+    const warns = [];
+    if (notFriday) warns.push(`Heads up — ${fmt(sp.releaseDate)} isn't a Friday. Offsets assume a Friday release.`);
+    if (daysOut < 42) {
+      const past = sp.items.filter((it) => it.date < today).map((it) => it.label);
+      warns.push(`Only ${daysOut} day${daysOut === 1 ? '' : 's'} out (workflow wants 42+). Already in the past: ${past.length ? esc(past.join(', ')) : 'none'}.`);
+    }
+    const warnHtml = warns.map((w) => `<div class="sprint-warn">${w}</div>`).join('');
+
+    // Group by phase (before vs on/after release day), sorted by date.
+    const sorted = sp.items.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const pre = sorted.filter((it) => it.date < sp.releaseDate);
+    const post = sorted.filter((it) => it.date >= sp.releaseDate);
+    const rows = (arr) => arr.map((it) => sprintItemRow(sp, it)).join('');
+
+    const title = `${esc(sp.trackName || sp.title || 'New release')}
       <span class="sec-tag muted">${fmt(sp.releaseDate)} · ${done}/${total}</span>`;
     const body = `
-      <input class="inline-title" type="text" data-k="sprint" data-id="${sp.id}" data-f="title"
-             value="${esc(sp.title)}" placeholder="Track name">
-      <div class="card-sub">Release ${fmt(sp.releaseDate)} · Symphonic deadline ~${fmt(symphonic)}</div>
-      ${bar(done, total)}
-      <div class="group">${rows}</div>
+      <input class="inline-title" type="text" data-k="sprint" data-id="${sp.id}" data-f="trackName"
+             value="${esc(sp.trackName || sp.title || '')}" placeholder="Track name">
+      <div class="card-sub">Release ${fmt(sp.releaseDate)}${notFriday ? '' : ' · Friday'}</div>
+      ${warnHtml}
+      <div class="sprint-phase">Pre-release</div>
+      ${rows(pre)}
+      <div class="sprint-divider"><span>Release day · ${fmt(sp.releaseDate)}</span></div>
+      ${rows(post)}
       <div class="cc-foot"><button class="link-del" data-action="sprint-del" data-id="${sp.id}">Delete sprint</button></div>`;
     return section('sprint-' + sp.id, title, body);
   }
@@ -620,19 +699,24 @@
     const me = S.state.meta.monthlyListeners || 5000;
     const items = S.state.collab;
 
-    const groups = TIERS.map((t) => {
-      const rows = items.filter((r) => tierOf(r.listeners) === t.key);
-      const active = rows.filter((r) => !['Landed', 'Passed', 'Parked'].includes(r.status)).length;
-      const shortfall = (t.key === 't2' || t.key === 't3') && active < 3;
-      const body = rows.length
-        ? rows.map(collabCard).join('')
-        : `<div class="empty small">No names in this tier yet.</div>`;
-      return `<div class="tier">
-        <div class="tier-head">
-          <span>${t.label}</span>
-          <span class="${shortfall ? 'tag-amber' : 'muted'}">${active} active${shortfall ? ' · aim for 3–4' : ''}</span>
-        </div>${body}</div>`;
-    }).join('');
+    const noneAtAll = items.length === 0;
+    const groups = noneAtAll
+      ? `<div class="empty">No artists yet. Start with someone a step above you (~8–15k listeners)
+           you'd genuinely want to work with — a warm contact beats a stranger.
+           <button data-action="collab-add" style="margin-top:12px">+ Add your first artist</button></div>`
+      : TIERS.map((t) => {
+        const rows = items.filter((r) => tierOf(r.listeners) === t.key);
+        const active = rows.filter((r) => !['Landed', 'Passed', 'Parked'].includes(r.status)).length;
+        const shortfall = (t.key === 't2' || t.key === 't3') && active < 3;
+        const body = rows.length
+          ? rows.map(collabCard).join('')
+          : `<button class="tier-add" data-action="collab-add">+ Add to this tier</button>`;
+        return `<div class="tier">
+          <div class="tier-head">
+            <span>${t.label}</span>
+            <span class="${shortfall ? 'tag-amber' : 'muted'}">${active} active${shortfall ? ' · aim for 3–4' : ''}</span>
+          </div>${body}</div>`;
+      }).join('');
 
     return `
     <div class="section-head">
@@ -725,8 +809,7 @@
 
       <div class="cc-next ${next.tone || ''}"><span class="cc-next-tag">Next move</span>${esc(next.text)}</div>
 
-      <div class="cc-progress">${bar(doneCount, SEED.collabSteps.length)}
-        <span class="muted cc-steps-count">${doneCount}/${SEED.collabSteps.length} steps</span></div>
+      <div class="cc-progress"><span class="muted cc-steps-count">${doneCount}/${SEED.collabSteps.length} steps</span></div>
 
       <div class="cc-steps">${steps}</div>
 
@@ -770,7 +853,6 @@
       const title = `${esc(d.title)} <span class="sec-tag muted">${done}/${d.checks.length}</span>`;
       const body = `
         <p class="sub">${esc(d.blurb)}</p>
-        ${bar(done, d.checks.length)}
         <div class="group roadmap-card">${checks}</div>
         ${d.numbers.length ? `<div class="subhead">Numbers</div><div class="grid2">${numbers}</div>` : ''}
         <div class="subhead">Reflection</div>${refl}`;
@@ -895,6 +977,16 @@
         ? `<div class="stat-grid">${postTiles}</div>`
         : `<div class="empty small">Nothing logged yet — log posts from the Content tab as you go.</div>`)}
 
+    ${section('me-funnel', `The leak <span class="muted">· feed → Spotify, last 90 days</span>`, `
+      <div class="funnel">
+        <div class="fn-step"><div class="fn-val">45,170</div><div class="fn-lab">IG views</div></div>
+        <div class="fn-arrow">1.4%</div>
+        <div class="fn-step"><div class="fn-val">641</div><div class="fn-lab">Profile visits</div></div>
+        <div class="fn-arrow drop">0.3%</div>
+        <div class="fn-step leak"><div class="fn-val">2</div><div class="fn-lab">Bio-link taps</div></div>
+      </div>
+      <div class="mini-note">45k people saw your content; 2 tapped through. The feed→Spotify jump is where the reach leaks out — one clear CTA + link one tap away is the cheapest fix.</div>`)}
+
     ${section('me-trend', `Trend <span class="muted">· from your monthly logs</span>`, `
       <div class="chip-row">
         ${SEED.monthlyLogDef.spotify.map((f) =>
@@ -967,13 +1059,14 @@
   /* =========================================================================
      ROUTER
      ========================================================================= */
+  // Grouped Do / Plan / Data. `groupEnd` marks the last tab of a group.
   const ROUTES = {
     today:   { label: 'This Week',    view: viewToday },
+    monthly: { label: 'Monthly',      view: viewMonthly, groupEnd: true },
     content: { label: 'Content',      view: viewContent },
-    monthly: { label: 'Monthly',      view: viewMonthly },
     sprint:  { label: 'Sprint',       view: viewSprint },
     collab:  { label: 'Collab',       view: viewCollab },
-    roadmap: { label: '90-Day',       view: viewRoadmap },
+    roadmap: { label: '90-Day',       view: viewRoadmap, groupEnd: true },
     metrics: { label: 'Metrics',      view: viewMetrics },
     data:    { label: 'Data',         view: viewData },
   };
@@ -996,8 +1089,11 @@
 
   function buildNav() {
     const nav = document.getElementById('tabs');
-    nav.innerHTML = Object.keys(ROUTES).map((k) =>
-      `<a class="tab" data-route="${k}" href="#/${k}">${ROUTES[k].label}</a>`).join('');
+    const keys = Object.keys(ROUTES);
+    nav.innerHTML = keys.map((k, i) =>
+      `<a class="tab" data-route="${k}" href="#/${k}">${ROUTES[k].label}</a>` +
+      (ROUTES[k].groupEnd && i < keys.length - 1 ? '<span class="tab-divider"></span>' : '')
+    ).join('');
   }
 
   /* =========================================================================
@@ -1019,12 +1115,17 @@
     switch (k) {
       case 'week': ensureWeek(weekCursor).tasks[f] = v; break;
       case 'month': ensureMonth(monthCursor)[f] = v; break;
+      case 'monthAt': ensureMonth(el.dataset.mk)[f] = v; break;
       case 'meta': S.state.meta[f] = v; break;
       case 'sprint': {
         const sp = S.state.sprints.find((x) => x.id === id);
         if (!sp) return false;
-        if (f === 'title') sp.title = v;
-        else sp.done[f] = v;
+        if (f === 'trackName') { sp.trackName = v; break; }
+        if (!sp.items) sp.items = makeSprintItems(sp.releaseDate);
+        const item = sp.items.find((x) => x.key === el.dataset.item);
+        if (!item) return false;
+        if (f === 'done') item.done = v;
+        else if (f === 'date') item.date = v;
         break;
       }
       case 'collab': {
@@ -1102,6 +1203,14 @@
         if (el.dataset.m !== trendMetric) { trendMetric = el.dataset.m; render(); }
         return;
 
+      case 'jump': {
+        const key = el.dataset.sec;
+        collapse[key] = true; saveCollapse(); render();
+        const target = document.querySelector(`[data-sec="${key}"]`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+
       case 'month-prev': monthCursor = shiftMonth(monthCursor, -1); return render();
       case 'month-next': monthCursor = shiftMonth(monthCursor, 1); return render();
       case 'month-today': monthCursor = monthKey(new Date()); return render();
@@ -1109,11 +1218,12 @@
       case 'sprint-add': {
         const input = document.getElementById('new-sprint-date');
         if (!input.value) { input.focus(); return; }
+        const nameEl = document.getElementById('new-sprint-name');
         S.state.sprints.push({
           id: S.uid(),
-          title: 'New release',
+          trackName: (nameEl && nameEl.value.trim()) || 'New release',
           releaseDate: input.value,
-          done: {},
+          items: makeSprintItems(input.value),
         });
         S.state.sprints.sort((a, b) => a.releaseDate.localeCompare(b.releaseDate));
         S.persist(); return render();
