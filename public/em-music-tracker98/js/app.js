@@ -120,11 +120,12 @@
       else if (wk.tasks[it.key]) done++;
     }));
 
-    // Posting time-of-day, pulled from the same Content data (single source).
+    // Posting type + time-of-day, pulled from the same Content data (single source).
     const pt = (type) => SEED.content.postingTimes.find((t) => t.type === type) || {};
+    const TYPE = { Posts: 'Post', Stories: 'Story', Reels: 'Reel' };
     const timeBadge = (type) => {
       const t = pt(type);
-      return t.time ? `<span class="time-hint">${esc(t.time)}</span>` : '';
+      return t.time ? `<span class="time-hint">${esc(TYPE[type] || '')} · ${esc(t.time)}</span>` : '';
     };
 
     const groups = SEED.weekTemplate.map((g) => {
@@ -149,7 +150,7 @@
         const on = !!wk.tasks[it.key];
         return `<label class="task ${on ? 'done' : ''}">
           <input type="checkbox" data-k="week" data-f="${it.key}" ${on ? 'checked' : ''}>
-          <span class="task-label">${esc(it.label)}</span>
+          <span class="task-label">${it.day ? `<b>${esc(it.day)}</b> · ` : ''}${esc(it.label)}</span>
           ${it.timeType ? timeBadge(it.timeType) : ''}
         </label>`;
       }).join('');
@@ -162,10 +163,11 @@
       return section('w-' + g.group, title, `${desc}${rows}${extra}`);
     }).join('');
 
-    // "Every day" — recurring habits as a 2×4 grid (7 + one empty). No ticking.
-    const habits = SEED.dailyHabits.map((h) => `<div class="habit-box">${esc(h)}</div>`).join('') +
+    // Day-by-day focus — a 2×4 calendar grid (7 days + one empty). No ticking.
+    const habits = SEED.dailyHabits.map((h) =>
+      `<div class="habit-box"><div class="habit-day">${esc(h.day)}</div><div class="habit-task">${esc(h.task)}</div></div>`).join('') +
       `<div class="habit-box empty"></div>`;
-    const habitGrid = section('w-daily', 'Every day', `<div class="habit-grid">${habits}</div>`);
+    const habitGrid = section('w-daily', 'Daily focus', `<div class="habit-grid">${habits}</div>`);
 
     return `
     <div class="section-head">

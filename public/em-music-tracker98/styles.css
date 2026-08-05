@@ -481,13 +481,17 @@ h3 { font-size: 16px; margin: 0 0 2px; color: var(--green-900); }
   color: var(--green-600); background: var(--cream); border-radius: 20px; padding: 2px 8px;
 }
 
-/* ---------- This Week: daily habits grid --------------------------------- */
+/* ---------- This Week: day-by-day focus grid ----------------------------- */
 .habit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .habit-box {
   background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
-  padding: 11px 12px; min-height: 56px; font-size: 12px; font-weight: 500;
-  color: var(--green-900); line-height: 1.35; display: flex; align-items: center;
+  padding: 10px 12px; min-height: 64px; display: flex; flex-direction: column; gap: 4px;
 }
+.habit-day {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--green-600);
+  font-weight: 600;
+}
+.habit-task { font-size: 12px; font-weight: 500; color: var(--green-900); line-height: 1.35; }
 .habit-box.empty { background: transparent; border-style: dashed; }
 @media (min-width: 620px) { .habit-grid { grid-template-columns: repeat(4, 1fr); } }
 

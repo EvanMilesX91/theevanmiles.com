@@ -14,38 +14,39 @@ window.EM_SEED = {
      Reach rows are flagged `protect` — the guide's rule is: if a week
      collapses, these are the ones you keep. */
   weekTemplate: [
-    // `timeType` links these to the Content posting-times data — the best
-    // time-of-day + days are shown here, pulled from one source.
-    { group: 'POST', timeType: 'Posts', items: [
-      { key: 'mon',  label: 'Mon — Working On',        type: 'check', timeType: 'Posts' },
-      { key: 'wed',  label: "Wed — What's In My USB",   type: 'check', timeType: 'Posts' },
-      { key: 'fri',  label: 'Fri — Making',             type: 'check', timeType: 'Posts' },
-      { key: 'sun',  label: 'Sun — Playing',            type: 'check', timeType: 'Posts' },
+    // The four series are 9:16 videos = Reels. The Content data says Reels are
+    // best Thu–Sun, so they live on Thu/Fri/Sat/Sun. `timeType` pulls the type
+    // badge + best time/days from one source (the Content posting-times).
+    { group: 'REELS', timeType: 'Reels', items: [
+      { key: 'r_thu', day: 'Thu', label: 'Working On',        type: 'check', timeType: 'Reels' },
+      { key: 'r_fri', day: 'Fri', label: 'Making',            type: 'check', timeType: 'Reels' },
+      { key: 'r_sat', day: 'Sat', label: "What's In My USB",  type: 'check', timeType: 'Reels' },
+      { key: 'r_sun', day: 'Sun', label: 'Playing',           type: 'check', timeType: 'Reels' },
+    ]},
+    { group: 'STORIES', timeType: 'Stories', desc: '3–5 across the week, rough is fine', items: [
+      { key: 'stories', label: '3–5 stories across the week', type: 'count', goal: 3, max: 5, timeType: 'Stories' },
     ]},
     { group: 'MAKE', items: [
       { key: 'capture',      label: 'One studio capture (2 min → CAPTURES)', type: 'check' },
-      { key: 'friday_asset', label: "Friday post asset ready",              type: 'check' },
+      { key: 'friday_asset', label: "Friday reel asset ready",              type: 'check' },
     ]},
     // Engagement is flagged so the view can append this week's collab targets.
     { group: 'ENGAGEMENT', engage: true,
       desc: 'Like + comment on your warm-up targets — 15 min, ~10 likes, 5 real comments each.', items: [
       { key: 'engage', label: 'Engagement sessions (aim 3)', type: 'count', goal: 3, max: 5 },
     ]},
-    { group: 'STORIES', timeType: 'Stories', desc: '3–5 across the week, rough is fine', items: [
-      { key: 'stories', label: '3–5 stories across the week', type: 'count', goal: 3, max: 5, timeType: 'Stories' },
-    ]},
   ],
 
-  /* Daily rhythm — the recurring reach/content habits to keep doing every day.
-     Shown as a reference grid on This Week (no ticking — just a reminder). */
+  /* Weekly day-by-day focus — one recurring reach/content habit per day, shown
+     as a calendar grid on This Week (no ticking, just a reminder). */
   dailyHabits: [
-    'Look for new artists to collab with',
-    'Find a song to edit or remix',
-    'Reach out with engagement',
-    'Work on an edit or a track',
-    'Capture a studio moment → CAPTURES',
-    'Warm up a collab target',
-    'Repost / share from a mutual',
+    { day: 'Mon', task: 'Look for new artists to collab with' },
+    { day: 'Tue', task: 'Find a song to edit or remix' },
+    { day: 'Wed', task: 'Reach out with engagement' },
+    { day: 'Thu', task: 'Work on an edit or a track' },
+    { day: 'Fri', task: 'Capture a studio moment → CAPTURES' },
+    { day: 'Sat', task: 'Warm up a collab target' },
+    { day: 'Sun', task: 'Repost / share from a mutual' },
   ],
 
   /* Monthly — the "once a month, on top" block from the guide. */
@@ -153,9 +154,9 @@ window.EM_SEED = {
       { type: 'Reels',   time: '6–8 PM',  days: 'Thu–Sun',   tip: 'Hook fast, keep it under 15 sec' },
     ],
     series: [
-      { day: 'Mon', name: 'Working On',        what: '30 sec of unreleased music, no talking. Cut between hands, Ableton, synth, speaker cone.', caption: '“still working on this”' },
-      { day: 'Wed', name: "What's In My USB",  what: "5 tracks you're actually playing, 10 sec each. The strongest format on the list — people want discovery.", caption: 'One per track, 5 words max — “opening track”, “peak time”, “closer”' },
+      { day: 'Thu', name: 'Working On',        what: '30 sec of unreleased music, no talking. Cut between hands, Ableton, synth, speaker cone.', caption: '“still working on this”' },
       { day: 'Fri', name: 'Making',            what: 'Anything being built — an edit, a visual, a melody, a field recording. One idea per post.', caption: 'Edit-lab version works well — “turning this…”, original plays, cut, your version' },
+      { day: 'Sat', name: "What's In My USB",  what: "5 tracks you're actually playing, 10 sec each. The strongest format on the list — people want discovery.", caption: 'One per track, 5 words max — “opening track”, “peak time”, “closer”' },
       { day: 'Sun', name: 'Playing',           what: 'A rehearsal, a mix clip, a rooftop, or one unreleased track in your room. One light, one take.', caption: "Timeless — these don't expire the way promo does" },
     ],
     formats: [
