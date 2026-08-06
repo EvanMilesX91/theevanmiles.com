@@ -83,75 +83,77 @@ window.EM_SEED = {
     { key: 'reel6',         label: 'TikTok / Reel 6',         offset:  21, kind: 'post' },
   ],
 
-  /* CONTENT CADENCE — one MAJOR post a week, not all of them at once.
-     `heroRotation` cycles the big post week-to-week (which week you're in picks
-     the hero automatically), each carrying its own off-social prep (source the
-     tunes, make the graphic, cut the reel) on earlier days. `weeklySmall` +
-     stories + engagement run underneath EVERY week. `media` sets the calendar
-     colour; `short` is the shorthand shown on the tile; `hint` is the Today
-     explainer. */
+  /* CONTENT CADENCE — one MAJOR post a week, placed on Evan's BEST days per his
+     own IG data: posts land best Thu & Sun, reels Thu–Sun, stories Tue–Thu, all
+     6–8 PM (stories 8–10 PM); follower-active peaks are Mon/Fri/Sun. So: the
+     rotating hero (major post/reel) sits on THURSDAY, the small posts take the
+     other strong slots (Playing/reel Sat, Working On/post Sun), stories run
+     Tue–Thu, engagement rides the active-follower peaks (Mon/Fri/Sun). Off-social
+     prep sits Mon–Wed (timing irrelevant — it's not posted). `heroRotation`
+     cycles the big post week-to-week automatically. `media` sets the calendar
+     colour; `short` is the tile shorthand; `hint` is the Today explainer. */
   heroRotation: [
-    { key: 'hero_usb', day: 'Fri', label: "What's In My USB", short: 'USB', media: 'post',
+    { key: 'hero_usb', day: 'Thu', label: "What's In My USB", short: 'USB', media: 'post',
       hint: 'Show the 3-5 tracks you are actually rating right now',
       prep: [
-        { day: 'Wed', key: 'p_usb_find', label: 'Find USB tunes', short: 'Find tunes',
+        { day: 'Tue', key: 'p_usb_find', label: 'Find USB tunes', short: 'Find tunes',
           hint: 'Pick 3-5 tracks worth shouting about' },
-        { day: 'Thu', key: 'p_usb_gfx', label: 'Make USB graphic', short: 'USB graphic',
+        { day: 'Wed', key: 'p_usb_gfx', label: 'Make USB graphic', short: 'USB graphic',
           hint: 'Drop the tracklist into your template' },
       ] },
-    { key: 'hero_tune', day: 'Fri', label: 'New Tune', short: 'New Tune', media: 'reel',
+    { key: 'hero_tune', day: 'Thu', label: 'New Tune', short: 'New Tune', media: 'reel',
       hint: 'Tease or drop a new track — snippet reel with a fast hook',
       prep: [
-        { day: 'Tue', key: 'p_tune_film', label: 'Film the tune clip', short: 'Film clip',
+        { day: 'Mon', key: 'p_tune_film', label: 'Film the tune clip', short: 'Film clip',
           hint: 'Grab 2-3 desk clips of the track playing' },
         { day: 'Wed', key: 'p_tune_edit', label: 'Edit the tune reel', short: 'Edit reel',
           hint: 'Cut to the best 15s, caption, sign-off frame' },
       ] },
-    { key: 'hero_playlist', day: 'Fri', label: 'Playlist', short: 'Playlist', media: 'post',
+    { key: 'hero_playlist', day: 'Thu', label: 'Playlist', short: 'Playlist', media: 'post',
       hint: 'Share a playlist you have curated',
       prep: [
-        { day: 'Tue', key: 'p_pl_source', label: 'Source playlist tunes', short: 'Source tunes',
+        { day: 'Mon', key: 'p_pl_source', label: 'Source playlist tunes', short: 'Source tunes',
           hint: 'Crate-dig and lock the tracklist' },
-        { day: 'Thu', key: 'p_pl_gfx', label: 'Make playlist graphic', short: 'PL graphic',
+        { day: 'Wed', key: 'p_pl_gfx', label: 'Make playlist graphic', short: 'PL graphic',
           hint: 'Design the playlist cover' },
       ] },
-    { key: 'hero_edit', day: 'Fri', label: 'Edit', short: 'Edit', media: 'reel',
+    { key: 'hero_edit', day: 'Thu', label: 'Edit', short: 'Edit', media: 'reel',
       hint: 'Post an edit / flip — your strongest reel format',
       prep: [
-        { day: 'Tue', key: 'p_edit_make', label: 'Make the edit', short: 'Make edit',
+        { day: 'Mon', key: 'p_edit_make', label: 'Make the edit', short: 'Make edit',
           hint: 'Finish the edit/flip ready to film' },
-        { day: 'Thu', key: 'p_edit_cut', label: 'Cut the edit reel', short: 'Cut reel',
+        { day: 'Wed', key: 'p_edit_cut', label: 'Cut the edit reel', short: 'Cut reel',
           hint: 'Film the edit-lab version, cut on the beat' },
       ] },
-    { key: 'hero_mix', day: 'Fri', label: 'Mix', short: 'Mix', media: 'post',
+    { key: 'hero_mix', day: 'Thu', label: 'Mix', short: 'Mix', media: 'post',
       hint: 'Drop a mix — one unreleased ID minimum',
       prep: [
-        { day: 'Tue', key: 'p_mix_source', label: 'Source mix tunes', short: 'Source tunes',
+        { day: 'Mon', key: 'p_mix_source', label: 'Source mix tunes', short: 'Source tunes',
           hint: 'Crate-dig and build the tracklist' },
-        { day: 'Wed', key: 'p_mix_rec', label: 'Record the mix', short: 'Record mix',
+        { day: 'Tue', key: 'p_mix_rec', label: 'Record the mix', short: 'Record mix',
           hint: 'Record and bounce the mix' },
-        { day: 'Thu', key: 'p_mix_gfx', label: 'Make mix graphic', short: 'Mix graphic',
+        { day: 'Wed', key: 'p_mix_gfx', label: 'Make mix graphic', short: 'Mix graphic',
           hint: 'Design the mix cover art' },
       ] },
   ],
-  // Smaller posts that run EVERY week underneath the hero.
+  // Smaller posts that run EVERY week, on the other strong days (Sat reel, Sun post).
   weeklySmall: [
-    { day: 'Mon', key: 's_working', label: 'Working On', short: 'Working On', media: 'post',
-      hint: 'Photo or clip of a track in progress — DAW, gear, or a hook' },
-    { day: 'Sun', key: 's_playing', label: 'Playing', short: 'Playing', media: 'reel',
+    { day: 'Sat', key: 's_playing', label: 'Playing', short: 'Playing', media: 'reel',
       hint: 'A rehearsal, a mix clip, or one unreleased track in your room' },
+    { day: 'Sun', key: 's_working', label: 'Working On', short: 'Working On', media: 'post',
+      hint: 'Photo or clip of a track in progress — DAW, gear, or a hook' },
   ],
-  // Stories — deliberately VARIED so it is never the same thing twice.
+  // Stories — VARIED, on the best story days (IG data: Tue–Thu, 8–10 PM).
   weekStories: [
     { day: 'Tue', key: 'story_tue', hint: 'Repost one of your recent posts or reels' },
     { day: 'Wed', key: 'story_wed', hint: 'Share a track or playlist you are into right now' },
-    { day: 'Thu', key: 'story_thu', hint: 'A studio demo or WIP snippet' },
-    { day: 'Sat', key: 'story_sat', hint: 'A gig/crowd clip, a poll, or a song you are liking' },
+    { day: 'Thu', key: 'story_thu', hint: 'A studio demo, WIP snippet, or a quick poll' },
   ],
+  // Engagement — ride the follower-active peaks (IG data: Mon, Fri, Sun).
   weekEngage: [
     { day: 'Mon', key: 'eng_mon', hint: 'Reply and like on your warm-up targets (15 min)' },
-    { day: 'Wed', key: 'eng_wed', hint: 'Comment on 5 accounts a step above you' },
-    { day: 'Fri', key: 'eng_fri', hint: 'React to anyone who engaged this week' },
+    { day: 'Fri', key: 'eng_fri', hint: 'Comment on 5 accounts a step above you' },
+    { day: 'Sun', key: 'eng_sun', hint: 'React to anyone who engaged this week' },
   ],
 
   /* 90-Day Roadmap — three monthly dashboards, seeded from Part Five.
