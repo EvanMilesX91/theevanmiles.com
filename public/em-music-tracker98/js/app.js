@@ -84,6 +84,7 @@
   function ensureWeek(k) {
     const w = S.state.weeks[k] || (S.state.weeks[k] = { tasks: {} });
     if (!w.counts) w.counts = {};
+    if (!w.moves) w.moves = {};   // per-week "delay til tomorrow" overrides, keyed by chip key
     // Back-compat: the old single `stories` number becomes a keyed counter.
     if (w.stories != null && w.counts.stories == null) { w.counts.stories = w.stories; delete w.stories; }
     return w;
@@ -109,13 +110,23 @@
   const DABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const dateShort = (iso) => fmt(iso).split(' ').slice(1).join(' '); // "03 Aug"
 
-  // One chip on the week grid. `src` carries the data-* to tick its source.
+  // Colour bucket for a sprint item: admin → off-social prep; video-ish → reel.
+  const sprintType = (it) => it.kind === 'admin' ? 'activity'
+    : /reel|tiktok|video|visualiser/i.test(it.label) ? 'reel' : 'post';
+
+  // One chip on the week grid. Clicking opens the Done / Delay popup.
   function wkChip(c) {
-    const cls = ['wk-chip', c.overdue ? 'overdue' : c.type, c.done ? 'done' : ''].join(' ');
-    return `<label class="${cls}"${c.tip || ''}>
-      <input type="checkbox" hidden ${c.src} ${c.done ? 'checked' : ''}>
-      <span>${esc(c.label)}</span>
-    </label>`;
+    const cls = ['wk-chip', c.type, c.done ? 'done' : ''].join(' ');
+    const tip = c.hint ? ` title="${esc(c.hint)}"` : '';
+    return `<button class="${cls}" ${c.src}${tip}><span>${esc(c.label)}</span></button>`;
+  }
+
+  // A row in the Today strip — coloured dot + label + one-line explainer.
+  function todayItem(c) {
+    return `<button class="today-item ${c.type}" ${c.src}>
+      <span class="ti-dot"></span>
+      <span class="ti-text"><b>${esc(c.label)}</b>${c.hint ? `<i>${esc(c.hint)}</i>` : ''}</span>
+    </button>`;
   }
 
   function viewToday() {
@@ -134,62 +145,74 @@
     const byAbbr = Object.fromEntries(days.map((d) => [d.abbr, d]));
     const byDate = Object.fromEntries(days.map((d) => [d.dateISO, d]));
 
-    // Source 1 — the four weekly series (tick → wk.tasks).
+    // Place a weekday-pinned chip, honouring a per-week "delay til tomorrow"
+    // override (wk.moves[key] = a specific date this week).
+    const placeWeekly = (defAbbr, key, chip) => {
+      const mv = wk.moves[key];
+      const cell = mv ? byDate[mv] : byAbbr[defAbbr];
+      if (!cell) return;   // delayed clean out of the visible week
+      const src = `data-action="chip" data-kind="week" data-key="${key}"`
+        + ` data-label="${esc(chip.label)}" data-date="${cell.dateISO}"`;
+      cell.chips.push({ ...chip, dateISO: cell.dateISO, src });
+    };
+
+    // Source 1 — the four weekly series + their off-social prep tasks.
     SEED.weekSeries.forEach((s) => {
-      const d = byAbbr[s.day]; if (!d) return;
-      d.chips.push({ type: 'series', label: s.label, done: !!wk.tasks[s.key],
-        dateISO: d.dateISO, src: `data-k="week" data-f="${s.key}"` });
+      placeWeekly(s.day, s.key, { type: s.media || 'post', label: s.label,
+        hint: s.hint || '', done: !!wk.tasks[s.key], series: true });
+      (s.prep || []).forEach((p) =>
+        placeWeekly(p.day, p.key, { type: 'activity', label: p.label,
+          hint: p.hint || '', done: !!wk.tasks[p.key] }));
     });
-    // Source 2 — active sprint items landing in this week (tick → sprint item).
+    // Source 2 — active sprint items landing in this week.
     S.state.sprints.forEach((sp) => {
       (sp.items || []).forEach((it) => {
         if (it.date < weekCursor || it.date > weekEnd) return;
         const d = byDate[it.date]; if (!d) return;
-        d.chips.push({ type: it.kind === 'admin' ? 'admin' : 'sprint', label: it.label,
+        d.chips.push({ type: sprintType(it), label: it.label, hint: '',
           done: it.done, dateISO: it.date, sprintPost: it.kind === 'post',
-          src: `data-k="sprint" data-id="${sp.id}" data-item="${it.key}" data-f="done"` });
+          src: `data-action="chip" data-kind="sprint" data-sprint="${sp.id}"`
+            + ` data-item="${it.key}" data-label="${esc(it.label)}" data-date="${it.date}"` });
       });
     });
-    // Source 3 — stories + engagement (muted).
-    SEED.weekStories.forEach((s) => { const d = byAbbr[s.day]; if (!d) return;
-      d.chips.push({ type: 'dim', label: 'Story', done: !!wk.tasks[s.key], dateISO: d.dateISO, src: `data-k="week" data-f="${s.key}"` }); });
-    SEED.weekEngage.forEach((s) => { const d = byAbbr[s.day]; if (!d) return;
-      d.chips.push({ type: 'dim', label: 'Engage', done: !!wk.tasks[s.key], dateISO: d.dateISO, src: `data-k="week" data-f="${s.key}"` }); });
+    // Source 3 — stories + engagement.
+    SEED.weekStories.forEach((s) =>
+      placeWeekly(s.day, s.key, { type: 'story', label: 'Story',
+        hint: s.hint || '', done: !!wk.tasks[s.key] }));
+    SEED.weekEngage.forEach((s) =>
+      placeWeekly(s.day, s.key, { type: 'engage', label: 'Engage',
+        hint: s.hint || '', done: !!wk.tasks[s.key] }));
 
-    // Merge rule: a sprint post on a day drops that day's series post.
+    // Merge rule: a sprint post on a day drops that day's weekly series post.
     days.forEach((d) => {
-      if (d.chips.some((c) => c.sprintPost)) d.chips = d.chips.filter((c) => c.type !== 'series');
+      if (d.chips.some((c) => c.sprintPost)) d.chips = d.chips.filter((c) => !c.series);
     });
 
-    // Overdue = due before today and not ticked. Count for the header badge.
-    let overdue = 0;
-    days.forEach((d) => d.chips.forEach((c) => {
-      c.overdue = !c.done && c.dateISO < today;
-      if (c.overdue) overdue++;
-    }));
-
-    // Today strip.
+    // Today strip — a list of what's due today with explainers.
     const todayCell = byDate[today];
     const todayDue = todayCell ? todayCell.chips.filter((c) => !c.done) : [];
     const todayStrip = isThisWeek ? `
       <div class="today-strip">
         <div class="ts-head">Today · ${dateShort(today)}</div>
         ${todayDue.length
-          ? `<div class="wk-chips">${todayDue.map(wkChip).join('')}</div>`
-          : `<span class="muted">Nothing due today — grab a studio capture (2 min → CAPTURES).</span>`}
+          ? `<div class="today-list">${todayDue.map(todayItem).join('')}</div>`
+          : `<span class="muted">Nothing due today — grab a studio capture (2 min).</span>`}
       </div>` : '';
+
+    const legend = `<div class="wk-legend">
+      <span class="wk-legend-title">Colour key</span>
+      <span class="lg post">Post</span>
+      <span class="lg reel">Reel</span>
+      <span class="lg story">Story</span>
+      <span class="lg engage">Engage</span>
+      <span class="lg activity">Off-social prep</span>
+    </div>`;
 
     const grid = `<div class="wk-grid">${days.map((d) => `
       <div class="wk-day ${d.dateISO === today ? 'today' : ''}">
         <div class="wk-day-head"><b>${d.abbr}</b><span>${dateShort(d.dateISO)}</span></div>
         <div class="wk-chips">${d.chips.map(wkChip).join('') || '<span class="wk-empty">—</span>'}</div>
       </div>`).join('')}</div>`;
-
-    const legend = `<div class="wk-legend">
-      <span class="lg series">Series</span>
-      <span class="lg sprint">Sprint</span>
-      <span class="lg admin">Admin</span>
-    </div>`;
 
     // Footer — sprint status + this month's block.
     const sprintFoot = S.state.sprints.map((sp) => {
@@ -222,7 +245,6 @@
       <div><h2>This week</h2>
         <p class="sub">${fmt(weekCursor)} – ${fmt(weekEnd)}</p></div>
       <div class="wk-header-right">
-        ${overdue > 0 ? `<span class="overdue-badge">${overdue} overdue</span>` : ''}
         <div class="weeknav">
           <button data-action="week-prev" aria-label="previous week">‹</button>
           ${isThisWeek ? '' : `<button class="ghost" data-action="week-today" style="padding:6px 10px">Today</button>`}
@@ -231,8 +253,8 @@
       </div>
     </div>
     ${todayStrip}
-    ${grid}
     ${legend}
+    ${grid}
     ${footer}`;
   }
 
@@ -1154,6 +1176,7 @@
      ========================================================================= */
   function handleAction(action, el) {
     switch (action) {
+      case 'chip': return showChipPrompt(el.dataset);
       case 'week-prev': weekCursor = addDays(weekCursor, -7); return render();
       case 'week-next': weekCursor = addDays(weekCursor, 7); return render();
       case 'week-today': weekCursor = toISO(mondayOf(new Date())); return render();
@@ -1295,6 +1318,60 @@
      Shows once per month (deduped via state.ui.lastPrompt).
      ========================================================================= */
   function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+
+  /* =========================================================================
+     CHIP POPUP — tap a calendar item to mark it Done or Delay til tomorrow.
+     Done crosses it out; Delay pushes it to the next day.
+     ========================================================================= */
+  // Resolve a chip's data-* into a target with done/setDone/delay handles.
+  function chipTarget(ds) {
+    if (ds.kind === 'sprint') {
+      const sp = S.state.sprints.find((x) => x.id === ds.sprint);
+      if (!sp) return null;
+      if (!sp.items) sp.items = makeSprintItems(sp.releaseDate);
+      const it = sp.items.find((x) => x.key === ds.item);
+      if (!it) return null;
+      return {
+        label: it.label, done: it.done,
+        setDone(v) { it.done = v; },
+        delay() { it.date = addDays(it.date, 1); },
+      };
+    }
+    // Weekly-recurring chip (series / prep / story / engage).
+    const wk = ensureWeek(weekCursor);
+    const key = ds.key;
+    return {
+      label: ds.label || key, done: !!wk.tasks[key],
+      setDone(v) { wk.tasks[key] = v; },
+      delay() { wk.moves[key] = addDays(ds.date, 1); },   // ds.date = where it sits now
+    };
+  }
+
+  function showChipPrompt(ds) {
+    const t = chipTarget(ds);
+    if (!t) return;
+    const root = document.getElementById('modal-root');
+    root.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal chip-modal" role="dialog" aria-modal="true">
+          <div class="modal-kicker">${t.done ? 'Done' : 'To do'}</div>
+          <h3>${esc(t.label)}</h3>
+          <div class="modal-actions">
+            ${t.done
+              ? `<button data-cp="undone">Mark not done</button>`
+              : `<button data-cp="done">Done</button>
+                 <button class="ghost" data-cp="delay">Delay til tomorrow</button>`}
+            <button class="ghost" data-cp="cancel">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+    const commit = () => { S.persist(); closeModal(); render(); };
+    const wire = (sel, fn) => { const b = root.querySelector(sel); if (b) b.onclick = fn; };
+    wire('[data-cp="cancel"]', closeModal);
+    wire('[data-cp="done"]', () => { t.setDone(true); commit(); });
+    wire('[data-cp="undone"]', () => { t.setDone(false); commit(); });
+    wire('[data-cp="delay"]', () => { t.delay(); commit(); });
+  }
 
   function showMonthPrompt(mk) {
     const root = document.getElementById('modal-root');

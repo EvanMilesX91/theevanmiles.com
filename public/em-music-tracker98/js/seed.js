@@ -84,18 +84,45 @@ window.EM_SEED = {
   ],
 
   /* The four weekly series, on their best days (IG data: Mon 12–3pm peak). */
+  // The four weekly series. `media` drives the calendar colour (post/reel).
+  // `hint` is the one-line "what to do" shown beside it on Today. `prep` are the
+  // OFF-SOCIAL make-it tasks (finding tunes, making graphics) that get their own
+  // calendar chips on earlier days so the time to create shows up too.
   weekSeries: [
-    { day: 'Mon', key: 's_working', label: 'Working On' },
-    { day: 'Thu', key: 's_making',  label: 'Making' },
-    { day: 'Fri', key: 's_usb',     label: "What's In My USB" },
-    { day: 'Sun', key: 's_playing', label: 'Playing' },
+    { day: 'Mon', key: 's_working', label: 'Working On', media: 'post',
+      hint: 'Photo or clip of a track in progress — DAW, gear, or a hook',
+      prep: [] },
+    { day: 'Thu', key: 's_making', label: 'Making', media: 'reel',
+      hint: 'Behind-the-scenes reel of building the current tune',
+      prep: [
+        { day: 'Tue', key: 'p_making_film', label: 'Film Making footage',
+          hint: 'Grab 2-3 short desk clips you can cut together' },
+      ] },
+    { day: 'Fri', key: 's_usb', label: "What's In My USB", media: 'post',
+      hint: 'Show the tracks you are rating right now',
+      prep: [
+        { day: 'Wed', key: 'p_usb_find', label: 'Find USB tunes',
+          hint: 'Pick 3-5 tracks worth shouting about' },
+        { day: 'Thu', key: 'p_usb_gfx', label: 'Make USB graphic',
+          hint: 'Drop the tracklist into your template' },
+      ] },
+    { day: 'Sun', key: 's_playing', label: 'Playing', media: 'reel',
+      hint: 'A set clip or what you are spinning this week',
+      prep: [
+        { day: 'Sat', key: 'p_playing_clip', label: 'Pull a set clip',
+          hint: 'Export a 15-30s moment from a recent set' },
+      ] },
   ],
-  // Story + engagement chips distributed across their best days (muted).
+  // Story + engagement chips distributed across their best days.
   weekStories: [
-    { day: 'Tue', key: 'story_tue' }, { day: 'Wed', key: 'story_wed' }, { day: 'Thu', key: 'story_thu' },
+    { day: 'Tue', key: 'story_tue', hint: 'Quick studio moment, poll, or WIP snippet' },
+    { day: 'Wed', key: 'story_wed', hint: 'Repost a tag or tease Friday USB' },
+    { day: 'Thu', key: 'story_thu', hint: 'Behind-the-scenes of the Making shoot' },
   ],
   weekEngage: [
-    { day: 'Mon', key: 'eng_mon' }, { day: 'Wed', key: 'eng_wed' }, { day: 'Fri', key: 'eng_fri' },
+    { day: 'Mon', key: 'eng_mon', hint: 'Reply and like on your warm-up targets (15 min)' },
+    { day: 'Wed', key: 'eng_wed', hint: 'Comment on 5 accounts a step above you' },
+    { day: 'Fri', key: 'eng_fri', hint: 'React to anyone who engaged this week' },
   ],
 
   /* 90-Day Roadmap — three monthly dashboards, seeded from Part Five.
