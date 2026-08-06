@@ -80,6 +80,8 @@
   /* ---------- period cursors (which week / month is being viewed) ---------- */
   let weekCursor = toISO(mondayOf(new Date())); // Monday ISO
   let monthCursor = monthKey(new Date());        // YYYY-MM
+  let calMode = 'week';                           // 'week' | 'month' — landing calendar mode
+  let monthViewKey = monthKey(new Date());        // YYYY-MM the month calendar is showing
 
   function ensureWeek(k) {
     const w = S.state.weeks[k] || (S.state.weeks[k] = { tasks: {} });
@@ -109,116 +111,141 @@
      ========================================================================= */
   const DABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const dateShort = (iso) => fmt(iso).split(' ').slice(1).join(' '); // "03 Aug"
+  const dayNum = (iso) => Number(iso.slice(8, 10));                  // day-of-month
 
   // Colour bucket for a sprint item: admin → off-social prep; video-ish → reel.
   const sprintType = (it) => it.kind === 'admin' ? 'activity'
     : /reel|tiktok|video|visualiser/i.test(it.label) ? 'reel' : 'post';
+  const sprintShort = (it) => it.label.replace('TikTok / ', '').replace(' press release sent', ' PR');
 
-  // One chip on the week grid. Clicking opens the Done / Delay popup.
-  function wkChip(c) {
-    const cls = ['wk-chip', c.type, c.done ? 'done' : ''].join(' ');
-    const tip = c.hint ? ` title="${esc(c.hint)}"` : '';
-    return `<button class="${cls}" ${c.src}${tip}><span>${esc(c.label)}</span></button>`;
+  // Best posting time by content type — advised in the Today strip.
+  const TIME_ADVICE = {
+    post:  { lab: 'Post',  t: '6–8 PM' },
+    reel:  { lab: 'Reel',  t: '6–8 PM' },
+    story: { lab: 'Story', t: '8–10 PM' },
+  };
+
+  // Which rotating "major" post falls in a given week. The hero rotates so you
+  // ship ONE big post a week (USB, then New Tune, then Playlist…) instead of all
+  // of them at once; the smaller posts + stories run every week underneath.
+  function heroForWeek(mondayISO) {
+    const list = SEED.heroRotation || [];
+    if (!list.length) return null;
+    const wkIdx = Math.floor(Date.parse(mondayISO) / 604800000);
+    return list[((wkIdx % list.length) + list.length) % list.length];
   }
 
-  // A row in the Today strip — coloured dot + label + one-line explainer.
+  // One chip on a calendar tile. Shows the short label; full label + hint on
+  // hover. Clicking opens the Done / Delay popup.
+  function wkChip(c) {
+    const cls = ['wk-chip', c.type, c.done ? 'done' : ''].join(' ');
+    const full = [c.label, c.hint].filter(Boolean).join(' — ');
+    const tip = full ? ` title="${esc(full)}"` : '';
+    return `<button class="${cls}" ${c.src}${tip}><span>${esc(c.short || c.label)}</span></button>`;
+  }
+
+  // A row in the Today strip — dot + label + explainer + best posting time.
   function todayItem(c) {
+    const adv = TIME_ADVICE[c.type];
     return `<button class="today-item ${c.type}" ${c.src}>
       <span class="ti-dot"></span>
       <span class="ti-text"><b>${esc(c.label)}</b>${c.hint ? `<i>${esc(c.hint)}</i>` : ''}</span>
+      ${adv ? `<span class="ti-time">${adv.lab} · ${adv.t}</span>` : ''}
     </button>`;
   }
 
-  function viewToday() {
-    const wk = ensureWeek(weekCursor);
-    const isThisWeek = weekCursor === toISO(mondayOf(new Date()));
-    const weekEnd = addDays(weekCursor, 6);
-    const today = todayISO();
-    const thisMk = monthKey(new Date());
+  // Fill one week's 7 cells with every chip that lands in it: the weekly small
+  // posts, that week's rotating hero + its prep, stories, engagement, and any
+  // sprint (scheduled-release) items dated inside the week.
+  function fillWeekChips(mondayISO, cells) {
+    const wk = ensureWeek(mondayISO);
+    const weekEnd = addDays(mondayISO, 6);
+    const byAbbr = Object.fromEntries(cells.map((d) => [d.abbr, d]));
+    const byDate = Object.fromEntries(cells.map((d) => [d.dateISO, d]));
 
-    // 7 day cells for the visible week.
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(weekCursor, i);
-      days.push({ abbr: DABBR[i], dateISO: d, chips: [] });
-    }
-    const byAbbr = Object.fromEntries(days.map((d) => [d.abbr, d]));
-    const byDate = Object.fromEntries(days.map((d) => [d.dateISO, d]));
-
-    // Place a weekday-pinned chip, honouring a per-week "delay til tomorrow"
-    // override (wk.moves[key] = a specific date this week).
-    const placeWeekly = (defAbbr, key, chip) => {
+    const place = (defAbbr, key, chip) => {
       const mv = wk.moves[key];
       const cell = mv ? byDate[mv] : byAbbr[defAbbr];
-      if (!cell) return;   // delayed clean out of the visible week
-      const src = `data-action="chip" data-kind="week" data-key="${key}"`
+      if (!cell) return;
+      const src = `data-action="chip" data-kind="week" data-wk="${mondayISO}" data-key="${key}"`
         + ` data-type="${chip.type}" data-label="${esc(chip.label)}" data-date="${cell.dateISO}"`;
       cell.chips.push({ ...chip, dateISO: cell.dateISO, src });
     };
 
-    // Source 1 — the four weekly series + their off-social prep tasks.
-    SEED.weekSeries.forEach((s) => {
-      placeWeekly(s.day, s.key, { type: s.media || 'post', label: s.label,
-        hint: s.hint || '', done: !!wk.tasks[s.key], series: true });
-      (s.prep || []).forEach((p) =>
-        placeWeekly(p.day, p.key, { type: 'activity', label: p.label,
+    // Weekly small posts (every week).
+    (SEED.weeklySmall || []).forEach((s) =>
+      place(s.day, s.key, { type: s.media || 'post', label: s.label, short: s.short,
+        hint: s.hint || '', done: !!wk.tasks[s.key], series: true }));
+    // This week's rotating hero + its make-it prep.
+    const hero = heroForWeek(mondayISO);
+    if (hero) {
+      place(hero.day, hero.key, { type: hero.media || 'post', label: hero.label, short: hero.short,
+        hint: hero.hint || '', done: !!wk.tasks[hero.key], series: true, hero: true });
+      (hero.prep || []).forEach((p) =>
+        place(p.day, p.key, { type: 'activity', label: p.label, short: p.short,
           hint: p.hint || '', done: !!wk.tasks[p.key] }));
-    });
-    // Source 2 — active sprint items landing in this week.
+    }
+    // Stories + engagement.
+    (SEED.weekStories || []).forEach((s) =>
+      place(s.day, s.key, { type: 'story', label: 'Story', short: 'Story',
+        hint: s.hint || '', done: !!wk.tasks[s.key] }));
+    (SEED.weekEngage || []).forEach((s) =>
+      place(s.day, s.key, { type: 'engage', label: 'Engage', short: 'Engage',
+        hint: s.hint || '', done: !!wk.tasks[s.key] }));
+    // Scheduled-release (sprint) items landing this week.
     S.state.sprints.forEach((sp) => {
       (sp.items || []).forEach((it) => {
-        if (it.date < weekCursor || it.date > weekEnd) return;
+        if (it.date < mondayISO || it.date > weekEnd) return;
         const d = byDate[it.date]; if (!d) return;
-        d.chips.push({ type: sprintType(it), label: it.label, hint: '',
+        d.chips.push({ type: sprintType(it), label: it.label, short: sprintShort(it), hint: '',
           done: it.done, dateISO: it.date, sprintPost: it.kind === 'post',
           src: `data-action="chip" data-kind="sprint" data-sprint="${sp.id}"`
             + ` data-item="${it.key}" data-type="${sprintType(it)}" data-label="${esc(it.label)}" data-date="${it.date}"` });
       });
     });
-    // Source 3 — stories + engagement.
-    SEED.weekStories.forEach((s) =>
-      placeWeekly(s.day, s.key, { type: 'story', label: 'Story',
-        hint: s.hint || '', done: !!wk.tasks[s.key] }));
-    SEED.weekEngage.forEach((s) =>
-      placeWeekly(s.day, s.key, { type: 'engage', label: 'Engage',
-        hint: s.hint || '', done: !!wk.tasks[s.key] }));
-    // Source 4 — the mix/playlist prep pipeline (off-social).
-    (SEED.weekPrep || []).forEach((p) =>
-      placeWeekly(p.day, p.key, { type: 'activity', label: p.label,
-        hint: p.hint || '', done: !!wk.tasks[p.key] }));
-
-    // Merge rule: a sprint post on a day drops that day's weekly series post.
-    days.forEach((d) => {
+    // Merge: a scheduled-release post drops the week's own hero/small that day.
+    cells.forEach((d) => {
       if (d.chips.some((c) => c.sprintPost)) d.chips = d.chips.filter((c) => !c.series);
     });
+  }
 
-    // Today strip — a list of what's due today with explainers.
-    const todayCell = byDate[today];
-    const todayDue = todayCell ? todayCell.chips.filter((c) => !c.done) : [];
-    const todayStrip = isThisWeek ? `
-      <div class="today-strip">
-        <div class="ts-head">Today · ${dateShort(today)}</div>
-        ${todayDue.length
-          ? `<div class="today-list">${todayDue.map(todayItem).join('')}</div>`
-          : `<span class="muted">Nothing due today — grab a studio capture (2 min).</span>`}
-      </div>` : '';
+  const calLegend = `<div class="wk-legend">
+    <span class="wk-legend-title">Colour key</span>
+    <span class="lg post">Post</span>
+    <span class="lg reel">Reel</span>
+    <span class="lg story">Story</span>
+    <span class="lg engage">Engage</span>
+    <span class="lg activity">Off-social prep</span>
+  </div>`;
 
-    const legend = `<div class="wk-legend">
-      <span class="wk-legend-title">Colour key</span>
-      <span class="lg post">Post</span>
-      <span class="lg reel">Reel</span>
-      <span class="lg story">Story</span>
-      <span class="lg engage">Engage</span>
-      <span class="lg activity">Off-social prep</span>
+  function calHeader(isThisPeriod) {
+    const month = calMode === 'month';
+    const title = month ? 'This month' : 'This week';
+    const sub = month ? monthLabel(monthViewKey)
+      : `${fmt(weekCursor)} – ${fmt(addDays(weekCursor, 6))}`;
+    const prev = month ? 'calmonth-prev' : 'week-prev';
+    const next = month ? 'calmonth-next' : 'week-next';
+    const todayAct = month ? 'calmonth-today' : 'week-today';
+    return `
+    <div class="wk-header">
+      <div><h2>${title}</h2><p class="sub">${sub}</p></div>
+      <div class="wk-header-right">
+        <div class="cal-toggle">
+          <button class="seg ${month ? '' : 'on'}" data-action="cal-week">Week</button>
+          <button class="seg ${month ? 'on' : ''}" data-action="cal-month">Month</button>
+        </div>
+        <div class="weeknav">
+          <button data-action="${prev}" aria-label="previous">‹</button>
+          ${isThisPeriod ? '' : `<button class="ghost seg" data-action="${todayAct}" style="padding:6px 10px">Today</button>`}
+          <button data-action="${next}" aria-label="next">›</button>
+        </div>
+      </div>
     </div>`;
+  }
 
-    const grid = `<div class="wk-grid">${days.map((d) => `
-      <div class="wk-day ${d.dateISO === today ? 'today' : ''}">
-        <div class="wk-day-head"><b>${d.abbr}</b><span>${dateShort(d.dateISO)}</span></div>
-        <div class="wk-chips">${d.chips.map(wkChip).join('') || '<span class="wk-empty">—</span>'}</div>
-      </div>`).join('')}</div>`;
-
-    // Footer — sprint status + this month's block.
+  function calFooter() {
+    const today = todayISO();
+    const thisMk = monthKey(new Date());
     const sprintFoot = S.state.sprints.map((sp) => {
       const dOut = daysBetween(today, sp.releaseDate);
       const status = dOut === 0 ? 'Release day — today'
@@ -236,30 +263,79 @@
       <label class="task ${mBlock[t.key] ? 'done' : ''}">
         <input type="checkbox" data-k="monthAt" data-mk="${thisMk}" data-f="${t.key}" ${mBlock[t.key] ? 'checked' : ''}>
         <span class="task-label">${esc(t.label)}</span></label>`).join('');
-    const footer = `<div class="wk-footer">
+    return `<div class="wk-footer">
       ${sprintFoot || '<div class="foot-card"><div class="fc-title muted">No active sprint</div><div class="muted">Generate one on the Sprint tab.</div></div>'}
       <div class="foot-card">
         <div class="fc-title">This month's block</div>
         ${blockRows}
       </div>
     </div>`;
+  }
 
-    return `
-    <div class="wk-header">
-      <div><h2>This week</h2>
-        <p class="sub">${fmt(weekCursor)} – ${fmt(weekEnd)}</p></div>
-      <div class="wk-header-right">
-        <div class="weeknav">
-          <button data-action="week-prev" aria-label="previous week">‹</button>
-          ${isThisWeek ? '' : `<button class="ghost" data-action="week-today" style="padding:6px 10px">Today</button>`}
-          <button data-action="week-next" aria-label="next week">›</button>
-        </div>
-      </div>
-    </div>
-    ${todayStrip}
-    ${legend}
-    ${grid}
-    ${footer}`;
+  function viewToday() {
+    return calMode === 'month' ? viewMonthCal() : viewWeekCal();
+  }
+
+  function viewWeekCal() {
+    const isThisWeek = weekCursor === toISO(mondayOf(new Date()));
+    const today = todayISO();
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekCursor, i);
+      days.push({ abbr: DABBR[i], dateISO: d, chips: [] });
+    }
+    fillWeekChips(weekCursor, days);
+
+    const todayCell = days.find((d) => d.dateISO === today);
+    const todayDue = todayCell ? todayCell.chips.filter((c) => !c.done) : [];
+    const todayStrip = isThisWeek ? `
+      <div class="today-strip">
+        <div class="ts-head">Today · ${dateShort(today)}</div>
+        ${todayDue.length
+          ? `<div class="today-list">${todayDue.map(todayItem).join('')}</div>`
+          : `<span class="muted">Nothing due today — grab a studio capture (2 min).</span>`}
+      </div>` : '';
+
+    const grid = `<div class="wk-grid">${days.map((d) => `
+      <div class="wk-day ${d.dateISO === today ? 'today' : ''}">
+        <div class="wk-day-head"><span class="wk-date">${dayNum(d.dateISO)}</span><b>${d.abbr}</b></div>
+        <div class="wk-chips">${d.chips.map(wkChip).join('') || '<span class="wk-empty">—</span>'}</div>
+      </div>`).join('')}</div>`;
+
+    return calHeader(isThisWeek) + todayStrip + calLegend + grid + calFooter();
+  }
+
+  function viewMonthCal() {
+    const today = todayISO();
+    const isThisMonth = monthViewKey === monthKey(new Date());
+    const [y, m] = monthViewKey.split('-').map(Number);
+    const gridStart = toISO(mondayOf(new Date(y, m - 1, 1)));
+    const lastOfMonth = toISO(new Date(y, m, 0));
+    const numWeeks = Math.ceil((daysBetween(gridStart, lastOfMonth) + 1) / 7);
+
+    let body = '';
+    for (let w = 0; w < numWeeks; w++) {
+      const monday = addDays(gridStart, w * 7);
+      const cells = [];
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(monday, i);
+        cells.push({ abbr: DABBR[i], dateISO: d, chips: [] });
+      }
+      fillWeekChips(monday, cells);
+      body += `<div class="mc-week">${cells.map((d) => {
+        const inMonth = d.dateISO.slice(0, 7) === monthViewKey;
+        return `<div class="mc-day ${d.dateISO === today ? 'today' : ''} ${inMonth ? '' : 'out'}">
+          <div class="mc-date">${dayNum(d.dateISO)}</div>
+          <div class="mc-chips">${d.chips.map(wkChip).join('')}</div>
+        </div>`;
+      }).join('')}</div>`;
+    }
+    const colHead = `<div class="mc-week mc-head">${DABBR.map((a) => `<div class="mc-col">${a}</div>`).join('')}</div>`;
+
+    return calHeader(isThisMonth) + calLegend
+      + `<div class="mc-scroll"><div class="mc-grid">${colHead}${body}</div></div>`
+      + calFooter();
   }
 
   // Who to spend the engagement blocks on — pulled live from the Collab Ladder
@@ -1184,6 +1260,11 @@
       case 'week-prev': weekCursor = addDays(weekCursor, -7); return render();
       case 'week-next': weekCursor = addDays(weekCursor, 7); return render();
       case 'week-today': weekCursor = toISO(mondayOf(new Date())); return render();
+      case 'cal-week': calMode = 'week'; return render();
+      case 'cal-month': calMode = 'month'; monthViewKey = monthKey(new Date(weekCursor)); return render();
+      case 'calmonth-prev': monthViewKey = shiftMonth(monthViewKey, -1); return render();
+      case 'calmonth-next': monthViewKey = shiftMonth(monthViewKey, 1); return render();
+      case 'calmonth-today': monthViewKey = monthKey(new Date()); return render();
       case 'count': {
         const wk = ensureWeek(weekCursor);
         const key = el.dataset.key;
@@ -1341,8 +1422,9 @@
         delay() { it.date = addDays(it.date, 1); },
       };
     }
-    // Weekly-recurring chip (series / prep / story / engage).
-    const wk = ensureWeek(weekCursor);
+    // Weekly-recurring chip (hero / small / prep / story / engage). ds.wk names
+    // the week it belongs to (matters in month view, which spans many weeks).
+    const wk = ensureWeek(ds.wk || weekCursor);
     const key = ds.key;
     return {
       label: ds.label || key, done: !!wk.tasks[key],

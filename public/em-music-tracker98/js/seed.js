@@ -83,39 +83,63 @@ window.EM_SEED = {
     { key: 'reel6',         label: 'TikTok / Reel 6',         offset:  21, kind: 'post' },
   ],
 
-  /* The four weekly series, on their best days (IG data: Mon 12–3pm peak). */
-  // The four weekly series. `media` drives the calendar colour (post/reel).
-  // `hint` is the one-line "what to do" shown beside it on Today. `prep` are the
-  // OFF-SOCIAL make-it tasks (finding tunes, making graphics) that get their own
-  // calendar chips on earlier days so the time to create shows up too.
-  weekSeries: [
-    { day: 'Mon', key: 's_working', label: 'Working On', media: 'post',
-      hint: 'Photo or clip of a track in progress — DAW, gear, or a hook',
-      prep: [] },
-    { day: 'Thu', key: 's_making', label: 'Making', media: 'reel',
-      hint: 'Behind-the-scenes reel of building the current tune',
+  /* CONTENT CADENCE — one MAJOR post a week, not all of them at once.
+     `heroRotation` cycles the big post week-to-week (which week you're in picks
+     the hero automatically), each carrying its own off-social prep (source the
+     tunes, make the graphic, cut the reel) on earlier days. `weeklySmall` +
+     stories + engagement run underneath EVERY week. `media` sets the calendar
+     colour; `short` is the shorthand shown on the tile; `hint` is the Today
+     explainer. */
+  heroRotation: [
+    { key: 'hero_usb', day: 'Fri', label: "What's In My USB", short: 'USB', media: 'post',
+      hint: 'Show the 3-5 tracks you are actually rating right now',
       prep: [
-        { day: 'Tue', key: 'p_making_film', label: 'Film Making footage',
-          hint: 'Grab 2-3 short desk clips you can cut together' },
-        { day: 'Wed', key: 'p_making_edit', label: 'Edit the Making reel',
-          hint: 'Cut the clips together with a hook and caption' },
-      ] },
-    { day: 'Fri', key: 's_usb', label: "What's In My USB", media: 'post',
-      hint: 'Show the tracks you are rating right now',
-      prep: [
-        { day: 'Wed', key: 'p_usb_find', label: 'Find USB tunes',
+        { day: 'Wed', key: 'p_usb_find', label: 'Find USB tunes', short: 'Find tunes',
           hint: 'Pick 3-5 tracks worth shouting about' },
-        { day: 'Thu', key: 'p_usb_gfx', label: 'Make USB graphic',
+        { day: 'Thu', key: 'p_usb_gfx', label: 'Make USB graphic', short: 'USB graphic',
           hint: 'Drop the tracklist into your template' },
       ] },
-    { day: 'Sun', key: 's_playing', label: 'Playing', media: 'reel',
-      hint: 'Reel of you playing a set, or the tunes you are spinning this week',
+    { key: 'hero_tune', day: 'Fri', label: 'New Tune', short: 'New Tune', media: 'reel',
+      hint: 'Tease or drop a new track — snippet reel with a fast hook',
       prep: [
-        { day: 'Fri', key: 'p_playing_record', label: 'Record a set clip',
-          hint: 'Film or screen-record 20-30s of you playing a set/mix' },
-        { day: 'Sat', key: 'p_playing_edit', label: 'Edit the set clip',
-          hint: 'Trim and caption it ready to post Sunday' },
+        { day: 'Tue', key: 'p_tune_film', label: 'Film the tune clip', short: 'Film clip',
+          hint: 'Grab 2-3 desk clips of the track playing' },
+        { day: 'Wed', key: 'p_tune_edit', label: 'Edit the tune reel', short: 'Edit reel',
+          hint: 'Cut to the best 15s, caption, sign-off frame' },
       ] },
+    { key: 'hero_playlist', day: 'Fri', label: 'Playlist', short: 'Playlist', media: 'post',
+      hint: 'Share a playlist you have curated',
+      prep: [
+        { day: 'Tue', key: 'p_pl_source', label: 'Source playlist tunes', short: 'Source tunes',
+          hint: 'Crate-dig and lock the tracklist' },
+        { day: 'Thu', key: 'p_pl_gfx', label: 'Make playlist graphic', short: 'PL graphic',
+          hint: 'Design the playlist cover' },
+      ] },
+    { key: 'hero_edit', day: 'Fri', label: 'Edit', short: 'Edit', media: 'reel',
+      hint: 'Post an edit / flip — your strongest reel format',
+      prep: [
+        { day: 'Tue', key: 'p_edit_make', label: 'Make the edit', short: 'Make edit',
+          hint: 'Finish the edit/flip ready to film' },
+        { day: 'Thu', key: 'p_edit_cut', label: 'Cut the edit reel', short: 'Cut reel',
+          hint: 'Film the edit-lab version, cut on the beat' },
+      ] },
+    { key: 'hero_mix', day: 'Fri', label: 'Mix', short: 'Mix', media: 'post',
+      hint: 'Drop a mix — one unreleased ID minimum',
+      prep: [
+        { day: 'Tue', key: 'p_mix_source', label: 'Source mix tunes', short: 'Source tunes',
+          hint: 'Crate-dig and build the tracklist' },
+        { day: 'Wed', key: 'p_mix_rec', label: 'Record the mix', short: 'Record mix',
+          hint: 'Record and bounce the mix' },
+        { day: 'Thu', key: 'p_mix_gfx', label: 'Make mix graphic', short: 'Mix graphic',
+          hint: 'Design the mix cover art' },
+      ] },
+  ],
+  // Smaller posts that run EVERY week underneath the hero.
+  weeklySmall: [
+    { day: 'Mon', key: 's_working', label: 'Working On', short: 'Working On', media: 'post',
+      hint: 'Photo or clip of a track in progress — DAW, gear, or a hook' },
+    { day: 'Sun', key: 's_playing', label: 'Playing', short: 'Playing', media: 'reel',
+      hint: 'A rehearsal, a mix clip, or one unreleased track in your room' },
   ],
   // Stories — deliberately VARIED so it is never the same thing twice.
   weekStories: [
@@ -128,13 +152,6 @@ window.EM_SEED = {
     { day: 'Mon', key: 'eng_mon', hint: 'Reply and like on your warm-up targets (15 min)' },
     { day: 'Wed', key: 'eng_wed', hint: 'Comment on 5 accounts a step above you' },
     { day: 'Fri', key: 'eng_fri', hint: 'React to anyone who engaged this week' },
-  ],
-  // Off-social prep NOT tied to a single series post — the mix/playlist pipeline.
-  weekPrep: [
-    { day: 'Tue', key: 'p_mix_source', label: 'Source tunes for mixes/playlists',
-      hint: 'Crate-dig 20 min — save tracks for your next edit, mix or playlist' },
-    { day: 'Sat', key: 'p_mix_gfx', label: 'Make mix/playlist graphic',
-      hint: 'Design the cover art for your next mix or playlist drop' },
   ],
 
   /* 90-Day Roadmap — three monthly dashboards, seeded from Part Five.
