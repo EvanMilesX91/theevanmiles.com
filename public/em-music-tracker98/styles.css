@@ -512,10 +512,12 @@ h3 { font-size: 16px; margin: 0 0 2px; color: var(--green-900); }
 /* ---------- week / month nav --------------------------------------------- */
 .weeknav { display: flex; align-items: center; gap: 6px; }
 .weeknav button {
-  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line);
-  background: var(--surface); color: var(--green-900); font-size: 16px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; line-height: 1; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--green-900);
+  font-size: 18px; cursor: pointer;
 }
-.weeknav button:hover { border-color: var(--green-600); }
+.weeknav button:hover { border-color: var(--green-600); background: var(--surface); }
 .weeklabel { text-align: center; min-width: 128px; }
 .weeklabel b { display: block; font-size: 12px; color: var(--green-900); }
 .weeklabel span { font-size: 11px; color: var(--ink-soft); }
@@ -526,7 +528,7 @@ button {
   background: var(--green-600); color: var(--bg); border: none;
   border-radius: 999px; padding: 9px 16px;
 }
-button:hover { background: var(--green-300); }
+button:not(.wk-chip):not(.today-item):hover { background: var(--green-300); }
 button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 400; }
 button.ghost:hover { border-color: var(--green-600); color: var(--green-300); background: transparent; }
 button.danger { background: var(--red); color: #1a0f0e; }
@@ -627,13 +629,14 @@ select { -webkit-appearance: none; appearance: none;
 .metric-head { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 10px; }
 .metric-head.green { color: var(--green-600); }
 .metric-row {
-  display: flex; align-items: center; gap: 10px; padding: 9px 2px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 2px;
   border-top: 1px solid var(--line-soft);
 }
 .metric-row:first-of-type { border-top: none; }
-.metric-name { flex: 1; display: flex; flex-direction: column; }
+.metric-name { flex: 1 1 160px; min-width: 140px; display: flex; flex-direction: column; }
 .metric-target { font-size: 11px; color: var(--ink-soft); }
-.metric-in { width: 130px; }
+/* element+class beats the global input[type=text] width:100% */
+input.metric-in { width: 150px; max-width: 100%; flex: 0 0 auto; }
 .metric-auto {
   width: 130px; text-align: center; font-weight: 600; color: var(--green-900);
   background: var(--cream); border-radius: 8px; padding: 7px; position: relative;
@@ -691,7 +694,7 @@ code {
   .metric-row.lag.head { display: none; }
   .lag-track { text-align: left; display: flex; gap: 6px; align-items: baseline; }
   .lag-track span { display: inline; }
-  .metric-in, .metric-auto { width: 100%; }
+  input.metric-in, .metric-auto { width: 100%; flex-basis: 100%; }
   .section-head { flex-direction: column; }
   .weeknav { align-self: stretch; justify-content: space-between; }
 }
@@ -715,7 +718,7 @@ code {
 
 /* remove the in-cell now/6mo/12mo labels on desktop (they duplicate the header) */
 @media (min-width: 461px) { .metric-row.lag:not(.head) .lag-track span { display: none; } }
-.metric-name { min-width: 0; overflow-wrap: normal; }
+.metric-name { overflow-wrap: normal; }
 
 /* empty-tier inline add */
 .tier-add {
@@ -767,23 +770,27 @@ code {
   font: inherit; font-size: 11px; line-height: 1.25; border: 0;
   padding: 4px 7px; border-radius: 6px; word-break: break-word;
 }
-/* Colour key: post / reel / story / engage / off-social prep */
-.wk-chip.post    { background: #2f4020; color: #d6ecac; }
-.wk-chip.reel    { background: #35264d; color: #d8c6f4; }
-.wk-chip.story   { background: #3a3320; color: #e2c576; }
-.wk-chip.engage  { background: #16302c; color: #8fcabc; }
-.wk-chip.activity{ background: #1c2018; color: #9db38b; border-left: 2px dashed var(--green-600); border-radius: 0 6px 6px 0; }
-.wk-chip.done { opacity: .45; text-decoration: line-through; }
+/* Colour key: post / reel / story / engage / off-social prep.
+   Chips sit on a bright left keyline in the category's vivid colour so the
+   coding reads instantly against the dark grid. */
+.wk-chip { border-left: 3px solid transparent; }
+.wk-chip.post    { background: #35491f; color: #dcf2ac; border-left-color: #8ec63f; }
+.wk-chip.reel    { background: #3a2b56; color: #e0d0f8; border-left-color: #b18af0; }
+.wk-chip.story   { background: #443a1f; color: #f0d585; border-left-color: #e6b83f; }
+.wk-chip.engage  { background: #173934; color: #a3ddce; border-left-color: #4fc7ad; }
+.wk-chip.activity{ background: #23271d; color: #b3c79c; border-left: 3px dashed #8ea86a; border-radius: 0 6px 6px 0; }
+.wk-chip:hover { filter: brightness(1.18); }
+.wk-chip.done { opacity: .45; text-decoration: line-through; filter: none; }
 
 .wk-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 16px; font-size: 11px; }
 .wk-legend-title { text-transform: uppercase; letter-spacing: 1px; font-size: 10px; color: var(--green-600); }
-.wk-legend .lg { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); }
-.wk-legend .lg::before { content: ''; width: 10px; height: 10px; border-radius: 3px; }
-.wk-legend .post::before    { background: #2f4020; box-shadow: inset 0 0 0 1px #45602c; }
-.wk-legend .reel::before    { background: #35264d; }
-.wk-legend .story::before   { background: #3a3320; }
-.wk-legend .engage::before  { background: #16302c; box-shadow: inset 0 0 0 1px #2a5049; }
-.wk-legend .activity::before{ background: #1c2018; box-shadow: inset 0 0 0 1px var(--green-600); }
+.wk-legend .lg { display: inline-flex; align-items: center; gap: 6px; color: var(--green-900); }
+.wk-legend .lg::before { content: ''; width: 11px; height: 11px; border-radius: 3px; }
+.wk-legend .post::before    { background: #8ec63f; }
+.wk-legend .reel::before    { background: #b18af0; }
+.wk-legend .story::before   { background: #e6b83f; }
+.wk-legend .engage::before  { background: #4fc7ad; }
+.wk-legend .activity::before{ background: transparent; border: 1.5px dashed #8ea86a; }
 
 /* Today strip — labelled rows with a one-line explainer */
 .today-list { display: flex; flex-direction: column; gap: 7px; }
@@ -792,18 +799,24 @@ code {
   background: none; border: 0; cursor: pointer; font: inherit; padding: 2px 0; color: var(--green-900);
 }
 .today-item .ti-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 3px; margin-top: 4px; }
-.today-item.post    .ti-dot { background: #6fa03e; }
-.today-item.reel    .ti-dot { background: #9a7bd4; }
-.today-item.story   .ti-dot { background: #d9b45a; }
-.today-item.engage  .ti-dot { background: #5fae9c; }
-.today-item.activity .ti-dot { background: #7f9a63; }
+.today-item.post    .ti-dot { background: #8ec63f; }
+.today-item.reel    .ti-dot { background: #b18af0; }
+.today-item.story   .ti-dot { background: #e6b83f; }
+.today-item.engage  .ti-dot { background: #4fc7ad; }
+.today-item.activity .ti-dot { background: #8ea86a; }
 .today-item .ti-text { display: flex; flex-direction: column; line-height: 1.3; }
 .today-item .ti-text b { font-size: 13px; font-weight: 600; }
 .today-item .ti-text i { font-style: normal; font-size: 12px; color: var(--ink-soft); }
+.today-item:hover { background: rgba(255,255,255,.05); border-radius: 8px; }
+.today-item:hover .ti-text i { color: var(--green-900); }
 
 /* Chip Done / Delay popup */
-.chip-modal { max-width: 360px; }
+.chip-modal { max-width: 380px; }
 .chip-modal .modal-actions { flex-wrap: wrap; }
+.cp-field { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 16px; text-align: left; }
+.cp-field span { font-size: 11px; color: var(--ink-soft); }
+.cp-field span i { font-style: normal; color: var(--green-300); }
+.cp-field input.cp-miss { border-color: var(--red); }
 
 .wk-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .foot-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 15px; }

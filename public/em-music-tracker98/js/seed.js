@@ -97,6 +97,8 @@ window.EM_SEED = {
       prep: [
         { day: 'Tue', key: 'p_making_film', label: 'Film Making footage',
           hint: 'Grab 2-3 short desk clips you can cut together' },
+        { day: 'Wed', key: 'p_making_edit', label: 'Edit the Making reel',
+          hint: 'Cut the clips together with a hook and caption' },
       ] },
     { day: 'Fri', key: 's_usb', label: "What's In My USB", media: 'post',
       hint: 'Show the tracks you are rating right now',
@@ -107,22 +109,32 @@ window.EM_SEED = {
           hint: 'Drop the tracklist into your template' },
       ] },
     { day: 'Sun', key: 's_playing', label: 'Playing', media: 'reel',
-      hint: 'A set clip or what you are spinning this week',
+      hint: 'Reel of you playing a set, or the tunes you are spinning this week',
       prep: [
-        { day: 'Sat', key: 'p_playing_clip', label: 'Pull a set clip',
-          hint: 'Export a 15-30s moment from a recent set' },
+        { day: 'Fri', key: 'p_playing_record', label: 'Record a set clip',
+          hint: 'Film or screen-record 20-30s of you playing a set/mix' },
+        { day: 'Sat', key: 'p_playing_edit', label: 'Edit the set clip',
+          hint: 'Trim and caption it ready to post Sunday' },
       ] },
   ],
-  // Story + engagement chips distributed across their best days.
+  // Stories — deliberately VARIED so it is never the same thing twice.
   weekStories: [
-    { day: 'Tue', key: 'story_tue', hint: 'Quick studio moment, poll, or WIP snippet' },
-    { day: 'Wed', key: 'story_wed', hint: 'Repost a tag or tease Friday USB' },
-    { day: 'Thu', key: 'story_thu', hint: 'Behind-the-scenes of the Making shoot' },
+    { day: 'Tue', key: 'story_tue', hint: 'Repost one of your recent posts or reels' },
+    { day: 'Wed', key: 'story_wed', hint: 'Share a track or playlist you are into right now' },
+    { day: 'Thu', key: 'story_thu', hint: 'A studio demo or WIP snippet' },
+    { day: 'Sat', key: 'story_sat', hint: 'A gig/crowd clip, a poll, or a song you are liking' },
   ],
   weekEngage: [
     { day: 'Mon', key: 'eng_mon', hint: 'Reply and like on your warm-up targets (15 min)' },
     { day: 'Wed', key: 'eng_wed', hint: 'Comment on 5 accounts a step above you' },
     { day: 'Fri', key: 'eng_fri', hint: 'React to anyone who engaged this week' },
+  ],
+  // Off-social prep NOT tied to a single series post — the mix/playlist pipeline.
+  weekPrep: [
+    { day: 'Tue', key: 'p_mix_source', label: 'Source tunes for mixes/playlists',
+      hint: 'Crate-dig 20 min — save tracks for your next edit, mix or playlist' },
+    { day: 'Sat', key: 'p_mix_gfx', label: 'Make mix/playlist graphic',
+      hint: 'Design the cover art for your next mix or playlist drop' },
   ],
 
   /* 90-Day Roadmap — three monthly dashboards, seeded from Part Five.

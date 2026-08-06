@@ -152,7 +152,7 @@
       const cell = mv ? byDate[mv] : byAbbr[defAbbr];
       if (!cell) return;   // delayed clean out of the visible week
       const src = `data-action="chip" data-kind="week" data-key="${key}"`
-        + ` data-label="${esc(chip.label)}" data-date="${cell.dateISO}"`;
+        + ` data-type="${chip.type}" data-label="${esc(chip.label)}" data-date="${cell.dateISO}"`;
       cell.chips.push({ ...chip, dateISO: cell.dateISO, src });
     };
 
@@ -172,7 +172,7 @@
         d.chips.push({ type: sprintType(it), label: it.label, hint: '',
           done: it.done, dateISO: it.date, sprintPost: it.kind === 'post',
           src: `data-action="chip" data-kind="sprint" data-sprint="${sp.id}"`
-            + ` data-item="${it.key}" data-label="${esc(it.label)}" data-date="${it.date}"` });
+            + ` data-item="${it.key}" data-type="${sprintType(it)}" data-label="${esc(it.label)}" data-date="${it.date}"` });
       });
     });
     // Source 3 — stories + engagement.
@@ -182,6 +182,10 @@
     SEED.weekEngage.forEach((s) =>
       placeWeekly(s.day, s.key, { type: 'engage', label: 'Engage',
         hint: s.hint || '', done: !!wk.tasks[s.key] }));
+    // Source 4 — the mix/playlist prep pipeline (off-social).
+    (SEED.weekPrep || []).forEach((p) =>
+      placeWeekly(p.day, p.key, { type: 'activity', label: p.label,
+        hint: p.hint || '', done: !!wk.tasks[p.key] }));
 
     // Merge rule: a sprint post on a day drops that day's weekly series post.
     days.forEach((d) => {
@@ -1347,15 +1351,25 @@
     };
   }
 
+  // Content chips (things you actually publish) log to the post history when
+  // ticked, so completing them feeds the "Posted this month" metrics.
+  const POST_TYPE = { post: 'Post', reel: 'Reel', story: 'Story' };
+
   function showChipPrompt(ds) {
     const t = chipTarget(ds);
     if (!t) return;
+    const logs = !t.done && !!POST_TYPE[ds.type];   // ask for a description on content
     const root = document.getElementById('modal-root');
     root.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal chip-modal" role="dialog" aria-modal="true">
           <div class="modal-kicker">${t.done ? 'Done' : 'To do'}</div>
           <h3>${esc(t.label)}</h3>
+          ${logs ? `
+            <label class="cp-field">
+              <span>What did you post? <i>logs to your metrics</i></span>
+              <input type="text" id="cp-desc" autocomplete="off" placeholder="e.g. clip of the new bassline">
+            </label>` : ''}
           <div class="modal-actions">
             ${t.done
               ? `<button data-cp="undone">Mark not done</button>`
@@ -1368,9 +1382,19 @@
     const commit = () => { S.persist(); closeModal(); render(); };
     const wire = (sel, fn) => { const b = root.querySelector(sel); if (b) b.onclick = fn; };
     wire('[data-cp="cancel"]', closeModal);
-    wire('[data-cp="done"]', () => { t.setDone(true); commit(); });
     wire('[data-cp="undone"]', () => { t.setDone(false); commit(); });
     wire('[data-cp="delay"]', () => { t.delay(); commit(); });
+    wire('[data-cp="done"]', () => {
+      if (logs) {
+        const el = document.getElementById('cp-desc');
+        const desc = (el.value || '').trim();
+        if (!desc) { el.focus(); el.classList.add('cp-miss'); return; }   // require it
+        S.state.posts.push({ id: S.uid(), date: todayISO(), type: POST_TYPE[ds.type], desc });
+      }
+      t.setDone(true); commit();
+    });
+    const descEl = document.getElementById('cp-desc');
+    if (descEl) descEl.focus();
   }
 
   function showMonthPrompt(mk) {
