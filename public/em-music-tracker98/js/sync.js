@@ -31,6 +31,15 @@
   function setStatus(s) { status = s; if (onStatus) onStatus(s); }
   const newer = (a, b) => Date.parse(a) > (b ? Date.parse(b) : 0);
   const hasData = (d) => d && typeof d === 'object' && Object.keys(d).length > 0;
+  // How much REAL data a state holds (things that only exist if you actually used
+  // the app — posts, collab, sprints, monthly logs). Weeks/months auto-seed so
+  // they don't count. The richer copy always wins, so an empty device can never
+  // wipe a populated cloud (and an empty cloud can never wipe a populated device).
+  const score = (s) => {
+    if (!s || typeof s !== 'object') return -1;
+    const n = (x) => Array.isArray(x) ? x.length : (x && typeof x === 'object' ? Object.keys(x).length : 0);
+    return n(s.posts) + n(s.collab) + n(s.sprints) + n(s.monthlyLog);
+  };
   const url = (path) => cfg.SUPABASE_URL + path;
 
   async function pullRow() {
@@ -71,32 +80,32 @@
     pushTimer = setTimeout(pushNow, 1200);
   }
 
-  // Adopt the cloud copy only if it's newer than what we last reconciled.
+  // Adopt the cloud copy only if it's newer AND at least as rich as local. If
+  // local is richer than a newer cloud (e.g. the cloud got wiped), keep local and
+  // push it back up to restore the cloud instead of losing data.
   async function pull() {
     try {
       const row = await pullRow();
-      if (row && hasData(row.data) && newer(row.updated_at, lastSyncedAt)) adopt(row);
+      if (row && newer(row.updated_at, lastSyncedAt)) {
+        if (score(row.data) >= score(store.state)) adopt(row);
+        else { setSynced(row.updated_at); await pushNow(); }   // local richer — restore cloud
+      }
       setStatus('synced');
     } catch (e) { setStatus('error'); }
   }
 
   // First run on a device: reconcile local data with the shared cloud copy.
+  // Deterministic + safe — the RICHER side wins, so there's no confirm() that an
+  // automation browser could auto-cancel into wiping the cloud.
   async function firstReconcile() {
     setStatus('syncing');
     try {
       const row = await pullRow();
       if (row && hasData(row.data)) {
-        if (localHasData() && localDiffers(row.data)) {
-          if (confirm('This tracker already has data saved in the cloud.\n\nOK  = load the cloud copy onto this device\nCancel = keep THIS device\'s data and upload it (replaces the cloud copy)')) {
-            adopt(row);
-          } else {
-            await pushNow();
-          }
-        } else {
-          adopt(row);
-        }
-      } else {
-        await pushNow();   // cloud is empty — seed it from this device
+        if (score(store.state) > score(row.data)) await pushNow();  // this device richer — restore cloud
+        else adopt(row);                                            // cloud >= local — load it
+      } else if (localHasData()) {
+        await pushNow();   // cloud empty but this device has real data — seed it
       }
       setStatus('synced');
     } catch (e) { setStatus('error'); }
