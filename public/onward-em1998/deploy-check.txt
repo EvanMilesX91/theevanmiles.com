@@ -1,0 +1,5 @@
+ONWARD deploy pipeline check
+token: ONWARD-DEPLOY-OK-20260807-a1b2c3
+machine: dev laptop #2 (Dominika Kuzniar profile)
+purpose: one-time verification that build -> git push -> Vercel -> live works from this machine.
+harmless / static / safe to delete anytime.
