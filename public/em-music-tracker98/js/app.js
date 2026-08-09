@@ -131,8 +131,13 @@
   function heroForWeek(mondayISO) {
     const list = SEED.heroRotation || [];
     if (!list.length) return null;
+    // Cadence-weighted rotation: index into heroSequence (a list of hero keys,
+    // where frequency = how often a key appears). Falls back to the flat rotation.
+    const seq = (SEED.heroSequence && SEED.heroSequence.length)
+      ? SEED.heroSequence : list.map((h) => h.key);
     const wkIdx = Math.floor(Date.parse(mondayISO) / 604800000);
-    return list[((wkIdx % list.length) + list.length) % list.length];
+    const key = seq[((wkIdx % seq.length) + seq.length) % seq.length];
+    return list.find((h) => h.key === key) || null;
   }
 
   // One chip on a calendar tile. Shows the short label; full label + hint on
@@ -176,22 +181,34 @@
     (SEED.weeklySmall || []).forEach((s) =>
       place(s.day, s.key, { type: s.media || 'post', label: s.label, short: s.short,
         hint: s.hint || '', done: !!wk.tasks[s.key], series: true }));
-    // This week's rotating hero + its make-it prep.
+    // This week's rotating hero (the major post, on Tuesday).
     const hero = heroForWeek(mondayISO);
     if (hero) {
       place(hero.day, hero.key, { type: hero.media || 'post', label: hero.label, short: hero.short,
         hint: hero.hint || '', done: !!wk.tasks[hero.key], series: true, hero: true });
-      (hero.prep || []).forEach((p) =>
+    }
+    // Prep for NEXT week's major shows in THIS (lighter) week — a Tuesday post
+    // can't be prepped earlier the same week, so the flex week ahead is the window.
+    const nextHero = heroForWeek(addDays(mondayISO, 7));
+    if (nextHero) {
+      (nextHero.prep || []).forEach((p) =>
         place(p.day, p.key, { type: 'activity', label: p.label, short: p.short,
           hint: p.hint || '', done: !!wk.tasks[p.key] }));
     }
-    // Stories + engagement.
-    (SEED.weekStories || []).forEach((s) =>
-      place(s.day, s.key, { type: 'story', label: 'Story', short: 'Story',
-        hint: s.hint || '', done: !!wk.tasks[s.key] }));
+    // Stories (one a day, varied) + engagement + collab sourcing. A story with an
+    // `alt` swaps to it on alternating weeks (e.g. Poll one Sat, Throwback the next).
+    const wkParity = Math.floor(Date.parse(mondayISO) / 604800000) % 2;
+    (SEED.weekStories || []).forEach((s) => {
+      const v = (s.alt && wkParity !== 0) ? s.alt : s;
+      place(s.day, s.key, { type: 'story', label: v.label || 'Story', short: v.short || 'Story',
+        hint: v.hint || '', done: !!wk.tasks[s.key] });
+    });
     (SEED.weekEngage || []).forEach((s) =>
       place(s.day, s.key, { type: 'engage', label: 'Engage', short: 'Engage',
         hint: s.hint || '', done: !!wk.tasks[s.key] }));
+    (SEED.weekCollab || []).forEach((s) =>
+      place(s.day, s.key, { type: 'activity', label: s.label || 'Find a collab target',
+        short: s.short || 'Find collab', hint: s.hint || '', done: !!wk.tasks[s.key] }));
     // Scheduled-release (sprint) items landing this week.
     S.state.sprints.forEach((sp) => {
       (sp.items || []).forEach((it) => {
@@ -1159,6 +1176,80 @@
   }
 
   /* =========================================================================
+     SECTION — GROWTH (the promotion plan, ranked by cadence)
+     Reference/strategy layer above the calendar. All content comes from
+     SEED.growth; reuses the collapsible section() + jump-nav from Content.
+     ========================================================================= */
+  function viewGrowth() {
+    const g = SEED.growth;
+
+    const funnelSteps = g.funnel.steps.map((s) => `
+      <div class="ref-item">
+        <div class="ref-title">${esc(s.t)}</div>
+        <p>${esc(s.d)}</p>
+      </div>`).join('');
+
+    const cadence = g.cadence.map((c) => `
+      <div class="ref-item">
+        <div class="ref-title">${esc(c.when)}${c.live ? ' <span class="muted">· already running</span>' : ''}</div>
+        <p>${esc(c.items)}</p>
+      </div>`).join('');
+
+    const triggers = g.triggers.map((t) => `
+      <div class="ref-item">
+        <div class="ref-title">${esc(t.when)}</div>
+        <p>${esc(t.act)}</p>
+      </div>`).join('');
+
+    const deadlines = g.deadlines.map((d) => `<li>${esc(d)}</li>`).join('');
+
+    const oneTime = g.oneTime.map((o) => `
+      <div class="ref-item">
+        <div class="ref-title">${esc(o.t)}</div>
+        <p>${esc(o.d)}</p>
+      </div>`).join('');
+
+    const offList = g.offList.map((o) => `
+      <div class="story-row"><span class="tag-chip">off</span><span><b>${esc(o.t)}</b> — ${esc(o.d)}</span></div>`).join('');
+
+    const jump = [
+      ['g-funnel', 'Funnel'], ['g-cadence', 'Cadence'], ['g-triggers', 'Triggers'],
+      ['g-deadlines', 'Deadlines'], ['g-onetime', 'Build once'],
+      ['g-relationships', 'Relationships'], ['g-backlog', 'Backlog'], ['g-off', 'Off list'],
+    ].map(([sec, lab]) => `<button class="chip-btn" data-action="jump" data-sec="${sec}">${lab}</button>`).join('');
+
+    return `
+    <div class="section-head"><div>
+      <h2>Growth</h2>
+      <p class="sub">The promotion plan, ranked by cadence — what to run, when, and what fires only on an opportunity.</p>
+    </div></div>
+
+    <div class="content-nav chip-row">${jump}</div>
+
+    ${section('g-funnel', `Fix the funnel first <span class="muted">· highest-leverage thing here</span>`, `
+      <div class="insight amber">${esc(g.funnel.lead)}</div>
+      ${funnelSteps}`)}
+
+    ${section('g-cadence', 'Cadence — what runs when', cadence, false)}
+
+    ${section('g-triggers', 'Triggered by opportunity, not the calendar', triggers, false)}
+
+    ${section('g-deadlines', `Deadlines watchlist <span class="muted">· check monthly</span>`, `
+      <div class="insight">${esc(g.deadlinesNote)}</div>
+      <ul class="aud-list">${deadlines}</ul>`, false)}
+
+    ${section('g-onetime', 'Build once, reuse forever', oneTime, false)}
+
+    ${section('g-relationships', 'The relationship quota — no new ledger', `
+      <div class="insight">${esc(g.relationships)}</div>`, false)}
+
+    ${section('g-backlog', 'Backlog — reference only', `
+      <p class="muted">${esc(g.backlog)}</p>`, false)}
+
+    ${section('g-off', 'Off the list', offList, false)}`;
+  }
+
+  /* =========================================================================
      ROUTER
      ========================================================================= */
   // Grouped Do / Plan / Data. `groupEnd` marks the last tab of a group.
@@ -1168,6 +1259,7 @@
     content: { label: 'Content',      view: viewContent },
     sprint:  { label: 'Sprint',       view: viewSprint },
     collab:  { label: 'Collab',       view: viewCollab },
+    growth:  { label: 'Growth',       view: viewGrowth },
     roadmap: { label: '90-Day',       view: viewRoadmap, groupEnd: true },
     metrics: { label: 'Metrics',      view: viewMetrics },
     data:    { label: 'Data',         view: viewData },

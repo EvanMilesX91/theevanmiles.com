@@ -54,6 +54,8 @@ window.EM_SEED = {
     { key: 'captures_review', label: 'Pull anything usable from CAPTURES' },
     { key: 'edit_released',   label: 'One edit or playlist released' },
     { key: 'collab_approach', label: 'One Collab Ladder approach' },
+    { key: 'newsletter',      label: 'Send the monthly newsletter' },
+    { key: 'congrats',        label: 'Congratulate anyone with a release or show this month' },
   ],
 
   /* Release sprint — the full 19-item workflow. Offsets are DAYS from the
@@ -83,77 +85,113 @@ window.EM_SEED = {
     { key: 'reel6',         label: 'TikTok / Reel 6',         offset:  21, kind: 'post' },
   ],
 
-  /* CONTENT CADENCE — one MAJOR post a week, placed on Evan's BEST days per his
-     own IG data: posts land best Thu & Sun, reels Thu–Sun, stories Tue–Thu, all
-     6–8 PM (stories 8–10 PM); follower-active peaks are Mon/Fri/Sun. So: the
-     rotating hero (major post/reel) sits on THURSDAY, the small posts take the
-     other strong slots (Playing/reel Sat, Working On/post Sun), stories run
-     Tue–Thu, engagement rides the active-follower peaks (Mon/Fri/Sun). Off-social
-     prep sits Mon–Wed (timing irrelevant — it's not posted). `heroRotation`
-     cycles the big post week-to-week automatically. `media` sets the calendar
-     colour; `short` is the tile shorthand; `hint` is the Today explainer. */
+  /* CONTENT CADENCE — the MAJOR post lands on TUESDAY, so the week's feed posts
+     spread out: major Tue, Playing Thu, Working On Sun. (Note: this is off Evan's
+     best post days — his IG data says posts do best Thu & Sun — a deliberate call
+     to spread across the week instead.) Stories run daily; engagement rides the
+     follower-active peaks (Mon/Fri/Sun). A Tuesday post can't be prepped earlier
+     the same week, so each hero's `prep` is placed in the LIGHTER week BEFORE the
+     drop (see fillWeekChips look-ahead) — the flex week doubles as the prep window.
+     `media` sets the calendar colour; `short` is the tile shorthand; `hint` is the
+     Today explainer. */
   heroRotation: [
-    { key: 'hero_usb', day: 'Thu', label: "What's In My USB", short: 'USB', media: 'post',
+    { key: 'hero_usb', day: 'Tue', label: "What's In My USB", short: 'USB', media: 'post',
       hint: 'Show the 3-5 tracks you are actually rating right now',
       prep: [
-        { day: 'Tue', key: 'p_usb_find', label: 'Find USB tunes', short: 'Find tunes',
-          hint: 'Pick 3-5 tracks worth shouting about' },
-        { day: 'Wed', key: 'p_usb_gfx', label: 'Make USB graphic', short: 'USB graphic',
+        { day: 'Fri', key: 'p_usb_find', label: 'Find USB tunes', short: 'Find tunes',
+          hint: 'Pick 3-5 tracks worth shouting about (for next week)' },
+        { day: 'Sat', key: 'p_usb_gfx', label: 'Make USB graphic', short: 'USB graphic',
           hint: 'Drop the tracklist into your template' },
       ] },
-    { key: 'hero_tune', day: 'Thu', label: 'New Tune', short: 'New Tune', media: 'reel',
+    { key: 'hero_tune', day: 'Tue', label: 'New Tune', short: 'New Tune', media: 'reel',
       hint: 'Tease or drop a new track — snippet reel with a fast hook',
       prep: [
-        { day: 'Mon', key: 'p_tune_film', label: 'Film the tune clip', short: 'Film clip',
-          hint: 'Grab 2-3 desk clips of the track playing' },
-        { day: 'Wed', key: 'p_tune_edit', label: 'Edit the tune reel', short: 'Edit reel',
+        { day: 'Fri', key: 'p_tune_film', label: 'Film the tune clip', short: 'Film clip',
+          hint: 'Grab 2-3 desk clips of the track playing (for next week)' },
+        { day: 'Sat', key: 'p_tune_edit', label: 'Edit the tune reel', short: 'Edit reel',
           hint: 'Cut to the best 15s, caption, sign-off frame' },
       ] },
-    { key: 'hero_playlist', day: 'Thu', label: 'Playlist', short: 'Playlist', media: 'post',
+    { key: 'hero_playlist', day: 'Tue', label: 'Playlist', short: 'Playlist', media: 'post',
       hint: 'Share a playlist you have curated',
       prep: [
-        { day: 'Mon', key: 'p_pl_source', label: 'Source playlist tunes', short: 'Source tunes',
-          hint: 'Crate-dig and lock the tracklist' },
-        { day: 'Wed', key: 'p_pl_gfx', label: 'Make playlist graphic', short: 'PL graphic',
+        { day: 'Fri', key: 'p_pl_source', label: 'Source playlist tunes', short: 'Source tunes',
+          hint: 'Crate-dig and lock the tracklist (for next week)' },
+        { day: 'Sat', key: 'p_pl_gfx', label: 'Make playlist graphic', short: 'PL graphic',
           hint: 'Design the playlist cover' },
       ] },
-    { key: 'hero_edit', day: 'Thu', label: 'Edit', short: 'Edit', media: 'reel',
+    { key: 'hero_edit', day: 'Tue', label: 'Edit', short: 'Edit', media: 'reel',
       hint: 'Post an edit / flip — your strongest reel format',
       prep: [
-        { day: 'Mon', key: 'p_edit_make', label: 'Make the edit', short: 'Make edit',
-          hint: 'Finish the edit/flip ready to film' },
-        { day: 'Wed', key: 'p_edit_cut', label: 'Cut the edit reel', short: 'Cut reel',
+        { day: 'Fri', key: 'p_edit_make', label: 'Make the edit', short: 'Make edit',
+          hint: 'Finish the edit/flip ready to film (for next week)' },
+        { day: 'Sat', key: 'p_edit_cut', label: 'Cut the edit reel', short: 'Cut reel',
           hint: 'Film the edit-lab version, cut on the beat' },
       ] },
-    { key: 'hero_mix', day: 'Thu', label: 'Mix', short: 'Mix', media: 'post',
+    { key: 'hero_mix', day: 'Tue', label: 'Mix', short: 'Mix', media: 'post',
       hint: 'Drop a mix — one unreleased ID minimum',
       prep: [
-        { day: 'Mon', key: 'p_mix_source', label: 'Source mix tunes', short: 'Source tunes',
-          hint: 'Crate-dig and build the tracklist' },
-        { day: 'Tue', key: 'p_mix_rec', label: 'Record the mix', short: 'Record mix',
+        { day: 'Wed', key: 'p_mix_source', label: 'Source mix tunes', short: 'Source tunes',
+          hint: 'Crate-dig and build the tracklist (mix drops next Tue)' },
+        { day: 'Fri', key: 'p_mix_rec', label: 'Record the mix', short: 'Record mix',
           hint: 'Record and bounce the mix' },
-        { day: 'Wed', key: 'p_mix_gfx', label: 'Make mix graphic', short: 'Mix graphic',
+        { day: 'Sat', key: 'p_mix_gfx', label: 'Make mix graphic', short: 'Mix graphic',
           hint: 'Design the mix cover art' },
       ] },
   ],
+
+  /* Which hero runs each week — a major only EVERY OTHER week, with flexible
+     'flex' weeks in between (no scheduled major: just the weekly Playing/Working
+     On + daily stories; drop a spontaneous edit, New Tune, or extra post here if
+     you feel like it). Over this 8-week (2-month) cycle:
+       • USB runs every month.
+       • The other major slot alternates Mix (one month) and Playlist (the next),
+         so the Mix — your biggest lift — stays bi-monthly and never doubles up.
+       • Edits aren't scheduled: slot one into a flex week whenever you want one,
+         so they're present but never the headline.
+     Result: 2 scheduled majors a month + 2 lighter flex weeks.
+     Reorder/relabel freely; any entry that isn't a heroRotation key = a flex week.
+     Available hero keys: hero_usb, hero_playlist, hero_edit, hero_mix, hero_tune. */
+  heroSequence: [
+    'flex', 'hero_usb', 'flex', 'hero_mix',
+    'flex', 'hero_usb', 'flex', 'hero_playlist',
+  ],
   // Smaller posts that run EVERY week, on the other strong days (Sat reel, Sun post).
   weeklySmall: [
-    { day: 'Sat', key: 's_playing', label: 'Playing', short: 'Playing', media: 'reel',
+    { day: 'Thu', key: 's_playing', label: 'Playing', short: 'Playing', media: 'reel',
       hint: 'A rehearsal, a mix clip, or one unreleased track in your room' },
     { day: 'Sun', key: 's_working', label: 'Working On', short: 'Working On', media: 'post',
       hint: 'Photo or clip of a track in progress — DAW, gear, or a hook' },
   ],
-  // Stories — VARIED, on the best story days (IG data: Tue–Thu, 8–10 PM).
+  // Stories — one EVERY day, a different type each day (all quick, low-effort).
+  // Peak story window is 8–10 PM (IG data), but a rough story any time beats none.
   weekStories: [
-    { day: 'Tue', key: 'story_tue', hint: 'Repost one of your recent posts or reels' },
-    { day: 'Wed', key: 'story_wed', hint: 'Share a track or playlist you are into right now' },
-    { day: 'Thu', key: 'story_thu', hint: 'A studio demo, WIP snippet, or a quick poll' },
+    { day: 'Mon', key: 'story_mon', short: 'Big artist',   label: 'Story · big artist',
+      hint: 'A track you love from a bigger artist — tag them' },
+    { day: 'Tue', key: 'story_tue', short: 'Small artist', label: 'Story · small artist',
+      hint: 'Spotlight a smaller artist you genuinely rate' },
+    { day: 'Wed', key: 'story_wed', short: 'Snippet',      label: 'Story · snippet',
+      hint: "Quick snippet of whatever's on the desk right now" },
+    { day: 'Thu', key: 'story_thu', short: 'Repost',       label: 'Story · repost',
+      hint: 'Repost your recent reel/post with a link sticker' },
+    { day: 'Fri', key: 'story_fri', short: 'Into now',     label: 'Story · into now',
+      hint: 'A track or playlist you are into right now — tag the artist' },
+    { day: 'Sat', key: 'story_sat', short: 'Poll',         label: 'Story · poll',
+      hint: 'Poll — two edits or mixes, “A or B?”',
+      // Alternates week-to-week: Poll one Saturday, this the next (swap freely).
+      alt: { short: 'Throwback', label: 'Story · throwback',
+        hint: 'Resurface an older track, set, or release you are still proud of' } },
   ],
   // Engagement — ride the follower-active peaks (IG data: Mon, Fri, Sun).
   weekEngage: [
     { day: 'Mon', key: 'eng_mon', hint: 'Reply and like on your warm-up targets (15 min)' },
     { day: 'Fri', key: 'eng_fri', hint: 'Comment on 5 accounts a step above you' },
     { day: 'Sun', key: 'eng_sun', hint: 'React to anyone who engaged this week' },
+  ],
+  // Collab sourcing — find NEW artists to warm up (engagement warms up ones you
+  // already have; this feeds the top of the Collab Ladder). One quiet browse/week.
+  weekCollab: [
+    { day: 'Tue', key: 'collab_find', short: 'Find collab', label: 'Find a collab target',
+      hint: 'Find 1–2 new artists to warm up → add them to the Collab Ladder' },
   ],
 
   /* 90-Day Roadmap — three monthly dashboards, seeded from Part Five.
@@ -403,6 +441,69 @@ window.EM_SEED = {
     'Irish Traditional', 'Blues', 'Lo-fi', 'One Hit Wonders', '80s Pop', '90s Pop',
     '2000s Pop', '90s R&B', '2000s Hip-Hop',
   ],
+
+  /* GROWTH — the promotion plan ranked by cadence (from the 100-idea triage).
+     Reference/strategy only: the recurring DO parts live on the calendar and in
+     the monthly block; this section is the layer above them — the funnel to fix
+     first, what fires on an opportunity vs the calendar, deadlines to watch, and
+     what's deliberately parked. Numbers in (#) map to the ideas spreadsheet. */
+  growth: {
+    // The through-line. Everything you post leaks out through a broken funnel, so
+    // this gets fixed before adding more activity on top.
+    funnel: {
+      lead: '45k IG views last quarter turned into 2 bio-link taps. Reach is not the problem — the jump from feed to Spotify is. Get this working before pouring more content in.',
+      steps: [
+        { t: 'Release landing pages (#51)', d: 'One clean page per release, every link one tap away. Build the template once (see Build once), reuse it forever.' },
+        { t: 'Free download for email (#45)', d: 'Gate an edit, stems, or an unreleased track behind an email signup. Tie it to any month with a release or an edit worth gating.' },
+        { t: 'Monthly newsletter (#46)', d: 'New music, what you are playing, shows, one behind-the-scenes note. Now a monthly-block task on the calendar.' },
+        { t: 'Early access + private demo club (#47, #48)', d: 'Let the list hear tracks first. This is the reason people stay subscribed.' },
+        { t: '100 true fans habit (#100)', d: 'Notice recurring names, reply, remember them, give early access. Treat them as people, not analytics.' },
+      ],
+    },
+    // What runs on a clock. The weekly layer is already the calendar; noted here
+    // so the whole rhythm is visible in one place.
+    cadence: [
+      { when: 'Weekly', live: true, items: 'Studio clips and snippets, genuine comments on releases (#12) and story replies (#13), 3x engagement blocks. All already on This Week.' },
+      { when: 'Monthly', items: 'Edit or bootleg (#1), monthly playlist (#3), newsletter (#46), congratulate people (#14), and gate a free download whenever there is a release worth it.' },
+      { when: 'Bi-monthly (6-8 weeks)', items: 'DJ mix (your stated cadence), SoundCloud edits/mixes upkeep (#40-43) so SC does not get neglected, and batch a few guest-mix pitches (#21).' },
+      { when: 'Quarterly', items: 'Producer-community participation (Vealer’s, #90) and a Collab Ladder shortlist review (already in the 90-Day roadmap).' },
+    ],
+    // Fires on a real event, not a date. This is the home for outreach that would
+    // feel like spam if forced to a quota — it is only ever a response.
+    triggers: [
+      { when: 'A Collab Ladder name responds', act: 'Make the collab / remix approach — lateral or upward (#16-19).' },
+      { when: 'You have a release', act: 'Radio outreach (#34, #35), selective press and local media (#52, #53), and gate a free download.' },
+      { when: 'A relevant artist announces an Irish date', act: 'Contact the promoter early for a support slot (#59); test an AV-support angle rather than DJ-only (#60).' },
+      { when: 'A budget-free visual collab makes sense', act: 'Collaborate with a visual artist, photographer, or filmmaker (#65, #66).' },
+      { when: 'You have done the sync research pass', act: 'Sync outreach, short films, installations, production libraries (#67-70) — not before the research.' },
+    ],
+    // Deadline-driven, not cadence-driven: these have fixed seasonal dates, so
+    // they get checked as a list rather than waiting for a tidy "quarter".
+    deadlinesNote: 'These have fixed, seasonal deadlines — glance at this list once a month rather than treating it as a quarterly ritual, or you will miss windows.',
+    deadlines: [
+      'Gallery / late-night arts programming (#56)',
+      'Arts festivals — digital art, light, multidisciplinary (#57)',
+      'Electronic music festivals (#58)',
+      'Open calls — arts councils, galleries, AV commissions (#92)',
+      'Funding, especially for audiovisual / live / installation work (#93)',
+      'Cultural-org relationships — keep them warm (#94, #95)',
+    ],
+    // Build it once and it pays off on every release after.
+    oneTime: [
+      { t: 'Release landing-page template (#51)', d: 'The single highest-leverage build here. One good template, reused every release.' },
+      { t: 'Bandcamp set up (#44)', d: 'For niche, experimental, collector, or community-focused releases.' },
+      { t: 'Contact database (#28)', d: 'Only if you commit to outreach — see the relationship note below. Otherwise skip it.' },
+    ],
+    // The ledger question, resolved.
+    relationships: 'The weekly relationship quota (#29) does not need a new ledger — the Collab Ladder already is your log. Point the quota at it: did I move ~5 ladder names forward this week? Warm targets also surface automatically in the engagement blocks on This Week, so the relationship work stays informal but still gets counted.',
+    // Reference only — nothing here needs a slot until something above runs well.
+    backlog: 'Platform-building (#22, #23), sample and preset packs (#76, #77), education content (#78, #79), podcast and interview series (#80, #82, #83), and playlist-as-curation projects (#84-87). Park these until something higher up is actually working.',
+    // Deliberately dropped — your own notes already said why.
+    offList: [
+      { t: 'Trackstack (#26)', d: 'Expensive and never much success — your note said it.' },
+      { t: 'Lads-in-a-field YouTube sessions (#37)', d: 'Not your thing, and you already know it.' },
+    ],
+  },
 
   meta: {
     monthlyListeners: 5000, // drives the Collab Ladder ratio scoring
