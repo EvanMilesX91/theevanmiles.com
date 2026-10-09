@@ -1,0 +1,2 @@
+# Locked, tested dependencies, including development checks.
+-r requirements.lock
