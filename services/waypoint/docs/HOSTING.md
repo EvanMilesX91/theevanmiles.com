@@ -44,11 +44,40 @@ Use a host that keeps one Python process running, supports outbound secure WebSo
 
 The website's `/api/waypoint/events` route authenticates the owner and proxies the SSE response. The upstream connection is bounded so Vercel can recycle it; the browser reconnects with jitter. A serverless backend returns a clear unavailable event instead of pretending the feed is live.
 
+### Docker deployment
+
+Docker Desktop is supported. From `services/waypoint`, validate and build the
+hosted engine image with:
+
+```powershell
+docker compose -f compose.hosted.yaml config --quiet
+docker compose -f compose.hosted.yaml build waypoint
+docker compose -f compose.hosted.yaml up -d waypoint
+```
+
+The hosted compose file maps port 8000, uses
+`WAYPOINT_HOSTED_DATABASE_URL` as the container's `DATABASE_URL`, mounts the
+local `data` directory, restarts on failure, and exposes a health check. Run
+the migration once before starting it, then verify `GET /api/health` and an
+authenticated dashboard request. Put this container behind HTTPS before
+pointing Vercel at it; do not expose port 8000 directly to the public internet.
+
 ## Existing Vercel projects
 
 The old FastAPI Vercel project can still serve short authenticated requests and migrations with `RUNTIME_MODE=serverless`, but streaming is intentionally disabled there and `/api/events` returns 409. Keep it until the persistent host has passed health, dashboard, SSE, restart and journal-integrity checks.
 
 **Existing website project:** set `WAYPOINT_BACKEND_URL=https://theevanmiles-waypoint-engine.vercel.app`, the matching `WAYPOINT_SERVICE_TOKEN`, and `WAYPOINT_SESSION_SECRET` (at least 32 random characters). Keep the existing `ADMIN_PASSWORD`, or set a separate `WAYPOINT_PASSWORD` of at least 12 characters. `WAYPOINT_SITE_ORIGIN` is needed only for a particular preview hostname; production www and apex domains are already allowed. Do not put credentials in variables beginning `NEXT_PUBLIC_`.
+
+For a non-Vercel Docker host, replace the example backend URL with the HTTPS
+origin of that host only, such as `https://engine.example.com` (no `/api`
+suffix and no trailing slash). In the website Vercel project, open
+**Settings → Environment Variables**, add `WAYPOINT_BACKEND_URL`,
+`WAYPOINT_SERVICE_TOKEN`, and `WAYPOINT_SESSION_SECRET` for **Production**,
+then redeploy. Add the same service token to the Docker host. The backend's
+`FRONTEND_ORIGIN` must be `https://www.theevanmiles.com` and its
+`TRUSTED_HOSTS` must include the engine hostname. `WAYPOINT_BACKEND_BYPASS_SECRET`
+is only needed when the backend itself is protected by Vercel Deployment
+Protection; it is unnecessary for an independent HTTPS host.
 
 Vercel deployment protection remains enabled on both projects. The website also needs `WAYPOINT_BACKEND_BYPASS_SECRET`, the engine project's automation bypass secret. Its server proxy sends this as `x-vercel-protection-bypass`, in addition to the separate bearer service token. Supabase scheduled requests need both credentials too. Neither credential is accepted from or returned to the browser. The temporary website deployment bypass used during release verification was revoked after production checks.
 
