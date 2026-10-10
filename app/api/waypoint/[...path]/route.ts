@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
 const routes: Record<string, RegExp> = {
-  GET: /^(dashboard|health|backtest|shadow|ml\/status|ml\/evaluate|ml\/drift|sources\/[A-Za-z0-9_.:-]{1,160}|research\/sec\/[0-9]{1,10})$/,
-  POST: /^(trades|refresh|demo\/step|watchlist\/promote|ml\/train|ml\/outcome)$/,
+  GET: /^(dashboard|health|backtest|shadow|notifications|performance|ml\/status|ml\/evaluate|ml\/drift|sources\/[A-Za-z0-9_.:-]{1,160}|research\/sec\/[0-9]{1,10})$/,
+  POST: /^(trades|refresh|quote-check|jobs\/settle|demo\/step|watchlist\/promote|ml\/train|ml\/ingest|ml\/maintenance|ml\/outcome)$/,
   PATCH: /^settings$/,
 };
 

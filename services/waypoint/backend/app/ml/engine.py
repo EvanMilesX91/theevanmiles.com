@@ -33,6 +33,7 @@ class MLEngine:
         self.history: list[PointInTimeSnapshot] = []
         self.projection_history: list[PointInTimeSnapshot] = []
         self._projection_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self.last_maintenance: dict[str, Any] = {}
 
     def status(self) -> dict[str, Any]:
         active = self.registry.active() if config.ml_enabled else None
@@ -224,4 +225,36 @@ class MLEngine:
         drift = assess_drift(active, snapshots[-200:], outcomes=outcomes[-200:]) if active else self.status()["drift"]
         return {**self.status(), "drift": drift, "predictions": len(predictions), "shadow_predictions": sum(item.get("mode") == "shadow" for item in predictions),
                 "evaluated_outcomes": len(outcomes), "comparison": compare_deterministic_and_ml(outcomes),
-                "historical_projection": self.projection_status(db)}
+                "historical_projection": self.projection_status(db), "maintenance": self.last_maintenance}
+
+    def scheduled_maintenance(self, db: Session, *, force: bool = False) -> dict[str, Any]:
+        """Evaluate and register a candidate model without changing production."""
+        if not config.ml_maintenance_enabled and not force:
+            return {"status": "disabled", "last": self.last_maintenance}
+        path = Path(config.ml_dataset_path)
+        path = path if path.is_absolute() else ROOT / path
+        if not path.exists():
+            result = {"status": "awaiting_dataset", "path": str(path)}
+            self.last_maintenance = result
+            return result
+        from .datasets import read_jsonl
+        from .evaluate import walk_forward
+        from .train import train
+
+        rows = read_jsonl(str(path))
+        report = walk_forward(rows)
+        model = train(rows)
+        try:
+            registry = self.registry.register(model.to_dict(), activate=False)
+        except ValueError:
+            registry = self.registry.list()
+            result = {"status": "candidate_exists", "candidate_version": model.version,
+                      "evaluation": report, "registry_models": len(registry.get("models", {})),
+                      "activated": False, "completed_at": datetime.now(UTC).isoformat()}
+            self.last_maintenance = result
+            return result
+        result = {"status": "candidate_ready", "candidate_version": model.version,
+                  "evaluation": report, "registry_models": len(registry.get("models", {})),
+                  "activated": False, "completed_at": datetime.now(UTC).isoformat()}
+        self.last_maintenance = result
+        return result

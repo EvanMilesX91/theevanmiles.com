@@ -25,7 +25,7 @@ from .engine import MODEL_VERSION
 from .migrate import migrate
 from .models import Equity, Setting, Shadow
 from .runtime import auth_attempt, run_scheduler, transaction
-from .schemas import DemoStep, Settings, SettingsPatch, TradeInput
+from .schemas import DemoStep, QuoteCheck, Settings, SettingsPatch, TradeInput
 from .service import service
 
 
@@ -155,6 +155,12 @@ async def events(request: Request) -> StreamingResponse:
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
 
 
+@app.get("/api/notifications")
+async def notifications() -> list[dict[str, Any]]:
+    async with transaction(service, SessionLocal) as db:
+        return service.dashboard(db)["alerts"]
+
+
 @app.post("/api/trades")
 async def trades(data: TradeInput) -> dict[str, Any]:
     if config.app_mode == "demo" and data.mode != "paper":
@@ -257,6 +263,30 @@ async def tick_job() -> dict[str, Any]:
         return {"status": "updated", "tick": service.tick}
 
 
+@app.get("/api/performance")
+async def performance() -> dict[str, Any]:
+    async with transaction(service, SessionLocal) as db:
+        return service.performance(db)
+
+
+@app.post("/api/quote-check")
+async def quote_check(data: QuoteCheck) -> dict[str, Any]:
+    async with transaction(service, SessionLocal) as db:
+        try:
+            return service.quote_check(db, symbol=data.symbol, broker_price=data.broker_price,
+                                      broker_spread=data.broker_spread)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+
+@app.post("/api/jobs/settle")
+async def settle_job() -> dict[str, Any]:
+    async with transaction(service, SessionLocal) as db:
+        dashboard = service.dashboard(db)
+        service.update_shadow(db, dashboard)
+        return {"status": "settled", "performance": service.performance(db)}
+
+
 class AuthAttempt(BaseModel):
     model_config = ConfigDict(extra="forbid")
     key: str = Field(min_length=1, max_length=200)
@@ -340,6 +370,34 @@ async def ml_evaluate() -> dict[str, Any]:
         return walk_forward(read_jsonl(path))
     except (OSError, ValueError) as error:
         raise HTTPException(409, str(error)) from None
+
+
+@app.post("/api/ml/ingest")
+async def ml_ingest(symbols: str | None = None, years: int | None = None, stride_days: int | None = None) -> dict[str, Any]:
+    """Fetch Alpaca daily bars and rebuild the labelled point-in-time dataset."""
+    if service.provider is None:
+        raise HTTPException(409, "Alpaca market data is not connected; run this job in live mode with valid keys.")
+    from .ml.ingest import ingest_to_path
+    path = Path(config.ml_dataset_path)
+    if not path.is_absolute():
+        path = ROOT / path
+    selected = [item.strip().upper() for item in (symbols or config.live_symbols).split(",") if item.strip()]
+    try:
+        return await ingest_to_path(service.provider, selected, path, years=years or config.ml_ingest_years,
+                                    stride_days=stride_days or config.ml_ingest_stride_days)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise HTTPException(409, str(error)) from None
+
+
+@app.post("/api/ml/maintenance")
+async def ml_maintenance() -> dict[str, Any]:
+    if not config.ml_enabled:
+        raise HTTPException(409, "ML is disabled. Enable it for offline evaluation and candidate training.")
+    async with transaction(service, SessionLocal) as db:
+        try:
+            return service.ml.scheduled_maintenance(db, force=True)
+        except (OSError, ValueError) as error:
+            raise HTTPException(409, str(error)) from None
 
 
 class MLOutcome(BaseModel):

@@ -44,6 +44,11 @@ class Config(BaseSettings):
     historical_projection_enabled: bool = True
     historical_projection_top_n: int = Field(default=100, ge=25, le=250)
     historical_projection_cache_seconds: int = Field(default=30, ge=5, le=3600)
+    # Offline ML maintenance is deliberately opt-in and never activates a candidate model.
+    ml_maintenance_enabled: bool = False
+    ml_maintenance_interval_hours: int = Field(default=168, ge=1, le=8760)
+    ml_ingest_years: int = Field(default=5, ge=1, le=20)
+    ml_ingest_stride_days: int = Field(default=5, ge=1, le=60)
 
     @field_validator("live_symbols")
     @classmethod

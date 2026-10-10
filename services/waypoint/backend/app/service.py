@@ -134,6 +134,13 @@ class EngineService:
             prediction = self.ml.predict(stock, symbol=stock["symbol"], now=now, db=db)
             if prediction is not None and self.ml.shadow_mode:
                 self.ml.attach_shadow(db, stock["symbol"], prediction, now)
+        if config.ml_maintenance_enabled:
+            try:
+                self.ml.scheduled_maintenance(db)
+            except (OSError, ValueError):
+                # Maintenance is offline work; a failed candidate must never
+                # interrupt live price/state updates.
+                pass
         self.last_slow_refresh = now
 
     async def refresh_live(self, history: bool = False, db: Session | None = None) -> None:
@@ -483,8 +490,18 @@ class EngineService:
                             created_at=now,
                         )
                     )
+            if stock["freshness"]["status"] == "stale":
+                recent = db.scalar(
+                    select(Alert).where(
+                        Alert.symbol == stock["symbol"], Alert.mode == config.app_mode,
+                        Alert.state == "DATA_STALE", Alert.created_at > now - timedelta(minutes=15),
+                    )
+                )
+                if recent is None:
+                    db.add(Alert(symbol=stock["symbol"], mode=config.app_mode, state="DATA_STALE",
+                                 message="Price or research data is stale. Wait for a fresh update before acting.", created_at=now))
             self.previous_states[stock["symbol"]] = state
-        if dashboard["settings"]["shadow_enabled"] and config.app_mode == "demo":
+        if dashboard["settings"]["shadow_enabled"]:
             self.update_shadow(db, dashboard)
         if ((config.app_mode == "demo" and self.tick % 12 == 0) or
                 (config.app_mode == "live" and (now - self.last_equity_at).total_seconds() >= 300)):
@@ -579,6 +596,47 @@ class EngineService:
                 )
             )
 
+    def performance(self, db: Session) -> dict[str, Any]:
+        """Return a compact engine-vs-reality report for the performance page."""
+        shadows = list(db.scalars(select(Shadow).order_by(Shadow.created_at.desc())))
+        outcomes = self.ml.dashboard(db)
+        equity = list(db.scalars(select(Equity).where(Equity.mode == self.mode).order_by(Equity.created_at.asc())))
+        closed = [item for item in shadows if item.status == "closed"]
+        pnl = [float(item.data.get("pnl_eur", 0)) for item in closed]
+        return {
+            "mode": config.app_mode,
+            "paper_signals": {"total": len(shadows), "open": sum(item.status == "open" for item in shadows),
+                               "pending": sum(item.status == "pending" for item in shadows), "closed": len(closed),
+                               "expired": sum(item.status == "expired" for item in shadows),
+                               "realized_pnl_eur": round(sum(pnl), 6),
+                               "win_rate": round(sum(value > 0 for value in pnl) / len(pnl), 4) if pnl else None},
+            "equity": [{"created_at": accounting.utc(item.created_at).isoformat(), "total_eur": float(item.total_eur)} for item in equity[-200:]],
+            "ml": outcomes,
+            "walk_forward": self.ml.registry.list().get("walk_forward"),
+            "disclaimer": "Paper and shadow results are research records, not proof of future profitability.",
+        }
+
+    def quote_check(self, db: Session, *, symbol: str, broker_price: float, broker_spread: float | None = None) -> dict[str, Any]:
+        stocks = {item["symbol"]: item for item in self.dashboard(db)["stocks"]}
+        stock = stocks.get(symbol)
+        if not stock:
+            raise ValueError("Choose a symbol from the monitored watchlist.")
+        plan = stock.get("plan")
+        if not plan:
+            return {"symbol": symbol, "valid": False, "reason": "No calculated entry plan is available.",
+                    "broker_price": broker_price, "market_price": stock.get("price")}
+        entry_low, entry_high = float(plan["entry_low"]), float(plan["entry_high"])
+        spread_pct = max(0.0, float(broker_spread or 0.0)) / max(broker_price, 0.000001)
+        effective = broker_price + float(broker_spread or 0.0) / 2
+        difference_pct = (effective / float(stock["price"]) - 1) * 100 if stock.get("price") else None
+        valid = entry_low <= effective <= entry_high and not stock.get("business_warning", False)
+        reason = ("Quote remains inside the calculated entry range; review the broker's final spread before placing any order."
+                  if valid else "Cancel the entry suggestion: the broker quote or spread is outside the calculated entry range.")
+        return {"symbol": symbol, "valid": valid, "reason": reason, "broker_price": broker_price,
+                "effective_price": round(effective, 6), "broker_spread": broker_spread or 0.0,
+                "spread_pct": round(spread_pct * 100, 4), "market_price": stock.get("price"),
+                "difference_pct": round(difference_pct, 4) if difference_pct is not None else None,
+                "entry_range": [entry_low, entry_high], "checked_at": datetime.now(UTC).isoformat()}
     async def run(self) -> None:
         while True:
             await asyncio.sleep(config.tick_seconds)

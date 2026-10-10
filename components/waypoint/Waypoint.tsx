@@ -17,6 +17,7 @@ import {
   ExternalLink,
   FlaskConical,
   LayoutDashboard,
+  LineChart,
   Loader2,
   MapPin,
   Navigation,
@@ -64,9 +65,11 @@ import type {
   State,
   Stock,
   TradeInput,
+  PerformanceReport,
+  QuoteCheck,
 } from "@/lib/waypoint/types";
 
-type Page = "today" | "positions" | "journal" | "research" | "settings";
+type Page = "today" | "positions" | "journal" | "projections" | "performance" | "research" | "settings";
 type Trade = { stock: Stock; side: "buy" | "sell"; position?: Position };
 function dublinInput(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -828,6 +831,54 @@ function HistoricalProjectionOutlook({ projection }: { projection: NonNullable<S
   );
 }
 
+function Trading212Check({ stock }: { stock: Stock }) {
+  const [quote, setQuote] = useState("");
+  const [spread, setSpread] = useState("");
+  const [result, setResult] = useState<QuoteCheck | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function check(event: FormEvent) {
+    event.preventDefault();
+    const brokerPrice = Number(quote);
+    if (!Number.isFinite(brokerPrice) || brokerPrice <= 0) return;
+    setBusy(true);
+    try {
+      setResult(await request<QuoteCheck>("/api/quote-check", { method: "POST", body: JSON.stringify({
+        symbol: stock.symbol, broker_price: brokerPrice, broker_spread: spread ? Number(spread) : undefined,
+      }) }));
+    } finally { setBusy(false); }
+  }
+  if (!stock.plan) return null;
+  return <section className="card quote-check">
+    <div className="section-heading"><div><p className="eyebrow">BEFORE ENTRY</p><h3>Trading 212 quote check</h3></div><ShieldCheck size={21} /></div>
+    <p className="muted">Trading 212 is not connected. Enter its current buy quote and optional spread to test the saved entry range.</p>
+    <form onSubmit={check} className="quote-check-form">
+      <label>Buy quote<input inputMode="decimal" value={quote} onChange={(e) => setQuote(e.target.value)} placeholder={stock.price.toFixed(2)} /></label>
+      <label>Spread (optional)<input inputMode="decimal" value={spread} onChange={(e) => setSpread(e.target.value)} placeholder="0.00" /></label>
+      <button className="button secondary" disabled={busy || !quote}>{busy ? <Loader2 className="spin" size={15} /> : <Check size={15} />} Check quote</button>
+    </form>
+    {result && <div className={`quote-result ${result.valid ? "valid" : "invalid"}`} role="status"><strong>{result.valid ? "Quote still fits the plan" : "Do not use this entry suggestion"}</strong><p>{result.reason}</p>{result.effective_price && <small>Effective quote ${result.effective_price.toFixed(2)} · plan {result.entry_range?.map((v) => `$${v.toFixed(2)}`).join("–")}</small>}</div>}
+  </section>;
+}
+
+function ProjectionView({ data }: { data: Dashboard }) {
+  const stocks = data.stocks.filter((stock) => stock.projection);
+  return <div className="research-view">
+    <div className="research-banner"><div><span className="eyebrow">Historical projection mapping</span><h2>What happened after similar setups?</h2><p>Ranges are built from point-in-time historical analogues. They are not guaranteed future prices.</p></div><LineChart size={72} strokeWidth={1} /></div>
+    {!stocks.length ? <section className="card"><Empty icon={<LineChart size={30} />} title="Waiting for labelled history">Run the historical ingestion job after Alpaca daily bars are available. The page will stay honest and show no fabricated projection.</Empty></section> : <div className="projection-page-grid">{stocks.map((stock) => { const projection = stock.projection!; const horizon = projection.horizons[String(projection.selected_horizon)]; return <section className="card projection-page-card" key={stock.symbol}><div className="section-heading"><div><p className="eyebrow">{stock.symbol} · {projection.selected_horizon} trading days</p><h3>{stock.name}</h3></div><strong>{projection.analogue_quality} confidence</strong></div><div className="projection-ranges"><div><span>Weak</span><strong>{horizon?.weak_range?.map((v) => v == null ? "—" : `$${v.toFixed(2)}`).join("–")}</strong></div><div><span>Typical</span><strong>{horizon?.typical_range?.map((v) => v == null ? "—" : `$${v.toFixed(2)}`).join("–")}</strong></div><div><span>Strong</span><strong>{horizon?.strong_range?.map((v) => v == null ? "—" : `$${v.toFixed(2)}`).join("–")}</strong></div></div><div className="projection-metrics"><div><span>Similar cases</span><strong>{projection.analogue_count}</strong></div><div><span>Positive</span><strong>{projection.positive_rate == null ? "—" : `${Math.round(projection.positive_rate * 100)}%`}</strong></div><div><span>Target first</span><strong>{projection.target_first_rate == null ? "—" : `${Math.round(projection.target_first_rate * 100)}%`}</strong></div></div><p className="muted">{projection.explanation}</p><button className="button secondary" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>Review on Today</button></section>; })}</div>}
+    <p className="page-note">Historical projections show distributions and disagreement. They never override deterministic risk controls.</p>
+  </div>;
+}
+
+function PerformanceView({ data }: { data: Dashboard }) {
+  const [report, setReport] = useState<PerformanceReport | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function load() { setBusy(true); try { setReport(await request<PerformanceReport>("/api/performance")); } finally { setBusy(false); } }
+  useEffect(() => { void load(); }, []);
+  const paper = report?.paper_signals;
+  const ml = report?.ml ?? data.ml;
+  return <div className="research-view"><div className="research-banner"><div><span className="eyebrow">Engine performance</span><h2>Engine vs reality.</h2><p>Every paper signal is settled against observed prices and costs so you can inspect whether the rules earned trust.</p></div><Activity size={72} strokeWidth={1} /></div><div className="research-stats"><Stat label="Paper signals" value={String(paper?.total ?? data.shadow.signals)} /><Stat label="Open / pending" value={`${paper?.open ?? data.shadow.open} / ${paper?.pending ?? 0}`} /><Stat label="Closed" value={String(paper?.closed ?? data.shadow.closed)} /><Stat label="Realized result" value={signed(paper?.realized_pnl_eur ?? data.shadow.realized_pnl_eur)} /></div><section className="card research-card"><div className="section-heading"><div><p className="eyebrow">Research evidence</p><h2>Settlement and model status</h2></div><button className="button secondary" onClick={load} disabled={busy}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} Refresh report</button></div><div className="performance-grid"><div><span>Paper win rate</span><strong>{paper?.win_rate == null ? "—" : `${Math.round(paper.win_rate * 100)}%`}</strong></div><div><span>ML predictions</span><strong>{ml?.predictions ?? 0}</strong></div><div><span>Settled ML outcomes</span><strong>{ml?.evaluated_outcomes ?? 0}</strong></div><div><span>Active model</span><strong>{ml?.active_model ?? "Rules only"}</strong></div></div><p className="notice"><HelpCircle size={17} />{report?.disclaimer ?? "Paper results are research records, not proof of future profitability."}</p></section></div>;
+}
+
 function Details({
   stock,
   onSource,
@@ -1575,6 +1626,8 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
     { id: "today", label: "Today", icon: <LayoutDashboard size={19} /> },
     { id: "positions", label: "My positions", icon: <Wallet size={19} /> },
     { id: "journal", label: "Trade journal", icon: <BookOpen size={19} /> },
+    { id: "projections", label: "Projections", icon: <LineChart size={19} /> },
+    { id: "performance", label: "Engine performance", icon: <Activity size={19} /> },
     { id: "research", label: "Research lab", icon: <FlaskConical size={19} /> },
     { id: "settings", label: "Preferences", icon: <Settings2 size={19} /> },
   ];
@@ -1950,6 +2003,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                           </div>
                           {selected.ml && <MLOutlook prediction={selected.ml} shadow={data.ml?.shadow_mode ?? true} />}
                           {selected.projection && <HistoricalProjectionOutlook projection={selected.projection} />}
+                          {safe && <Trading212Check stock={selected} />}
                           {position && (
                             <div className="owned-summary">
                               <Stat
@@ -2500,6 +2554,8 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                 </section>
               )}
               {page === "research" && <ResearchView data={data} />}{" "}
+              {page === "projections" && <ProjectionView data={data} />}
+              {page === "performance" && <PerformanceView data={data} />}
               {page === "settings" && (
                 <SettingsView data={data} onSaved={apply} />
               )}

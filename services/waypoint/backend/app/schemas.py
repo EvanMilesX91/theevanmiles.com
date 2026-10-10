@@ -70,3 +70,10 @@ class DemoStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
     symbol: str = "RKLB"
     scenario: Literal["entry", "profit", "warning", "exit", "wait"]
+
+
+class QuoteCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.\-]{0,11}$")
+    broker_price: float = Field(gt=0, le=1000000)
+    broker_spread: float | None = Field(default=None, ge=0, le=100000)

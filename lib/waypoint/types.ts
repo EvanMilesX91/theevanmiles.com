@@ -234,7 +234,7 @@ export type Dashboard = {
   alerts: {
     id: string;
     symbol: string;
-    state: State;
+    state: State | "DATA_STALE";
     message: string;
     created_at: string;
   }[];
@@ -308,4 +308,25 @@ export type BacktestReport = {
   trades: Record<string, unknown>[];
   equity: (number | Record<string, unknown>)[];
   [key: string]: unknown;
+};
+export type QuoteCheck = {
+  symbol: string;
+  valid: boolean;
+  reason: string;
+  broker_price: number;
+  effective_price?: number;
+  broker_spread?: number;
+  spread_pct?: number;
+  market_price?: number;
+  difference_pct?: number | null;
+  entry_range?: [number, number];
+  checked_at?: string;
+};
+export type PerformanceReport = {
+  mode: "demo" | "live";
+  paper_signals: { total: number; open: number; pending: number; closed: number; expired: number; realized_pnl_eur: number; win_rate: number | null };
+  equity: { created_at: string; total_eur: number }[];
+  ml: Dashboard["ml"];
+  walk_forward?: Record<string, unknown> | null;
+  disclaimer: string;
 };
