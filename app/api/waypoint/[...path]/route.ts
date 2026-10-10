@@ -8,7 +8,7 @@ export const maxDuration = 60;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
 const routes: Record<string, RegExp> = {
   GET: /^(dashboard|health|backtest|shadow|sources\/[A-Za-z0-9_.:-]{1,160}|research\/sec\/[0-9]{1,10})$/,
-  POST: /^(trades|refresh|demo\/step)$/,
+  POST: /^(trades|refresh|demo\/step|watchlist\/promote)$/,
   PATCH: /^settings$/,
 };
 

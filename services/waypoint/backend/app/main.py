@@ -32,12 +32,20 @@ from .service import service
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     # Serverless cold starts do no database migration, filesystem writes, or provider calls.
     task = None
+    data_engine = None
     if not config.hosted:
         if config.auto_migrate:
             migrate()
         await service.initialize()
-        task = asyncio.create_task(run_scheduler(service, SessionLocal)) if config.scheduler_enabled else None
+        if config.app_mode == "live":
+            from .data_engine import DataEngine
+            data_engine = DataEngine(service, SessionLocal)
+            await data_engine.start()
+        else:
+            task = asyncio.create_task(run_scheduler(service, SessionLocal)) if config.scheduler_enabled else None
     yield
+    if data_engine:
+        await data_engine.stop()
     if task:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -117,9 +125,27 @@ async def dashboard() -> dict[str, Any]:
 @app.get("/api/events")
 async def events(request: Request) -> StreamingResponse:
     if config.hosted:
-        raise HTTPException(409, "Serverless mode uses GET /api/dashboard polling every 30 seconds.")
+        raise HTTPException(409, "streaming_worker_required: connect a persistent background engine for live streaming.")
 
     async def stream():  # type: ignore[no-untyped-def]
+        engine = service.data_engine
+        if engine:
+            version = -1
+            while not await request.is_disconnected():
+                async with engine.condition:
+                    if version == engine.version:
+                        try:
+                            await asyncio.wait_for(engine.condition.wait(), timeout=15)
+                        except TimeoutError:
+                            pass
+                    changed = version != engine.version
+                    version = engine.version
+                    result = engine.latest
+                if changed and result:
+                    yield f"event: snapshot\ndata: {json.dumps(result, allow_nan=False)}\n\n"
+                else:
+                    yield "event: heartbeat\ndata: {}\n\n"
+            return
         while not await request.is_disconnected():
             result = await dashboard()
             yield f"event: snapshot\ndata: {json.dumps(result, allow_nan=False)}\n\n"
@@ -190,6 +216,8 @@ async def demo_step(data: DemoStep) -> dict[str, Any]:
 
 @app.post("/api/refresh")
 async def refresh() -> dict[str, Any]:
+    if service.data_engine:
+        return await service.data_engine.refresh()
     async with transaction(service, SessionLocal) as db:
         await service.slow_refresh(db)
         return service.dashboard(db)
@@ -201,8 +229,26 @@ async def refresh_job() -> dict[str, Any]:
     return {"status": "refreshed", "last_slow_refresh": result["last_slow_refresh"]}
 
 
+class PromoteSymbol(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.\-]{0,11}$")
+
+
+@app.post("/api/watchlist/promote")
+async def promote_symbol(data: PromoteSymbol) -> dict[str, Any]:
+    if not service.data_engine:
+        raise HTTPException(409, "A persistent streaming engine is required for HOT promotion.")
+    try:
+        service.data_engine.select_symbols(data.symbol)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+    return await service.data_engine.publish()
+
+
 @app.post("/api/jobs/tick")
 async def tick_job() -> dict[str, Any]:
+    if config.app_mode == "live":
+        return {"status": "skipped", "reason": "Live prices use the persistent Alpaca WebSocket, never REST polling."}
     if not market_status()["is_open"]:
         return {"status": "skipped", "reason": "Market closed."}
     async with transaction(service, SessionLocal) as db:
@@ -224,6 +270,13 @@ async def reserve_auth_attempt(data: AuthAttempt) -> dict[str, Any]:
 
 @app.get("/api/backtest")
 async def backtest() -> dict[str, Any]:
+    if config.app_mode == "live":
+        from .history_replay import cached_backtest
+        async with transaction(service, SessionLocal):
+            try:
+                return cached_backtest(service.provider_cache, config.live_symbols.split(',')[0])
+            except ValueError as error:
+                raise HTTPException(409, str(error)) from None
     return demo_backtest()
 
 
@@ -259,7 +312,8 @@ async def sec_research(cik: str) -> dict[str, Any]:
     if not cik.isascii() or not cik.isdecimal() or not 1 <= len(cik) <= 10 or int(cik) == 0:
         raise HTTPException(400, "CIK must contain 1 to 10 digits.")
     try:
-        provider = SECProvider(user_agent=config.sec_user_agent)
+        provider = SECProvider(user_agent=config.sec_user_agent, cache=service.provider_cache,
+                               checkpoint=service.usage_checkpoint)
         try:
             filings = await provider.filings(cik)
             facts = await provider.fundamentals(cik)

@@ -4,16 +4,15 @@
 
 | Data | Provider | Scope |
 |---|---|---|
-| Quotes | Alpaca | Explicit IEX bid/ask midpoint; valid positive uncrossed sides required. Zero after-hours sides mean absent quotes. |
+| Quotes/trades/bars | Alpaca | One persistent IEX WebSocket. Every HOT symbol receives quotes and minute bars; spare Basic channel allowance adds trades. Valid positive uncrossed quotes are required. |
 | Daily history/liquidity | Alpaca | SIP history ending at least 16 minutes ago, split-adjusted completed prior sessions; mean 20-session close × volume is a dollar-volume proxy. |
 | Company identity | SEC | Official ticker map plus submissions ticker/CIK verification. |
 | Financials | SEC | Reported domestic US-GAAP USD facts, actual quarter/YTD/year duration, exact-period revenue/income/cash-flow alignment. |
 | Filings | SEC | Recent supported filings and original documents, accession and availability dates. |
-| Headlines | Alpaca | Seven-day symbol search, headline/time/link; unavailable entitlement remains explicit. |
+| Headlines | Alpaca | One batched symbol request per slow refresh, headline/time/link; unavailable entitlement remains explicit. |
 | Earnings | Alpha Vantage | One cached bulk calendar daily; expected dates, not confirmed company announcements. A missing row means unknown. |
-| EUR/USD | Alpha Vantage | Hourly cache and observation timestamp. A valid recent observation updates current valuation, never past fill FX. |
 
-Credentials in the engine's private environment: `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `ALPHA_VANTAGE_API_KEY`, and `SEC_USER_AGENT` containing an actual contact email. Paper Alpaca account keys can read market data; no funded account is required for basic IEX data. No LLM provider is needed.
+Credentials in the engine's private environment: `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`; optional `ALPHA_VANTAGE_API_KEY`; optional `SEC_USER_AGENT` containing an actual contact email. Paper Alpaca account keys can read market data; no funded account is required for Basic IEX data. Alpha Vantage is used only for the earnings calendar. No LLM provider is needed.
 
 ## Normalization
 
@@ -21,7 +20,7 @@ Credentials in the engine's private environment: `APCA_API_KEY_ID`, `APCA_API_SE
 
 Net margin uses aligned net income/revenue. FCF subtracts reported nonnegative PP&E acquisition payments from aligned operating cash flow; absent capex is not zero. Debt/assets requires an explicit complete debt concept. Positive FCF has no invented infinite runway. Annual EPS is only displayed for actual annual periods and is not silently called TTM EPS. No YTD annualization or overlapping-quarter sum is performed. A failed fetch retains an old observation only with its old timestamps and stale coverage.
 
-Coverage `current` means a successful retrieval within its cache TTL. It does not prove the financial period or market observation is recent. Separate timestamps govern use. Quotes must be timely and the exchange open before they could support an actionable state. Cached closed-session prices are labeled distinctly.
+Coverage `current` means a successful retrieval within its cache TTL. It does not prove the financial period or market observation is recent. Separate timestamps govern use. The market gate requires a connected stream, an acknowledged quote subscription, a timely event and an open exchange before a state can be actionable. Cached closed-session prices are labeled distinctly. The browser ages data from its source timestamp even if no new snapshot arrives.
 
 ## What remains unavailable
 
@@ -29,6 +28,6 @@ Peer reference valuations, concentration, catalyst scores, validated uncertainty
 
 ## Limits
 
-Standard HTTP requests use bounded retries/timeouts and sanitized errors. Alpha Vantage reserves calls before requests, does not retry automatically and tracks up to 25 calls/day in the shared persisted cache. Normal failure consumes the reservation. Abrupt cancellation before transaction commit may roll it back, so this local counter is not a billing guarantee. Keep jobs comfortably below the provider allowance. Historical bars and SEC restatements fetched today are not an archived point-in-time backtest dataset.
+Standard HTTP requests use bounded retries/timeouts, Retry-After handling, singleflight deduplication and sanitized errors. Usage is tracked by provider and endpoint. Alpha Vantage reserves calls before requests, does not retry automatically and tracks up to 25 calls/day in persisted state. Normal failure consumes the reservation. Historical bars are cached by completed time range; SEC facts are invalidated when a new financial filing accession appears. Historical bars and SEC restatements fetched today are not an archived point-in-time backtest dataset.
 
 Official references: [Alpaca access](https://docs.alpaca.markets/us/docs/about-market-data-api), [SIP historical cutoff](https://docs.alpaca.markets/us/docs/market-data-faq), [SEC APIs](https://www.sec.gov/search-filings/edgar-application-programming-interfaces), [Alpha Vantage endpoints](https://www.alphavantage.co/documentation/), [free allowance](https://www.alphavantage.co/support/).

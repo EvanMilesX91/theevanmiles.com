@@ -24,6 +24,7 @@ from .providers import (
     ProviderError,
     SECProvider,
 )
+from .api_usage import cache_record
 
 NORMALIZATION_VERSION = "sec-observed-1.0.0"
 UNSUPPORTED = {
@@ -170,6 +171,11 @@ def normalize_fundamentals(
     else:
         result["missing_reasons"].append("A matching prior-year revenue duration is unavailable.")
     income = exact(("NetIncomeLoss",), start, end)
+    operating_income = exact(("OperatingIncomeLoss",), start, end)
+    if operating_income:
+        add("operating_income_usd", operating_income.value, [operating_income], "Reported operating income.", True)
+        add("operating_margin_pct", operating_income.value / revenue.value * 100,
+            [operating_income, revenue], "Same-duration operating income / revenue × 100.")
     if income:
         add("net_income_usd", income.value, [income], "Reported net income for the revenue duration.", True)
         add(
@@ -238,6 +244,7 @@ def normalize_fundamentals(
         # or liabilities never stand in for total interest-bearing debt.
         debt = exact(("DebtCurrentAndNoncurrent",), None, end)
         if debt and debt.value >= 0:
+            add("total_debt_usd", debt.value, [debt], "Reported complete interest-bearing debt.", True)
             add(
                 "debt_to_assets_pct",
                 debt.value / assets.value * 100,
@@ -312,7 +319,8 @@ async def build_live_research(
             if not configured:
                 raise ProviderError("not_configured", "Provider credentials are not configured.")
             data = await operation()
-            cache[key] = {"checked_at": now.isoformat(), "data": copy.deepcopy(data)}
+            cache[key] = {**cache_record(data, key.split(':')[1], now, ttl=ttl,
+                                        source_timestamp=now.isoformat()), "checked_at": now.isoformat()}
             return data, {"status": "current", "checked_at": now.isoformat(), "cached": False}
         except (ProviderError, ValueError) as error:
             health = {
@@ -334,16 +342,17 @@ async def build_live_research(
     calendar, calendar_health = await fetch("live:earnings", 24 * 3600, calendar_call, alpha is not None)
     output["provider_health"]["earnings"] = calendar_health
 
-    async def fx_call():
-        assert alpha is not None
-        return (await alpha.exchange_rate()).model_dump(mode="json")
+    output["provider_health"]["fx"] = {"status": "unavailable", "code": "not_configured",
+                                       "message": "No FX provider in V1; Alpha Vantage is reserved for earnings."}
 
-    fx, fx_health = await fetch("live:fx", 3600, fx_call, alpha is not None)
-    if fx:
-        fx["health"] = fx_health
-        output["fx"] = fx
-    output["provider_health"]["fx"] = fx_health
+    async def news_batch_call():
+        assert market is not None
+        rows = await market.news(list(dict.fromkeys(symbols)), now - timedelta(days=1))
+        return [item.model_dump(mode="json") for item in rows]
 
+    # One broad news request/cache, not one seven-day request per stock.
+    news_batch, news_health = await fetch("live:news-batch:" + ",".join(sorted(set(symbols))),
+                                         15 * 60, news_batch_call, market is not None)
     for symbol in dict.fromkeys(symbols):
         record: dict[str, Any] = {
             "identity": None,
@@ -389,6 +398,24 @@ async def build_live_research(
                 record["sector_group"] = "biotechnology"
                 record["metric_sources"]["sector_group"] = identity_id
 
+            async def filings_call(identity=identity):
+                assert sec is not None
+                rows = await sec.filings(identity.cik)
+                return [
+                    f.model_dump(mode="json")
+                    for f in rows
+                    if f.form in {"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A", "20-F", "6-K", "3", "4", "5", "3/A", "4/A", "5/A"}
+                ][:12]
+
+            filings, health = await fetch(f"live:filings:{symbol}", 3600, filings_call, sec is not None)
+            record["coverage"]["filings"] = health
+            record["filings"] = filings or []
+
+            version_key = f"live:fundamentals-version:{symbol}"
+            version = sorted((item["accession"] for item in record["filings"] if item["form"] in {"10-K", "10-Q", "10-K/A", "10-Q/A", "8-K", "8-K/A"}))
+            if health["status"] == "current" and cache.get(version_key) != version:
+                cache.pop(f"live:fundamentals:{symbol}", None)
+                cache[version_key] = version
             async def fundamentals_call(identity=identity):
                 assert sec is not None
                 return normalize_fundamentals(await sec.fundamentals(identity.cik, now.date()), identity, now)
@@ -405,23 +432,13 @@ async def build_live_research(
                 record["sources"].extend(normalized["sources"])
                 record["missing_reasons"].extend(normalized["missing_reasons"])
 
-            async def filings_call(identity=identity):
-                assert sec is not None
-                rows = await sec.filings(identity.cik)
-                return [
-                    f.model_dump(mode="json")
-                    for f in rows
-                    if f.form in {"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A", "20-F", "6-K"}
-                ][:12]
-
-            filings, health = await fetch(f"live:filings:{symbol}", 3600, filings_call, sec is not None)
-            record["coverage"]["filings"] = health
-            record["filings"] = filings or []
 
         async def bars_call(symbol=symbol):
             assert market is not None
             bars = await market.historical_bars(
-                symbol, now - timedelta(days=180), now - timedelta(minutes=16), feed="sip", adjustment="split"
+                symbol, now - timedelta(days=180),
+                now.astimezone(ZoneInfo("America/New_York")).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+                - timedelta(microseconds=1), feed="sip", adjustment="split"
             )
             # Prior local dates are complete even before today's session opens;
             # intentionally omit today's bar, including after close, until tomorrow.
@@ -467,12 +484,7 @@ async def build_live_research(
                 record["metrics"]["dollar_volume"] = volume
                 record["metric_sources"]["dollar_volume"] = volume_id
 
-        async def news_call(symbol=symbol):
-            assert market is not None
-            rows = await market.news([symbol], now - timedelta(days=7))
-            return [n.model_dump(mode="json") for n in rows]
-
-        news, news_health = await fetch(f"live:news:{symbol}", 15 * 60, news_call, market is not None)
+        news = [item for item in (news_batch or []) if symbol in item.get("symbols", [])]
         record["coverage"]["news"] = news_health
         record["news_checked_at"] = news_health.get("checked_at")
         for index, item in enumerate((news or [])[:12]):

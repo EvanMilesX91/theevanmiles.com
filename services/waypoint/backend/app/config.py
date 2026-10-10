@@ -25,6 +25,14 @@ class Config(BaseSettings):
     sec_user_agent: str = ""
     live_symbols: str = "AAPL,MSFT"
     scheduler_enabled: bool = True
+    max_hot_symbols: int = Field(default=30, ge=1, le=30)
+    price_stale_seconds: float = Field(default=30, ge=2, le=90)
+    stream_enabled: bool = True
+    stream_publish_seconds: float = Field(default=0.5, ge=0.1, le=5)
+    stream_checkpoint_seconds: float = Field(default=30, ge=10, le=300)
+    warm_refresh_minutes: int = Field(default=15, ge=5, le=60)
+    alpha_vantage_daily_limit: int = Field(default=25, ge=1, le=25)
+    morning_refresh_hour: int = Field(default=9, ge=0, le=23)
 
     @field_validator("live_symbols")
     @classmethod
@@ -42,6 +50,7 @@ class Config(BaseSettings):
         if self.runtime_mode == "serverless":
             self.auto_migrate = False
             self.scheduler_enabled = False
+            self.stream_enabled = False
         return self
 
     @property

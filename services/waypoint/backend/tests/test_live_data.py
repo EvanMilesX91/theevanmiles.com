@@ -221,7 +221,8 @@ def test_research_uses_sip_split_history_excludes_today_and_keeps_unknown_earnin
     assert "earnings_in_days" not in xyz["metrics"]
     assert abc["news_checked_at"] == NOW.isoformat()
     assert "binary_event" not in abc["metrics"]
-    assert result["fx"]["rate"] == "1.12"
+    assert result["fx"] is None
+    assert result["provider_health"]["fx"]["code"] == "not_configured"
     json.dumps(result, allow_nan=False)
     json.dumps(cache, allow_nan=False)
 

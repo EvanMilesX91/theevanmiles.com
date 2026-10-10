@@ -40,6 +40,12 @@ FIELDS = (
     "provider_cache",
     "provider_health",
     "fx",
+    "market_values",
+    "stream_status",
+    "hot_symbols",
+    "warm_symbols",
+    "capacity_error",
+    "schedule_status",
 )
 
 
@@ -74,7 +80,7 @@ def restore_state(service: Any, state: dict[str, Any] | None) -> None:
                 setattr(
                     service,
                     name,
-                    0
+                    [] if name in {"hot_symbols", "warm_symbols"} else None if name == "capacity_error" else 0
                     if name == "tick"
                     else {}
                     if name != "provider_status"

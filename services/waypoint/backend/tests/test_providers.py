@@ -247,6 +247,10 @@ def test_companyfacts_filters_by_filing_date_not_financial_period():
     ]
 
     def handler(request):
+        if request.url.path == "/submissions/CIK0000000001.json":
+            return httpx.Response(200, json={"cik": "1", "name": "Example", "filings": {"recent": {
+                "accessionNumber": ["0000000001-26-000002"], "filingDate": ["2026-08-01"],
+                "form": ["10-Q/A"], "primaryDocument": ["report.htm"]}}})
         assert request.url.path == "/api/xbrl/companyfacts/CIK0000000001.json"
         return httpx.Response(
             200,

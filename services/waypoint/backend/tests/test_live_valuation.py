@@ -13,7 +13,7 @@ from app.schemas import TradeInput
 from app.service import EngineService
 
 
-def test_live_fx_updates_current_value_without_rewriting_fill(monkeypatch):
+def test_earnings_only_v1_preserves_user_fx_and_historical_fill(monkeypatch):
     monkeypatch.setattr(config, "app_mode", "live")
     monkeypatch.setattr(config, "live_symbols", "AAPL")
     now = datetime.now(UTC)
@@ -47,10 +47,10 @@ def test_live_fx_updates_current_value_without_rewriting_fill(monkeypatch):
         ), {}, "test")
         db.commit()
         asyncio.run(runtime.refresh_live(history=True, db=db))
-        assert runtime.settings(db).fx_usd_per_eur == 1.25
+        assert runtime.settings(db).fx_usd_per_eur == 1.1
         assert db.get(Trade, fill.id).fx_usd_per_eur == "1.05"
         result = runtime.dashboard(db)
-        assert "Alpha Vantage" in result["portfolio"]["fx_source"]
+        assert "User-entered" in result["portfolio"]["fx_source"]
         assert result["stocks"][0]["freshness"]["news_checked_at"] == (now - timedelta(days=1)).isoformat()
         assert result["stocks"][0]["plan"] is None
         # Old observations and wrong pairs cannot overwrite current valuation.
@@ -59,7 +59,7 @@ def test_live_fx_updates_current_value_without_rewriting_fill(monkeypatch):
             observation.update(change)
             observation["rate"] = "1.4"
             asyncio.run(runtime.refresh_live(history=True, db=db))
-            assert runtime.settings(db).fx_usd_per_eur == 1.25
+            assert runtime.settings(db).fx_usd_per_eur == 1.1
             assert db.get(Trade, fill.id).fx_usd_per_eur == "1.05"
         row = db.get(Setting, 1)
         row.data = row.data | {"fx_usd_per_eur": 1.3}

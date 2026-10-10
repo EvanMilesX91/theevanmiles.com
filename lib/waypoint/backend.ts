@@ -27,7 +27,7 @@ export async function callWaypointBackend(path: string, init: RequestInit = {}):
       },
       cache: 'no-store',
       redirect: 'error',
-      signal: AbortSignal.timeout(path === 'refresh' ? 55000 : 15000),
+      signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(path === 'refresh' || path === 'events' ? 55000 : 15000)]) : AbortSignal.timeout(path === 'refresh' || path === 'events' ? 55000 : 15000),
     });
   } catch { throw new WaypointBackendError('Waypoint’s engine did not respond. The outcome could not be confirmed; check your journal before recording the same fill again.'); }
 }

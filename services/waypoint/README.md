@@ -2,7 +2,7 @@
 
 Private investment research and an append-only EUR trade journal at **theevanmiles.com/waypoint**. The canonical source now lives in the existing `theevanmiles.com` repository.
 
-Live at **https://www.theevanmiles.com/waypoint**, deployed and verified on 9 October 2026. Sign in with the existing website admin password unless a separate Waypoint password has been configured.
+The existing hosted release remains available at **https://www.theevanmiles.com/waypoint**. The newer streaming architecture currently runs on this Windows computer at **http://127.0.0.1:3000/waypoint**. Publishing that build requires an always-on backend reachable from Vercel; the current serverless engine cannot keep an Alpaca WebSocket open.
 
 ## Open locally
 
@@ -22,17 +22,17 @@ The frontend uses the site's Next 15 / React 18 stack. There is no second standa
 
 The local configuration uses **live mode**. Alpaca keys have been tested with actual historical SIP prices and news. IEX quotes remain subject to exchange hours and valid two-sided quotes. A completed prior-session close is clearly labeled. Failed data requests never become synthetic live data.
 
-SEC identity, filings and reported financial metrics require an identifying contact email. Free Alpha Vantage earnings and EUR/USD require its API key. Save these in the engine's `.env` locally; production keys belong in the Python Vercel project's environment variables. Read [PROVIDERS.md](docs/PROVIDERS.md) and [HOSTING.md](docs/HOSTING.md).
+SEC identity, filings and reported financial metrics require an identifying contact email. Alpha Vantage is optional and used only for its earnings calendar. Both remain explicitly unconfigured when their environment values are blank. Read [PROVIDERS.md](docs/PROVIDERS.md) and [HOSTING.md](docs/HOSTING.md).
 
 **Live trade plans remain paused when required inputs are unavailable.** Free feeds do not establish reviewed peer valuations, customer concentration, favorable catalysts, absence of binary events or estimate uncertainty. The app reports those gaps instead of making up reassuring values. The original recommendation engine and toy backtest can still be tested with `APP_MODE=demo`; their fictional inputs never support live claims.
 
 The manual ledger starts at €20; the €200 goal does not affect calculations. Fills retain their actual supplied fees, FX, execution time and frozen entry snapshot. Duplicate IDs cannot duplicate a fill. Cash cannot go negative, and partial sales release average cost proportionally. The app does not send brokerage orders.
 
-## Hosted setup
+## Runtime architecture
 
-The existing site project serves `/waypoint`. A second **Vercel FastAPI project in the same repo** executes short jobs. Supabase stores the engine state and ledger in a private `waypoint` schema, and Cron triggers updates while the browser is closed. No dedicated always-running server is needed. Owner login uses a signed HttpOnly cookie; the Python API requires a separate server secret.
+The local Python process owns one Alpaca IEX WebSocket and publishes coalesced snapshots to the signed-in browser over Server-Sent Events. The fast price loop is independent of the slower research loop. A deterministic HOT set is capped at 30 symbols; WARM names retain slower cached research. All HOT names receive quotes and minute bars. Alpaca's observed Basic allowance counts quote and trade subscriptions together, so spare capacity is assigned to trades after quotes while bars use their separate allowance.
 
-See [HOSTING.md](docs/HOSTING.md) for exact environment variables, migration, Cron and deployment checks. Both Vercel projects, authenticated cloud access, Supabase migration and automatic scheduled HTTP delivery have been verified. No paid subscription was enabled by this setup.
+Supabase stores the engine state, provider cache and ledger in a private `waypoint` schema. Vercel continues to serve the private page and authenticated proxy. Its serverless functions cannot own the persistent market-data connection, so the streaming build stays local until an always-on host is configured. See [HOSTING.md](docs/HOSTING.md) for the boundary and later deployment steps.
 
 ## Method and verification
 

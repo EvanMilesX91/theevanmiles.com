@@ -36,6 +36,16 @@ class EngineService:
         self.provider_cache: dict[str, Any] = {}
         self.provider_health: dict[str, Any] = {}
         self.fx: dict[str, Any] = {}
+        self.market_values: dict[str, Any] = {}
+        self.stream_status: dict[str, Any] = {"status": "waiting", "connected": False,
+                                            "subscribed_symbols": [], "last_event_at": None}
+        self.hot_symbols: list[str] = []
+        self.warm_symbols: list[str] = []
+        self.capacity_error: str | None = None
+        self.schedule_status: dict[str, Any] = {}
+        self.data_engine: Any = None
+        self.usage_checkpoint: Any = None
+        self.last_equity_at = datetime(1970, 1, 1, tzinfo=UTC)
 
     @property
     def mode(self) -> str:
@@ -54,6 +64,7 @@ class EngineService:
 
         with SessionLocal() as db:
             acquire_database_lock(db)
+            self.settings(db)
             saved = db.get(Setting, RUNTIME_IDS[config.app_mode])
             if saved:
                 restore_state(self, saved.data)
@@ -61,7 +72,13 @@ class EngineService:
             if runtime and config.app_mode == "demo":
                 self.tick = runtime.data.get("tick", 0)
                 self.overrides = runtime.data.get("overrides", {})
-            await self.slow_refresh(db)
+            if config.app_mode == "demo":
+                await self.slow_refresh(db)
+            else:
+                # Boot from saved observations; slow network work runs separately.
+                await self.refresh_live(history=False, db=db)
+                self.stream_status = {"status": "waiting", "connected": False,
+                                      "subscribed_symbols": [], "last_event_at": None}
             if saved:
                 saved.data = capture_state(self)
             else:
@@ -120,7 +137,8 @@ class EngineService:
         if self.provider is None:
             try:
                 self.provider = AlpacaMarketDataProvider(
-                    api_key=config.apca_api_key_id, secret_key=config.apca_api_secret_key
+                    api_key=config.apca_api_key_id, secret_key=config.apca_api_secret_key,
+                    cache=self.provider_cache, checkpoint=self.usage_checkpoint
                 )
             except ProviderError:
                 pass
@@ -132,12 +150,13 @@ class EngineService:
             alpha = None
             try:
                 try:
-                    sec = SECProvider(user_agent=config.sec_user_agent)
+                    sec = SECProvider(user_agent=config.sec_user_agent, cache=self.provider_cache, checkpoint=self.usage_checkpoint)
                 except ProviderError:
                     pass
                 try:
                     alpha = AlphaVantageProvider(
-                        api_key=config.alpha_vantage_api_key, cache=self.provider_cache
+                        api_key=config.alpha_vantage_api_key, cache=self.provider_cache,
+                        daily_limit=config.alpha_vantage_daily_limit, checkpoint=self.usage_checkpoint
                     )
                 except ProviderError:
                     pass
@@ -147,44 +166,16 @@ class EngineService:
                 )
                 self.research = research["by_symbol"]
                 self.provider_health = research["provider_health"]
-                self.fx = research["fx"] or {}
-                # Only current, dated EUR→USD observations update portfolio valuation.
-                # Historical fill FX stays immutable in the trade ledger.
-                if db is not None and self.fx and self.fx.get("health", {}).get("status") == "current":
-                    fx_time = datetime.fromisoformat(self.fx["timestamp"])
-                    rate = float(self.fx["rate"])
-                    if self.fx.get("from_currency") == "EUR" and self.fx.get("to_currency") == "USD" and (
-                        -5 <= (now - fx_time).total_seconds() <= 86400 and 0.01 < rate <= 1000
-                    ):
-                        setting = self.settings(db)
-                        row = db.get(Setting, 1)
-                        assert row is not None
-                        row.data = setting.model_dump() | {"fx_usd_per_eur": rate}
-                        db.flush()
+                self.fx = {}  # V1 reserves Alpha Vantage solely for the daily earnings calendar.
             finally:
                 if sec:
                     await sec.aclose()
                 if alpha:
                     await alpha.aclose()
 
+        # Live prices come exclusively from the one IEX stream. Slow research
+        # never polls latest_quotes, and cannot make an old market value fresh.
         quotes: dict[str, Any] = {}
-        quote_error = None
-        if self.provider:
-            try:
-                quotes = await self.provider.latest_quotes(symbols)
-                if not quotes:
-                    quote_error = (
-                        "No two-sided IEX quotes are currently available; showing completed-session prices where available."
-                    )
-            except (ProviderError, ValueError):
-                quote_error = "Live quotes are unavailable. Check Alpaca credentials and feed access."
-        else:
-            quote_error = "Set APCA_API_KEY_ID and APCA_API_SECRET_KEY to connect free Alpaca IEX quotes."
-        self.provider_health["quotes"] = {
-            "status": "current" if quotes else "unavailable", "attempted_at": now.isoformat(),
-            "message": quote_error or "Alpaca IEX indicative midpoints; limited exchange coverage.",
-        }
-
         for symbol in symbols:
             prior = self.stocks.get(symbol, {})
             record = self.research.get(symbol, {})
@@ -244,9 +235,47 @@ class EngineService:
             if price > 0:
                 self.prices[symbol] = price
         self.provider_status = (
-            "LIVE QUOTES UNAVAILABLE. " + quote_error if quote_error else
-            "Real Alpaca IEX prices with sourced research. IEX is one exchange. Incomplete eligibility inputs block trade plans."
+            ("LIVE PRICES UNAVAILABLE. " if not self.stream_status.get("connected") else "") +
+            "LIVE FEED: ALPACA IEX. NOT CONSOLIDATED NBBO. "
+            "Trading 212 is the final execution-price check. Incomplete research keeps trade plans paused."
         )
+
+    def accept_market_event(self, event: dict[str, Any]) -> bool:
+        from .market_state import apply_event
+
+        symbol = event.get("symbol")
+        if symbol not in self.hot_symbols or symbol not in self.stocks:
+            return False
+        value = self.market_values.setdefault(symbol, {})
+        if not apply_event(value, event, datetime.now(UTC)):
+            return False
+        if event.get("type") != "bar" and value.get("price"):
+            self.prices[symbol] = value["price"]
+            stock = self.stocks[symbol]
+            stock["price"] = value["price"]
+            stock["price_basis"] = value["price_basis"]
+            stock["price_as_of"] = value["timestamp"]
+            stock["freshness"]["market_at"] = value["timestamp"]
+            stock["freshness"]["feed"] = "REAL-TIME"
+        return True
+
+    def data_status(self) -> dict[str, Any]:
+        from .api_usage import usage_snapshot
+
+        providers = {item["provider"]: {**item, "requests_minute": item["requests_this_minute"]}
+                     for item in usage_snapshot(self.provider_cache)}
+        for name, configured in (("alpaca", bool(config.apca_api_key_id and config.apca_api_secret_key)),
+                                 ("sec", bool(config.sec_user_agent)),
+                                 ("alpha_vantage", bool(config.alpha_vantage_api_key))):
+            providers[name]["configured"] = configured
+            error = providers[name].get("last_error")
+            if isinstance(error, dict):
+                providers[name]["last_error"] = error.get("code")
+        providers["alpha_vantage"]["daily_limit"] = config.alpha_vantage_daily_limit
+        return {"stream": {"connected_at": None, **self.stream_status, "feed": "Alpaca IEX"}, "providers": providers,
+                "hot_symbols": self.hot_symbols, "warm_symbols": self.warm_symbols,
+                "max_hot_symbols": config.max_hot_symbols, "capacity_error": self.capacity_error,
+                "price_stale_seconds": config.price_stale_seconds, "schedule": self.schedule_status}
 
     def position_plans(self, db: Session) -> dict[str, Any]:
         plans: dict[str, Any] = {}
@@ -266,6 +295,7 @@ class EngineService:
     def dashboard(self, db: Session) -> dict[str, Any]:
         now = datetime.now(UTC)
         settings = self.settings(db)
+        session = market_status(now)
         p = accounting.portfolio(db, self.prices, settings.fx_usd_per_eur, self.mode)
         if self.fx and abs(float(self.fx.get("rate", 0)) - settings.fx_usd_per_eur) < 0.00000001:
             p["fx_source"] = f"Alpha Vantage EUR/USD observation at {self.fx.get('timestamp', 'unknown time')}"
@@ -287,11 +317,25 @@ class EngineService:
             except (ValueError, TypeError, AttributeError):
                 quote_current = False
             fresh = stock["freshness"]["status"] == "current" and quote_current
+            if config.app_mode == "live":
+                from .market_state import market_view
+
+                view = market_view(self.market_values.get(symbol, {}), now=now,
+                                   connected=bool(self.stream_status.get("connected")) and symbol not in self.stream_status.get("stale_symbols", []),
+                                   subscribed=symbol in self.stream_status.get("subscribed_symbols", []),
+                                   hot=symbol in self.hot_symbols, stale_seconds=config.price_stale_seconds)
+                stock["market"] = view
+                stock["watchlist_tier"] = "HOT" if symbol in self.hot_symbols else "WARM"
+                quote_current = not view["stale"] and not self.capacity_error
+                # A fresh quote alone does not repair incomplete research.
+                fresh = quote_current and stock["freshness"]["status"] == "current"
+                if stock.get("plan") and stock["freshness"]["status"] == "stale":
+                    fresh = False
             if config.app_mode == "live" and not quote_current and stock["freshness"]["feed"] in {"REAL-TIME", "DELAYED"}:
                 stock["freshness"]["feed"] = "UNAVAILABLE"
             if not fresh and stock["freshness"]["status"] == "current":
                 stock["freshness"]["status"] = "stale"
-            if config.app_mode == "live" and not market_status(now)["is_open"]:
+            if config.app_mode == "live" and not session["is_open"]:
                 if stock["freshness"]["feed"] in {"REAL-TIME", "DELAYED"}:
                     stock["freshness"]["feed"] = "MARKET CLOSED"
                 fresh = False
@@ -326,6 +370,12 @@ class EngineService:
             if config.app_mode == "live" and stock["plan"] is None:
                 state = "WATCH_CLOSELY" if symbol in owned else "NO_SETUP"
                 explanation = "Company inputs are incomplete. No calculated trade plan is available."
+            if config.app_mode == "live" and (not quote_current or not session["is_open"]):
+                if state in {"BUY_AREA", "TAKE_PROFIT", "RECONSIDER_EXIT"}:
+                    state = "WATCH_CLOSELY" if symbol in owned else "WAIT"
+                    explanation = "PRICE DATA STALE. Wait for fresh HOT-stream data; check Trading 212 manually."
+            stock["actionable"] = bool(config.app_mode == "live" and fresh and session["is_open"]
+                                       and state in {"BUY_AREA", "TAKE_PROFIT", "RECONSIDER_EXIT"})
             stock.update(state=state, explanation=explanation)
             stocks.append(stock)
         alerts = list(
@@ -337,7 +387,8 @@ class EngineService:
             "now": now.isoformat(),
             "model_version": MODEL_VERSION,
             "settings": settings.model_dump(),
-            "market": market_status(now),
+            "market": session,
+            "data_status": self.data_status(),
             "portfolio": p,
             "stocks": stocks,
             "alerts": [
@@ -378,8 +429,6 @@ class EngineService:
                 row.data = data
             else:
                 db.add(Setting(id=2, data=data))
-        elif market_status(now)["is_open"]:
-            await self.refresh_live()
         dashboard = self.dashboard(db)
         for stock in dashboard["stocks"]:
             previous = self.previous_states.get(stock["symbol"])
@@ -410,8 +459,10 @@ class EngineService:
             self.previous_states[stock["symbol"]] = state
         if dashboard["settings"]["shadow_enabled"] and config.app_mode == "demo":
             self.update_shadow(db, dashboard)
-        if self.tick % 12 == 0:
+        if ((config.app_mode == "demo" and self.tick % 12 == 0) or
+                (config.app_mode == "live" and (now - self.last_equity_at).total_seconds() >= 300)):
             db.add(Equity(mode=self.mode, total_eur=str(dashboard["portfolio"]["total_eur"]), created_at=now))
+            self.last_equity_at = now
 
     def update_shadow(self, db: Session, dashboard: dict[str, Any]) -> None:
         now = datetime.now(UTC)

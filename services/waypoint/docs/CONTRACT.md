@@ -9,7 +9,7 @@ Frontend agent owns frontend/ entirely. No shared file edits outside ownership w
 
 ## HTTP
 - GET /api/dashboard -> Dashboard below
-- GET /api/events -> SSE event `snapshot`, data is Dashboard JSON (every 5 seconds)
+- GET /api/events -> local persistent-runtime SSE events: `snapshot` contains Dashboard JSON; `heartbeat` keeps the connection active. Serverless runtime returns 409 because it cannot own the Alpaca stream.
 - POST /api/trades -> TradeInput; response Dashboard
 - PATCH /api/settings -> partial Settings; response Dashboard
 - POST /api/demo/step {scenario: "entry"|"profit"|"warning"|"exit"|"wait", symbol: "RKLB"} -> Dashboard

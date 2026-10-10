@@ -1,3 +1,18 @@
+# Persistent stream verification — 10 October 2026
+
+| Check | Result |
+|---|---|
+| Backend suite | 201 passed; Ruff passed; mypy passed across 22 source files |
+| Entire website suite | 174 passed; TypeScript and Next 15.5.27 production build passed |
+| Actual Alpaca socket | One authenticated IEX socket acknowledged 30 HOT symbols |
+| Basic channel allocation | 30 quotes + 30 bars accepted; quotes and trades share the observed 30-symbol allowance, so trades use only spare capacity |
+| Local SSE | Authenticated stream returned coalesced snapshots; no live quote REST calls occurred |
+| Freshness gate | Closed-market/stale symbols were non-actionable; source timestamps age independently in the browser |
+| Provider configuration | Alpaca configured; SEC and Alpha Vantage explicitly unconfigured |
+| Journal integrity | No trade records changed during live verification |
+
+The persistent build is running locally. It has not replaced the public Vercel release because Vercel serverless cannot keep the Alpaca WebSocket open. Production cutover awaits an always-on backend.
+
 # Live integration verification — 9 October 2026
 
 Canonical source is in `theevanmiles.com`; the route is `/waypoint`. The release copy excludes unrelated unfinished FPL and Traitors work.

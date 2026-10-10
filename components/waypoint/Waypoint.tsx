@@ -50,6 +50,9 @@ import {
   range,
   request,
   signed,
+  subscribeWaypoint,
+  marketFreshness,
+  stockStateSafe,
 } from "@/lib/waypoint/api";
 import type {
   BacktestReport,
@@ -1327,7 +1330,7 @@ function ResearchView({ data }: { data: Dashboard }) {
             ) : (
               <FlaskConical size={16} />
             )}
-            Run demo backtest
+            {data.mode === "live" ? "Replay cached Alpaca history" : "Run demo backtest"}
           </button>
         </div>
         <p className="muted">
@@ -1429,41 +1432,27 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
   }, []);
   useEffect(() => {
     let active = true;
-    let pending = false;
-    let abort: AbortController | null = null;
-    async function poll() {
-      if (pending || document.hidden) return;
-      pending = true;
-      abort = new AbortController();
-      const timeout = window.setTimeout(() => abort?.abort(), 15000);
-      try {
-        const d = parseDashboard(await request("/api/dashboard", { signal: abort.signal }));
-        if (active) {
-          apply(d);
-          setError("");
-        }
-      } catch (reason) {
-        if (active) {
-          setConnected(false);
-          setError(reason instanceof Error ? reason.message : "Your workspace is temporarily unavailable. Retrying automatically.");
-        }
-      } finally {
-        clearTimeout(timeout);
-        pending = false;
+    const abort = new AbortController();
+    // One cached initial read. All subsequent market updates are server-pushed.
+    void request("/api/dashboard", { signal: abort.signal }).then((value) => {
+      if (active) {
+        setData((current) => current ?? parseDashboard(value));
+        setClock(Date.now());
       }
-    }
-    void poll();
-    const snapshots = window.setInterval(() => { void poll(); }, 30000);
-    const timer = window.setInterval(() => setClock(Date.now()), 5000);
-    const visible = () => { if (!document.hidden) void poll(); };
-    document.addEventListener("visibilitychange", visible);
-    return () => {
-      active = false;
-      abort?.abort();
-      clearInterval(snapshots);
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", visible);
-    };
+    }).catch((reason) => {
+      if (active) setError(reason instanceof Error ? reason.message : "Workspace unavailable.");
+    });
+    const stop = subscribeWaypoint({
+      onSnapshot: (snapshot) => { if (active) { apply(snapshot); setError(""); } },
+      onHeartbeat: () => { if (active) setReceived(Date.now()); },
+      onState: (state, message) => {
+        if (!active) return;
+        setConnected(state === "connected");
+        if (message) setError(message);
+      },
+    });
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => { active = false; abort.abort(); stop(); clearInterval(timer); };
   }, [apply, retry]);
   useEffect(() => {
     if (!toast) return;
@@ -1472,13 +1461,8 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
   }, [toast]);
   const closeTrade = useCallback(() => setTrade(null), []);
   const closeSource = useCallback(() => setSource(null), []);
-  const freshConnection = connected && received > 0 && clock - received < 75000;
-  const stockSafe = (s: Stock) =>
-    freshConnection &&
-    s.freshness.status === "current" &&
-    ["DEMO DATA", "REAL-TIME"].includes(s.freshness.feed) &&
-    Number.isFinite(Date.parse(s.freshness.market_at ?? "")) &&
-    clock - Date.parse(s.freshness.market_at ?? "") < 120000;
+  const freshConnection = connected && received > 0 && clock - received < 35000;
+  const stockSafe = (s: Stock) => !!data && stockStateSafe(s, data, clock, freshConnection);
   const selected =
     data?.stocks.find((s) => s.symbol === symbol) ??
     data?.stocks.find(
@@ -1658,6 +1642,27 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
               </button>
             </div>
           </div>
+          {data?.mode === "live" && (
+            <section className="card waypoint-data-status" aria-label="Data status">
+              <details>
+                <summary><strong>DATA STATUS</strong> · Alpaca {data.data_status?.stream.status ?? "unavailable"} · HOT {data.data_status?.hot_symbols.length ?? 0} / {data.data_status?.max_hot_symbols ?? 30}</summary>
+                <p><strong>LIVE FEED: ALPACA IEX</strong> · <strong>NOT CONSOLIDATED NBBO</strong></p>
+                <p>Trading 212 remains the final execution-price check. IEX prices may differ from its executable quote.</p>
+                <p>HOT: {data.data_status?.hot_symbols.join(", ") || "Waiting for stream"} · WARM: {data.data_status?.warm_symbols.join(", ") || "None"}</p>
+                {data.data_status?.stream.last_error && <p role="status">{data.data_status.stream.last_error}</p>}
+                <div className="waypoint-provider-grid">
+                  {Object.entries(data.data_status?.providers ?? {}).map(([name, usage]) => (
+                    <div key={name}>
+                      <strong>{name === "alpha_vantage" ? "Alpha Vantage" : name === "sec" ? "SEC EDGAR" : "Alpaca REST"}</strong>
+                      <p>{usage.configured === false ? "Not configured" : usage.last_error ? "Using cached data / temporarily unavailable" : usage.last_success ? "Healthy" : "Waiting"}</p>
+                      <p>{usage.requests_today}{usage.daily_limit ? ` / ${usage.daily_limit}` : ""} requests today · {usage.requests_minute} this minute</p>
+                      <small>Last success: {dateTime(usage.last_success)} · Rate limits: {usage.rate_limit_responses}</small>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </section>
+          )}
           {data?.mode === "demo" && (
             <div className="demo-strip">
               <FlaskConical size={16} />
@@ -1836,6 +1841,11 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                             </div>
                             <div className="current-price">
                               <strong>{price(selected.price)}</strong>
+                              {data.mode === "live" && <small className="waypoint-price-age">
+                                {marketFreshness(selected, data, clock, freshConnection).stale ? "⚠ PRICE DATA STALE" : `Updated ${marketFreshness(selected, data, clock, freshConnection).age?.toFixed(1)} sec ago`}
+                                {" · Alpaca IEX · "}{selected.watchlist_tier ?? "WARM"}
+                              </small>}
+
                               <span
                                 className={
                                   (selected.change_pct ?? 0) >= 0

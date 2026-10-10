@@ -27,6 +27,9 @@ def test_live_quote_without_history_never_invents_baseline_or_financials(monkeyp
             runtime = EngineService()
             runtime.provider = AlpacaMarketDataProvider(client, api_key="test", secret_key="test")
             await runtime.refresh_live(history=True)
+            runtime.hot_symbols = ["AAPL"]
+            runtime.accept_market_event({"type": "quote", "symbol": "AAPL", "bid": 220, "ask": 222,
+                                         "timestamp": datetime.now(UTC).isoformat()})
             stock = runtime.stocks["AAPL"]
             assert stock["price"] == 221
             assert stock["previous_close"] is None
@@ -34,7 +37,7 @@ def test_live_quote_without_history_never_invents_baseline_or_financials(monkeyp
             assert stock["history"] == []
             assert stock["opportunity"] is None and stock["risk"] is None
             assert stock["plan"] is None
-            assert stock["sources"][0]["provider"] != "Waypoint synthetic fixtures"
+            assert not any(s["provider"] == "Waypoint synthetic fixtures" for s in stock["sources"])
             assert stock["freshness"]["status"] == "missing"
 
     asyncio.run(scenario())
@@ -57,6 +60,8 @@ def test_live_stale_feed_and_outage_preserve_last_price_but_block_signals(monkey
             runtime.provider = AlpacaMarketDataProvider(client, api_key="test", secret_key="test")
             await runtime.refresh_live()
             assert runtime.stocks["AAPL"]["freshness"]["feed"] == "UNAVAILABLE"
+            runtime.hot_symbols = ["AAPL"]
+            runtime.accept_market_event({"type": "quote", "symbol": "AAPL", "bid": 220, "ask": 222, "timestamp": stale})
             unavailable = True
             await runtime.refresh_live()
             assert runtime.prices["AAPL"] == 221

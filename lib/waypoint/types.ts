@@ -71,6 +71,21 @@ export type Stock = {
   price: number;
   price_basis?: "completed_close" | "quote";
   price_as_of?: string | null;
+  watchlist_tier?: "HOT" | "WARM";
+  actionable?: boolean;
+  market?: {
+    timestamp: string | null;
+    provider: string;
+    feed: string;
+    age_seconds: number | null;
+    stale: boolean;
+    bid?: number | null;
+    ask?: number | null;
+    bid_size?: number | null;
+    ask_size?: number | null;
+    last_trade?: number | null;
+    volume?: number | null;
+  };
   previous_close: number | null;
   change_pct: number | null;
   history: number[];
@@ -177,7 +192,34 @@ export type Dashboard = {
   last_slow_refresh: string;
   provider_status: string;
   provider_health?: Record<string, ProviderHealth>;
+  data_status?: DataStatus;
   fx?: { rate: number | string; timestamp: string | null; health: ProviderHealth; source: Partial<Source> } | null;
+};
+export type ProviderUsage = {
+  configured?: boolean;
+  requests_today: number;
+  requests_minute: number;
+  last_request: string | null;
+  last_success: string | null;
+  last_error: string | null;
+  rate_limit_responses: number;
+  daily_limit?: number | null;
+  status?: string;
+};
+export type DataStatus = {
+  stream: {
+    status: string;
+    connected: boolean;
+    feed: string;
+    last_event_at: string | null;
+    connected_at: string | null;
+    last_error?: string | null;
+  };
+  hot_symbols: string[];
+  warm_symbols: string[];
+  max_hot_symbols: number;
+  price_stale_seconds?: number;
+  providers: Record<string, ProviderUsage>;
 };
 export type TradeInput = {
   symbol: string;

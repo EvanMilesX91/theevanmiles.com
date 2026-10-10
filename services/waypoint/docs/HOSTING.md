@@ -1,10 +1,10 @@
 # Waypoint on theevanmiles.com/waypoint
 
-The frontend is part of the existing Next.js website. The Python engine is a second Vercel project in the same repository, with root directory `services/waypoint`. Supabase Postgres stores the ledger, provider cache and engine snapshots. Supabase Cron invokes short authenticated jobs. No continuously running rented server is required.
+The frontend is part of the existing Next.js website. Supabase Postgres stores the ledger, provider cache and engine snapshots. The current streaming engine must run as a persistent Python process: it owns one Alpaca WebSocket and sends browser updates through Server-Sent Events. It runs on this Windows computer initially. Vercel serves the website and proxy but cannot hold the backend connection indefinitely.
 
 The public domain remains on the existing website project. Its private server proxy at `/api/waypoint/*` forwards authenticated requests to the Python engine. API keys, the database password and service token never enter client JavaScript. The private page is excluded from search indexing.
 
-Production was deployed and verified on 9 October 2026: https://www.theevanmiles.com/waypoint. The website project is `theevanmiles-com-fsdh`; the engine is `theevanmiles-waypoint-engine`, at https://theevanmiles-waypoint-engine.vercel.app. Both belong to the existing `evan-miles-projects` Vercel team. The apex domain redirects to www.
+The previously deployed serverless release remains at https://www.theevanmiles.com/waypoint. The persistent-stream update has deliberately not replaced it because the local backend is not reachable from Vercel. After an always-on host is chosen, point `WAYPOINT_BACKEND_URL` at its HTTPS origin, configure the same private environment values, verify `/api/events`, then deploy the website build.
 
 ## Local use
 
@@ -24,7 +24,7 @@ In the engine `.env` locally, or the **engine project's** Vercel environment var
 
 Alpaca: sign in at https://app.alpaca.markets/account/login, choose **Paper Trading**, find **API Keys** on Home, then **Generate New Key**. The secret is displayed once; regenerating keys invalidates the prior pair. Save privately. Waypoint makes market-data requests only and contains no order endpoint.
 
-Basic IEX quotes cover one exchange. Historical SIP bars end at least 16 minutes in the past and use split adjustment. Missing/withdrawn quotes never become a zero-dollar market price. Completed-session prices are labeled END OF DAY. News entitlement is checked separately. Alpha Vantage earnings dates are expected dates, not company-confirmed events. Its free allowance is 25 requests/day: the app caches bulk earnings daily and FX hourly and tracks calls in persisted state. An abrupt job termination can roll back a reservation; the provider's own quota remains the final limit. Normal provider failures preserve reservations and old observation timestamps.
+Basic IEX data covers one exchange and is not a consolidated NBBO. One socket subscribes every HOT symbol to quotes and minute bars, then adds trades while the observed account allowance permits. Missing, withdrawn, corrected, future or out-of-order events fail closed. Historical SIP bars end at least 16 minutes in the past and use split adjustment. Alpha Vantage earnings dates are expected dates, not company-confirmed events. Its free allowance is tracked at 25 requests/day; it is not used for FX.
 
 ## Supabase database
 
@@ -38,9 +38,15 @@ The owner currently uses Alpaca only. Leave Alpha Vantage and SEC values empty u
 
 No migration runs on a serverless cold start. Hosted requests fail closed if a service token or Postgres URL is missing. Each transaction locks the engine state and ledger together, preventing two server instances from spending the same cash. Daily analytical snapshots are retained; current quote/research state is overwritten in the runtime record. Trade entry snapshots and historical FX remain immutable.
 
-## Vercel projects
+## Always-on deployment target
 
-**Engine project:** import the same Git repository with root `services/waypoint`, FastAPI framework and Python 3.13. Add `APP_MODE=live`, `RUNTIME_MODE=serverless`, `DATABASE_URL`, `WAYPOINT_SERVICE_TOKEN`, provider settings above, `FRONTEND_ORIGIN=https://www.theevanmiles.com`, and `TRUSTED_HOSTS` containing the engine's production hostname. Vercel's current deployment hostname is also allowed automatically. Runtime requirements and the 180-second function budget are already defined. Migrate before the first authenticated request. If deployment protection is enabled, configure a supported machine-access bypass for the proxy and scheduler rather than expecting a browser login to authorize their calls.
+Use a host that keeps one Python process running, supports outbound secure WebSockets, exposes HTTPS, and can reach Supabase. Run `uvicorn app.main:app` from `services/waypoint/backend` with `RUNTIME_MODE=server`, `STREAM_ENABLED=true`, and exactly one worker. Set `FRONTEND_ORIGIN=https://www.theevanmiles.com` and restrict `TRUSTED_HOSTS` to the assigned hostname. Do not scale to multiple workers unless the stream ownership and event fan-out design is changed.
+
+The website's `/api/waypoint/events` route authenticates the owner and proxies the SSE response. The upstream connection is bounded so Vercel can recycle it; the browser reconnects with jitter. A serverless backend returns a clear unavailable event instead of pretending the feed is live.
+
+## Existing Vercel projects
+
+The old FastAPI Vercel project can still serve short authenticated requests and migrations with `RUNTIME_MODE=serverless`, but streaming is intentionally disabled there and `/api/events` returns 409. Keep it until the persistent host has passed health, dashboard, SSE, restart and journal-integrity checks.
 
 **Existing website project:** set `WAYPOINT_BACKEND_URL=https://theevanmiles-waypoint-engine.vercel.app`, the matching `WAYPOINT_SERVICE_TOKEN`, and `WAYPOINT_SESSION_SECRET` (at least 32 random characters). Keep the existing `ADMIN_PASSWORD`, or set a separate `WAYPOINT_PASSWORD` of at least 12 characters. `WAYPOINT_SITE_ORIGIN` is needed only for a particular preview hostname; production www and apex domains are already allowed. Do not put credentials in variables beginning `NEXT_PUBLIC_`.
 
@@ -48,9 +54,9 @@ Vercel deployment protection remains enabled on both projects. The website also 
 
 The repository contains unrelated uncommitted FPL and Traitors work. Review and deploy only the Waypoint integration, or deliberately release those projects separately. Do not accidentally publish the entire dirty checkout. Keep existing domain, DNS and cron settings.
 
-## Background updates
+## Background updates in the streaming build
 
-Enable Supabase Cron, pg_net and Vault. Store `waypoint_backend_url`, `waypoint_service_token` and `waypoint_backend_bypass_secret` in Vault, then run `supabase/cron.sql`. Four namespaced jobs are active: `waypoint-quotes` checks each minute during a UTC window covering both US daylight-saving offsets; `waypoint-morning-research` refreshes research; `waypoint-session-research` refreshes hourly during sessions; `waypoint-job-log-retention` trims old Waypoint Cron run records weekly. The exchange calendar skips closed sessions and holidays. The browser polls saved results every 30 seconds. A closed browser does not stop the scheduled jobs.
+The persistent engine performs the fast market loop and slow research schedule itself. The browser receives pushed snapshots and does not poll the dashboard every 30 seconds. Existing Supabase Cron jobs belong to the prior serverless build; disable their quote/tick jobs before switching production to the persistent host to avoid duplicate work. A process lock prevents two local streaming workers from owning the account socket.
 
 On 9 October 2026, the initial Supabase HTTP call and five subsequent automatic minute calls returned HTTP 200 without timeout or network error. This verifies actual scheduled delivery through Vercel protection and the engine's authentication; it is not a long-term uptime claim.
 
