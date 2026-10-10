@@ -515,7 +515,7 @@ function OpportunityBoard({
               <div className="opportunity-tile-top">
                 <div className="company-heading compact">
                   <StockMark symbol={stock.symbol} small />
-                  <div><strong>{stock.symbol}</strong><small>{stock.name}</small></div>
+                  <div><strong>{stock.symbol}</strong><small>{stock.name}</small>{stock.research_lane === "discovery" && <span className="research-lane-badge">Discovery candidate</span>}</div>
                 </div>
                 <Badge state={stock.state} safe={safe} marketOpen={marketOpen} />
               </div>

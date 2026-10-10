@@ -32,6 +32,8 @@ class Config(BaseSettings):
     live_symbols: str = "AAPL,MSFT"
     # Optional broader pre-market scan universe. It is combined with LIVE_SYMBOLS.
     scan_symbols: str = ""
+    # Smaller or less-followed candidates are kept in a separate exploration lane.
+    discovery_symbols: str = ""
     scheduler_enabled: bool = True
     max_hot_symbols: int = Field(default=30, ge=1, le=30)
     price_stale_seconds: float = Field(default=30, ge=2, le=90)
@@ -53,7 +55,7 @@ class Config(BaseSettings):
     historical_projection_top_n: int = Field(default=100, ge=25, le=250)
     # Bound synchronous dashboard work; the full labelled file remains available
     # to offline training and can be sampled again on the next refresh.
-    historical_projection_runtime_rows: int = Field(default=500, ge=100, le=5000)
+    historical_projection_runtime_rows: int = Field(default=500, ge=25, le=5000)
     historical_projection_cache_seconds: int = Field(default=300, ge=5, le=3600)
     # Offline ML maintenance is deliberately opt-in and never activates a candidate model.
     ml_maintenance_enabled: bool = False
@@ -77,6 +79,16 @@ class Config(BaseSettings):
         symbols = list(dict.fromkeys(symbol.strip().upper() for symbol in value.split(",") if symbol.strip()))
         if len(symbols) > 100 or any(not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,11}", s) for s in symbols):
             raise ValueError("SCAN_SYMBOLS must contain up to 100 ordinary share symbols separated by commas.")
+        return ",".join(symbols)
+
+    @field_validator("discovery_symbols")
+    @classmethod
+    def valid_discovery_symbols(cls, value: str) -> str:
+        if not value.strip():
+            return ""
+        symbols = list(dict.fromkeys(symbol.strip().upper() for symbol in value.split(",") if symbol.strip()))
+        if len(symbols) > 100 or any(not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,11}", s) for s in symbols):
+            raise ValueError("DISCOVERY_SYMBOLS must contain up to 100 ordinary share symbols separated by commas.")
         return ",".join(symbols)
 
     @model_validator(mode="after")

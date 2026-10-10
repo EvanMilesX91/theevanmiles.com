@@ -64,6 +64,7 @@ export type LiveResearch = {
 export type Stock = {
   symbol: string;
   name: string;
+  research_lane?: "core" | "discovery";
   sector: string;
   company_type: string;
   classification_confidence: number;

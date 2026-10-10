@@ -3352,6 +3352,7 @@
 .company-heading.compact strong, .company-heading.compact small { display: block; }
 .company-heading.compact strong { font-size: 13px; }
 .company-heading.compact small { margin-top: 3px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a9c0ca; font-size: 10px; }
+.research-lane-badge { display: inline-block; margin-top: 5px; color: #f9b9f2; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .opportunity-tile-price { display: flex; align-items: baseline; justify-content: space-between; margin-top: 15px; }
 .opportunity-tile-price strong { font-size: 19px; }
 .opportunity-tile-price span { font-size: 11px; }

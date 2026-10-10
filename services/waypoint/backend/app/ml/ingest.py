@@ -105,7 +105,7 @@ async def _cli(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build Waypoint point-in-time labelled history from Alpaca daily bars.")
-    parser.add_argument("--symbols", default="", help="Comma-separated symbols; defaults to LIVE_SYMBOLS")
+    parser.add_argument("--symbols", default="", help="Comma-separated symbols; defaults to the core, scan and discovery universes")
     parser.add_argument("--years", type=int, default=5)
     parser.add_argument("--stride-days", type=int, default=5)
     parser.add_argument("--target-pct", type=float, default=0.15)
@@ -113,5 +113,5 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
     if not arguments.symbols:
         from ..config import config
-        arguments.symbols = config.live_symbols
+        arguments.symbols = ",".join(filter(None, (config.live_symbols, config.scan_symbols, config.discovery_symbols)))
     asyncio.run(_cli(arguments))

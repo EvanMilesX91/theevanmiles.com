@@ -162,7 +162,20 @@ class EngineService:
         from .live_data import build_live_research
         from .providers import AlpacaMarketDataProvider, AlphaVantageProvider, ProviderError, SECProvider
 
-        symbols = list(dict.fromkeys(s.strip().upper() for raw in (config.live_symbols + "," + config.scan_symbols).split(",") if (s := raw.strip())))
+        symbols = list(dict.fromkeys(
+            s.strip().upper()
+            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+            if (s := raw.strip())
+        ))
+        discovery_symbols = set(config.discovery_symbols.split(","))
+        # A changed universe must not leave removed candidates visible from a
+        # previously persisted runtime snapshot. Open positions are expected to
+        # remain in LIVE_SYMBOLS or SCAN_SYMBOLS so their monitoring continues.
+        configured_symbols = set(symbols)
+        for stale in set(self.stocks) - configured_symbols:
+            self.stocks.pop(stale, None)
+            self.prices.pop(stale, None)
+            self.market_values.pop(stale, None)
         now = datetime.now(UTC)
         if self.provider is None:
             try:
@@ -270,6 +283,7 @@ class EngineService:
             } for event in record.get("next_events", [])]
             self.stocks[symbol] = {
                 "symbol": symbol, "name": record.get("name", symbol),
+                "research_lane": "discovery" if symbol in discovery_symbols else "core",
                 "sector": record.get("sector", "Industry not verified"),
                 "company_type": "Unclassified", "classification_confidence": 0,
                 "classification_version": MODEL_VERSION,
@@ -409,7 +423,15 @@ class EngineService:
         original_plans = self.position_plans(db)
         stocks = []
         for symbol, base in self.stocks.items():
-            stock = copy.deepcopy(base)
+            # Dashboard updates run on every live heartbeat. Copying the full
+            # research payload here duplicated historical bars and provenance
+            # for every symbol once per second. The dashboard only mutates its
+            # top-level view plus freshness/market dictionaries, so keep the
+            # evidence payload shared and copy the mutable views explicitly.
+            stock = dict(base)
+            stock["freshness"] = dict(base.get("freshness", {}))
+            if isinstance(base.get("market"), dict):
+                stock["market"] = dict(base["market"])
             stock["price"] = self.prices.get(symbol, base["price"])
             change_reference = stock.get("change_reference", stock.get("previous_close"))
             stock["change_pct"] = round((stock["price"] / change_reference - 1) * 100, 2) if change_reference else None

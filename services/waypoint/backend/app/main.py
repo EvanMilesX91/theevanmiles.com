@@ -381,7 +381,7 @@ async def ml_ingest(symbols: str | None = None, years: int | None = None, stride
     path = Path(config.ml_dataset_path)
     if not path.is_absolute():
         path = ROOT / path
-    selected = [item.strip().upper() for item in (symbols or ",".join(filter(None, (config.live_symbols, config.scan_symbols)))).split(",") if item.strip()]
+    selected = [item.strip().upper() for item in (symbols or ",".join(filter(None, (config.live_symbols, config.scan_symbols, config.discovery_symbols)))).split(",") if item.strip()]
     try:
         return await ingest_to_path(service.provider, selected, path, years=years or config.ml_ingest_years,
                                     stride_days=stride_days or config.ml_ingest_stride_days)

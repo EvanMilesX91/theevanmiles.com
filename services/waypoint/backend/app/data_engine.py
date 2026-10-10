@@ -100,7 +100,12 @@ class DataEngine:
             settings = self.service.settings(db)
             owned = {p['symbol'] for p in accounting.portfolio(
                 db, self.service.prices, settings.fx_usd_per_eur, self.service.mode)['positions']}
-        symbols = set(config.live_symbols.split(',')) | set(config.scan_symbols.split(',')) | owned
+        symbols = {
+            item.strip().upper()
+            for universe in (config.live_symbols, config.scan_symbols, config.discovery_symbols)
+            for item in universe.split(',')
+            if item.strip()
+        } | owned
         candidates = []
         for symbol in symbols:
             stock = self.service.stocks.get(symbol, {})
