@@ -54,7 +54,7 @@ class Config(BaseSettings):
     # Bound synchronous dashboard work; the full labelled file remains available
     # to offline training and can be sampled again on the next refresh.
     historical_projection_runtime_rows: int = Field(default=500, ge=100, le=5000)
-    historical_projection_cache_seconds: int = Field(default=30, ge=5, le=3600)
+    historical_projection_cache_seconds: int = Field(default=300, ge=5, le=3600)
     # Offline ML maintenance is deliberately opt-in and never activates a candidate model.
     ml_maintenance_enabled: bool = False
     ml_maintenance_interval_hours: int = Field(default=168, ge=1, le=8760)

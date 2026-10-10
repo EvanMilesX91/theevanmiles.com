@@ -119,7 +119,10 @@ class MLEngine:
             return None
         point = make_snapshot(stock, symbol=symbol, as_of=now)
         bucket = int(now.timestamp() // config.historical_projection_cache_seconds)
-        cache_key = f"{symbol}:{stock.get('price')}:{bucket}"
+        # Refresh the slower historical map on a time window rather than for
+        # every cent of quote movement. Live prices still update immediately;
+        # the research range remains stable between refreshes.
+        cache_key = f"{symbol}:{bucket}"
         cached = self._projection_cache.get(cache_key)
         if cached and cached[0] > now.timestamp():
             return cached[1]
