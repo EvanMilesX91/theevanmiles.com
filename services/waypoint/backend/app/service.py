@@ -19,6 +19,7 @@ from .engine import MODEL_VERSION, analyze_stock, position_size, trade_state
 from .fixtures import demo_stocks
 from .models import Alert, Analysis, Equity, Setting, Shadow
 from .schemas import Settings
+from .ml import MLEngine
 
 
 class EngineService:
@@ -46,6 +47,7 @@ class EngineService:
         self.data_engine: Any = None
         self.usage_checkpoint: Any = None
         self.last_equity_at = datetime(1970, 1, 1, tzinfo=UTC)
+        self.ml = MLEngine()
 
     @property
     def mode(self) -> str:
@@ -126,6 +128,12 @@ class EngineService:
                     data=copy.deepcopy(stock),
                 )
             )
+            # ML snapshots are point-in-time evidence only. They are captured
+            # after the deterministic research refresh and never alter it.
+            self.ml.capture(db, symbol=stock["symbol"], stock=stock, now=now)
+            prediction = self.ml.predict(stock, symbol=stock["symbol"], now=now, db=db)
+            if prediction is not None and self.ml.shadow_mode:
+                self.ml.attach_shadow(db, stock["symbol"], prediction, now)
         self.last_slow_refresh = now
 
     async def refresh_live(self, history: bool = False, db: Session | None = None) -> None:
@@ -339,9 +347,24 @@ class EngineService:
                 if stock["freshness"]["feed"] in {"REAL-TIME", "DELAYED"}:
                     stock["freshness"]["feed"] = "MARKET CLOSED"
                 fresh = False
+            prediction = self.ml.predict(stock, symbol=symbol, now=now, db=db)
+            if prediction is not None:
+                stock["ml"] = prediction
             state, explanation = trade_state(
                 stock["price"], stock["plan"], symbol in owned, fresh, stock.get("business_warning", False)
             )
+            if prediction is not None:
+                from .ml.decision import combine_decision
+
+                combined = combine_decision(
+                    deterministic_state=state, opportunity=stock.get("opportunity"), risk=stock.get("risk"),
+                    prediction=prediction, influence_enabled=self.ml.influence_enabled,
+                    fresh=fresh, liquidity_ok=not bool(stock.get("business_warning")),
+                    event_risk=bool(stock.get("research", {}).get("event_risk", False)), owned=symbol in owned,
+                )
+                state = combined["state"]
+                if combined["ml_applied"]:
+                    explanation = combined["reason"]
             stock["sizing"] = position_size(
                 stock["plan"], stock["price"], p["total_eur"], p["cash_eur"], settings.model_dump()
             )
@@ -389,6 +412,7 @@ class EngineService:
             "settings": settings.model_dump(),
             "market": session,
             "data_status": self.data_status(),
+            "ml": self.ml.dashboard(db),
             "portfolio": p,
             "stocks": stocks,
             "alerts": [

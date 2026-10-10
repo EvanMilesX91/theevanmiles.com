@@ -3115,3 +3115,15 @@
 .waypoint-data-status p { margin: 10px 0; line-height: 1.6; }
 .waypoint-provider-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 16px; }
 .waypoint-price-age { display: block; margin-top: 6px; font-size: 11px; font-weight: 500; }
+.ml-outlook { margin: 18px 0 4px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #f7f8f1; }
+.ml-outlook-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.ml-outlook-heading strong { display: block; margin-top: 6px; font-size: 12px; }
+.ml-outlook-heading small { color: var(--muted); font-size: 10px; text-align: right; }
+.ml-outlook-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.ml-outlook-metrics span, .ml-why span { display: block; color: var(--muted); font-size: 10px; }
+.ml-outlook-metrics strong { display: block; margin-top: 5px; font-size: 18px; }
+.ml-why { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; color: var(--muted); font-size: 11px; }
+.ml-why summary { cursor: pointer; color: var(--green); font-weight: 600; }
+.ml-why > div { display: inline-block; width: 49%; margin-top: 12px; vertical-align: top; }
+.ml-why p { margin: 5px 0; color: var(--ink); }
+@media (max-width: 600px) { .ml-outlook-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

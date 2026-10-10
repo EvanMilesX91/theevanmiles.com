@@ -5,6 +5,7 @@ import json
 import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -18,7 +19,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from . import accounting
 from .backtest import demo_backtest
 from .calendar import market_status
-from .config import config
+from .config import ROOT, config
 from .db import SessionLocal
 from .engine import MODEL_VERSION
 from .migrate import migrate
@@ -293,6 +294,87 @@ async def shadow() -> list[dict[str, Any]]:
             }
             for s in db.scalars(select(Shadow).order_by(Shadow.id.desc()))
         ]
+
+
+@app.get("/api/ml/status")
+async def ml_status() -> dict[str, Any]:
+    async with transaction(service, SessionLocal) as db:
+        return {**service.ml.dashboard(db), "walk_forward": service.ml.registry.list().get("walk_forward")}
+
+
+@app.post("/api/ml/train")
+async def ml_train(activate: bool = False) -> dict[str, Any]:
+    """Manually train from a prepared point-in-time JSONL dataset.
+
+    Training never runs on a price tick. Activation is explicit and a registry
+    version can never be overwritten.
+    """
+    if not config.ml_enabled:
+        raise HTTPException(409, "ML is disabled. Set ML_ENABLED=true for offline training.")
+    from .ml.datasets import read_jsonl
+    from .ml.train import train
+
+    path = config.ml_dataset_path
+    if not Path(path).is_absolute():
+        path = str(ROOT / path)
+    try:
+        rows = read_jsonl(path)
+        model = train(rows)
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from None
+    registry = service.ml.registry.register(model.to_dict(), activate=activate)
+    return {"status": "trained", "activated": activate, "model": model.to_dict(), "registry": registry}
+
+
+@app.get("/api/ml/evaluate")
+async def ml_evaluate() -> dict[str, Any]:
+    if not config.ml_enabled:
+        raise HTTPException(409, "ML is disabled. Set ML_ENABLED=true for offline evaluation.")
+    from .ml.datasets import read_jsonl
+    from .ml.evaluate import walk_forward
+
+    path = config.ml_dataset_path
+    if not Path(path).is_absolute():
+        path = str(ROOT / path)
+    try:
+        return walk_forward(read_jsonl(path))
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from None
+
+
+class MLOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.\-]{0,11}$")
+    prediction_timestamp: str = Field(min_length=20, max_length=40)
+    labels: dict[str, Any]
+
+
+@app.post("/api/ml/outcome")
+async def ml_outcome(data: MLOutcome) -> dict[str, Any]:
+    if not config.ml_enabled:
+        raise HTTPException(409, "ML is disabled.")
+    async with transaction(service, SessionLocal) as db:
+        if not service.ml.settle_shadow(db, symbol=data.symbol, prediction_timestamp=data.prediction_timestamp, labels=data.labels):
+            raise HTTPException(404, "Shadow prediction not found.")
+        return service.ml.dashboard(db)
+
+
+@app.get("/api/ml/drift")
+async def ml_drift() -> dict[str, Any]:
+    if not config.ml_enabled:
+        raise HTTPException(409, "ML is disabled.")
+    from .ml.datasets import PointInTimeSnapshot
+    from .ml.drift import assess_drift
+
+    model = service.ml._load()
+    if not model:
+        return {"status": "no_model", "confidence_reduced": True}
+    async with transaction(service, SessionLocal) as db:
+        row = db.get(Setting, 130)
+        rows = [PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
+                                    labels=item.get("labels"), provenance=item.get("provenance", []), regime=item.get("regime", "unknown"))
+                for item in (row.data.get("snapshots", []) if row else [])]
+        return assess_drift(model, rows[-200:])
 
 
 @app.get("/api/sources/{source_id}")

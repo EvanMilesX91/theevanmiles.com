@@ -754,6 +754,35 @@ function SourceModal({
   );
 }
 
+function MLOutlook({ prediction, shadow }: { prediction: NonNullable<Stock["ml"]>; shadow: boolean }) {
+  const percent = (value?: number) => value == null ? "—" : `${Math.round(value * 100)}%`;
+  const signedPercent = (value?: number) => value == null ? "—" : `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}%`;
+  return (
+    <section className="ml-outlook" aria-label="Model outlook">
+      <div className="ml-outlook-heading">
+        <div>
+          <span className="eyebrow">MODEL OUTLOOK · NEXT 10 TRADING DAYS</span>
+          <strong>{prediction.model_confidence} confidence</strong>
+        </div>
+        {shadow && <small>Research only · shadow mode</small>}
+      </div>
+      <div className="ml-outlook-metrics">
+        <div><span>Positive return</span><strong>{percent(prediction.probability_positive_10d)}</strong></div>
+        <div><span>Target first</span><strong>{percent(prediction.probability_target_first)}</strong></div>
+        <div><span>Reconsider first</span><strong>{percent(prediction.probability_reconsider_first)}</strong></div>
+        <div><span>Expected return</span><strong>{signedPercent(prediction.expected_return_10d)}</strong></div>
+      </div>
+      {prediction.feature_explanations && (
+        <details className="ml-why">
+          <summary>Why?</summary>
+          <div><span>Likes</span>{prediction.feature_explanations.likes.slice(0, 3).map((item) => <p key={item}>{item}</p>)}</div>
+          <div><span>Cautions</span>{prediction.feature_explanations.cautions.slice(0, 3).map((item) => <p key={item}>{item}</p>)}</div>
+        </details>
+      )}
+    </section>
+  );
+}
+
 function Details({
   stock,
   onSource,
@@ -1874,6 +1903,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                                 : "This is the last received price. Actionable labels and the trade plan are paused until the data is current."}
                             </p>
                           </div>
+                          {selected.ml && <MLOutlook prediction={selected.ml} shadow={data.ml?.shadow_mode ?? true} />}
                           {position && (
                             <div className="owned-summary">
                               <Stat

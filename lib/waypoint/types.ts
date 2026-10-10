@@ -126,6 +126,31 @@ export type Stock = {
   sources: Source[];
   business_warning: boolean;
   research?: LiveResearch;
+  ml?: MLPrediction;
+};
+export type MLPrediction = {
+  model_version: string;
+  model_family: string;
+  probability_positive_5d?: number;
+  probability_positive_10d?: number;
+  probability_positive_20d?: number;
+  expected_return_5d?: number;
+  expected_return_10d?: number;
+  expected_return_20d?: number;
+  probability_target_first?: number;
+  probability_reconsider_first?: number;
+  probability_neither?: number;
+  expected_max_upside?: number;
+  expected_max_drawdown?: number;
+  model_confidence: "HIGH" | "MEDIUM" | "LOW";
+  feature_explanations?: { likes: string[]; cautions: string[] };
+  similar_setups?: {
+    count: number;
+    median_return_10d: number | null;
+    positive_rate: number | null;
+    target_first_rate: number | null;
+    median_drawdown_10d: number | null;
+  };
 };
 export type Position = {
   symbol: string;
@@ -194,6 +219,17 @@ export type Dashboard = {
   provider_health?: Record<string, ProviderHealth>;
   data_status?: DataStatus;
   fx?: { rate: number | string; timestamp: string | null; health: ProviderHealth; source: Partial<Source> } | null;
+  ml?: {
+    enabled: boolean;
+    shadow_mode: boolean;
+    influence_enabled: boolean;
+    active_model: string | null;
+    model_family: string | null;
+    predictions: number;
+    shadow_predictions: number;
+    evaluated_outcomes: number;
+    drift: { status: string; confidence_reduced?: boolean };
+  };
 };
 export type ProviderUsage = {
   configured?: boolean;

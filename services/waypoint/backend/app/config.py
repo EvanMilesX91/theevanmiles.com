@@ -33,6 +33,14 @@ class Config(BaseSettings):
     warm_refresh_minutes: int = Field(default=15, ge=5, le=60)
     alpha_vantage_daily_limit: int = Field(default=25, ge=1, le=25)
     morning_refresh_hour: int = Field(default=9, ge=0, le=23)
+    # ML is optional, offline-first, and shadow-only until explicitly enabled.
+    ml_enabled: bool = False
+    ml_shadow_mode: bool = True
+    ml_influence_enabled: bool = False
+    ml_registry_path: str = "data/ml_registry.json"
+    ml_dataset_path: str = "data/ml_snapshots.jsonl"
+    ml_snapshot_limit: int = Field(default=10000, ge=100, le=100000)
+    ml_prediction_limit: int = Field(default=5000, ge=100, le=50000)
 
     @field_validator("live_symbols")
     @classmethod
