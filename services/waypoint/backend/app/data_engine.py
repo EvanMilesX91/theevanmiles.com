@@ -195,7 +195,39 @@ class DataEngine:
             try:
                 # Crucial: no engine/ledger lock is held during any external I/O.
                 await prepared.refresh_live(history=True)
+                # News and filings are an auditable evidence lane. Collection
+                # happens before the state transaction, so a slow or broken
+                # feed can never hold the ledger lock or stop price monitoring.
+                news_rows = []
+                try:
+                    from .news import candidates_from_filings, collect_candidates
+                    from .providers import AlphaVantageProvider
+                    collection_now = datetime.now(UTC)
+                    news_rows.extend(candidates_from_filings(prepared.research, collection_now))
+                    alpha = None
+                    try:
+                        alpha = AlphaVantageProvider(
+                            api_key=config.alpha_vantage_api_key, cache=prepared.provider_cache,
+                            daily_limit=config.alpha_vantage_daily_limit, checkpoint=self.usage_checkpoint,
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        news_rows.extend(await collect_candidates(
+                            symbols=prepared.stocks.keys(), market=prepared.provider, alpha=alpha,
+                            now=collection_now,
+                            include_gdelt=config.news_gdelt_enabled and config.app_mode == "live",
+                        ))
+                    finally:
+                        if alpha:
+                            await alpha.aclose()
+                except Exception:
+                    # Current news is optional. The provider health and normal
+                    # research snapshot remain usable when discovery is down.
+                    news_rows = []
                 async with transaction(self.service, self.sessions) as db:
+                    from .news import persist_candidates
+                    inserted_news = persist_candidates(db, news_rows)
                     self.service.research = prepared.research
                     self.service.provider_health.update(prepared.provider_health)
                     self.service.fx = {}  # AV is earnings-only in this version.
@@ -225,7 +257,10 @@ class DataEngine:
                             db.add(Analysis(symbol=symbol, mode='live', created_at=datetime.now(UTC),
                                             model_version=MODEL_VERSION, data=copy.deepcopy(stock)))
                     self.service.last_slow_refresh = datetime.now(UTC)
-                    self.service.schedule_status.update(running=False, last_success=datetime.now(UTC).isoformat())
+                    self.service.schedule_status.update(
+                        running=False, last_success=datetime.now(UTC).isoformat(),
+                        news_collected=len(news_rows), news_inserted=inserted_news,
+                    )
                 self.select_symbols()
             except Exception:
                 self.service.schedule_status.update(running=False, last_error='Research refresh failed; using cached data.')

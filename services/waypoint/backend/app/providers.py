@@ -829,6 +829,7 @@ class AlphaVantageProvider(_HttpProvider):
     BASE_URL = "https://www.alphavantage.co/query"
     BUDGET_KEY = "alpha_vantage_budget"
     EARNINGS_KEY = "alpha_vantage_earnings"
+    NEWS_KEY = "alpha_vantage_news"
     FX_KEY = "alpha_vantage_fx_eur_usd"
 
     def __init__(
@@ -902,6 +903,69 @@ class AlphaVantageProvider(_HttpProvider):
 
     async def earnings_calendar(self) -> list[EarningsEvent]:
         return await singleflight(self.cache, "alpha_vantage", self.EARNINGS_KEY, self._earnings_calendar)
+
+    async def news_sentiment(self, symbols: list[str], since: datetime,
+                             until: datetime | None = None) -> list[NewsItem]:
+        """Fetch a bounded ticker-filtered window when the configured plan permits it.
+
+        Alpha Vantage documents this endpoint as historical market news and
+        sentiment, but access and allowance vary by plan. A rejection is
+        surfaced as a provider error and the caller keeps the other feeds.
+        """
+        tickers = ",".join(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
+        if not tickers or since.tzinfo is None:
+            raise ValueError("news_sentiment requires symbols and a timezone-aware start")
+        until = until or self._clock()
+        cache_key = f"{self.NEWS_KEY}:{tickers}:{since.strftime('%Y%m%dT%H%M')}:{until.strftime('%Y%m%dT%H%M')}"
+        cached = self._cached(cache_key, 6 * 3600)
+        if cached is not None:
+            try:
+                return [NewsItem.model_validate(row) for row in cached]
+            except (ValidationError, TypeError):
+                pass
+        response = await self._request({
+            "function": "NEWS_SENTIMENT", "tickers": tickers,
+            "time_from": since.astimezone(timezone.utc).strftime("%Y%m%dT%H%M"),
+            "time_to": until.astimezone(timezone.utc).strftime("%Y%m%dT%H%M"),
+            "sort": "LATEST", "limit": "1000",
+        })
+        retrieved = self._clock()
+        try:
+            payload = response.json()
+            rows = payload.get("feed", [])
+            if not isinstance(rows, list):
+                raise ValueError("invalid news feed")
+            output: list[NewsItem] = []
+            requested = set(tickers.split(","))
+            for row in rows[:1000]:
+                published = datetime.strptime(str(row["time_published"]), "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+                if not since <= published <= until:
+                    continue
+                mentioned = {
+                    str(item.get("ticker", "")).upper()
+                    for item in row.get("ticker_sentiment", [])
+                    if isinstance(item, dict)
+                } & requested
+                if not mentioned:
+                    continue
+                url = str(row.get("url", ""))
+                if not url.startswith("https://"):
+                    continue
+                output.append(NewsItem(
+                    title=row["title"], symbols=sorted(mentioned), published_at=published,
+                    source=Provenance(
+                        provider="Alpha Vantage News & Sentiment", url=url,
+                        retrieved_at=retrieved, published_at=published,
+                        raw_value={"source": row.get("source"), "overall_sentiment_score": row.get("overall_sentiment_score")},
+                        normalized_value=row.get("overall_sentiment_score"),
+                        description="Ticker-filtered market news; availability depends on the configured Alpha Vantage plan.",
+                    ),
+                ))
+        except (ValidationError, ValueError, TypeError, KeyError, AttributeError):
+            raise ProviderError("invalid_response", "Alpha Vantage returned invalid news data.") from None
+        self.cache[cache_key] = cache_record([item.model_dump(mode="json") for item in output],
+                                             "Alpha Vantage", retrieved, source_timestamp=retrieved.isoformat(), ttl=6 * 3600)
+        return output
 
     async def _earnings_calendar(self) -> list[EarningsEvent]:
         cached = self._cached(self.EARNINGS_KEY, 24 * 3600)

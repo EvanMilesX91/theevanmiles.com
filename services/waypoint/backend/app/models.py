@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -73,4 +73,24 @@ class Shadow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ticks: Mapped[int] = mapped_column(Integer, default=0)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class NewsArticle(Base):
+    """Immutable first-seen record for a sourced news or filing observation."""
+
+    __tablename__ = "news_articles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    symbol: Mapped[str] = mapped_column(String(12), index=True)
+    provider: Mapped[str] = mapped_column(String(40), index=True)
+    title: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    sentiment: Mapped[float] = mapped_column(Float, default=0.0)
+    importance: Mapped[float] = mapped_column(Float, default=0.0)
+    is_major: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     data: Mapped[dict[str, Any]] = mapped_column(JSON)

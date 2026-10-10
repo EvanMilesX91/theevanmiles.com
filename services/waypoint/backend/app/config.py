@@ -42,6 +42,9 @@ class Config(BaseSettings):
     stream_checkpoint_seconds: float = Field(default=30, ge=10, le=300)
     warm_refresh_minutes: int = Field(default=15, ge=5, le=60)
     alpha_vantage_daily_limit: int = Field(default=25, ge=1, le=25)
+    # GDELT is a broad discovery feed; it is stored as unverified evidence and
+    # never treated as proof that an issuer made an announcement.
+    news_gdelt_enabled: bool = False
     morning_refresh_hour: int = Field(default=9, ge=0, le=23)
     # ML is optional, offline-first, and shadow-only until explicitly enabled.
     ml_enabled: bool = False

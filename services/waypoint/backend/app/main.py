@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,6 +24,7 @@ from .db import SessionLocal
 from .engine import MODEL_VERSION
 from .migrate import migrate
 from .models import Equity, Setting, Shadow
+from .news import recent_articles
 from .runtime import auth_attempt, run_scheduler, transaction
 from .schemas import DemoStep, QuoteCheck, Settings, SettingsPatch, TradeInput
 from .service import service
@@ -72,6 +73,14 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
     allow_credentials=False,
 )
+
+
+@app.get("/api/news")
+async def news_feed(symbol: str | None = Query(default=None, pattern=r"^[A-Za-z][A-Za-z0-9.\-]{0,11}$"),
+                    limit: int = Query(default=100, ge=1, le=250)) -> dict[str, Any]:
+    """Return immutable, first-seen news and filing observations for review."""
+    with SessionLocal() as db:
+        return {"articles": recent_articles(db, symbol=symbol.upper() if symbol else None, limit=limit)}
 
 
 @app.middleware("http")
