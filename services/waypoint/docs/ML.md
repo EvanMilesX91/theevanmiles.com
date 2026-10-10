@@ -44,6 +44,18 @@ days, and the 20-day barrier outcome `TARGET_FIRST`, `RECONSIDER_FIRST`, or
 `NEITHER`. If both barriers are touched in one OHLC bar, the outcome is treated
 as `NEITHER` because the intrabar order is unknowable.
 
+To build the first real dataset, run the job from the backend virtualenv after
+Alpaca is connected:
+
+```text
+python -m app.ml.ingest --symbols AAPL,MSFT --years 5 --stride-days 5
+```
+
+It fetches daily bars, creates one snapshot every configured stride, leaves a
+60-session tail for forward labels, and replaces the JSONL file atomically. The
+same operation is available to an authenticated operator as `POST /api/ml/ingest`.
+No current quote is used to backfill an earlier snapshot.
+
 ## Historical projection mapping
 
 `app/ml/projections.py` is a separate evidence module. It standardizes the
@@ -80,6 +92,12 @@ standardized feature space and are explanatory only.
 reduces ML confidence. Shadow predictions are persisted separately from the
 trade ledger; `POST /api/ml/outcome` settles a prediction after its holding
 window so deterministic-only and ML-filtered results can be compared.
+
+Set `ML_MAINTENANCE_ENABLED=true` to let the persistent scheduler periodically
+evaluate the dataset and train an immutable candidate. It records the
+walk-forward report and candidate version but never activates it. The manual
+`POST /api/ml/maintenance` endpoint is useful for an explicit run; activation
+still requires `POST /api/ml/train?activate=true` after review.
 
 LightGBM, XGBoost and CatBoost availability is detected by `app/ml/tree.py`.
 They are optional and never silently replace the baseline model family. Social
