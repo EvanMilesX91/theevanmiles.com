@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
-import Navigation from '@/components/Navigation';
+import ArtistChrome from '@/components/ArtistChrome';
 import { Toaster } from 'react-hot-toast';
-import Script from 'next/script';
 
 const ibmPlexMono = IBM_Plex_Mono({
   weight: ['400', '500', '600', '700'],
@@ -61,17 +60,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        {/* Behold Instagram Widget Script */}
-        <Script
-          src="https://w.behold.so/widget.js"
-          type="module"
-          strategy="lazyOnload"
-        />
-      </head>
       <body className={`${ibmPlexMono.variable} font-mono antialiased`}>
         <div className="flex flex-col min-h-screen bg-black text-white">
-          <Navigation />
+          <ArtistChrome />
           <main className="flex-grow">{children}</main>
         </div>
         <Toaster
