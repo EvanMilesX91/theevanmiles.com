@@ -231,6 +231,13 @@ class MLEngine:
         """Evaluate and register a candidate model without changing production."""
         if not config.ml_maintenance_enabled and not force:
             return {"status": "disabled", "last": self.last_maintenance}
+        if not force and self.last_maintenance.get("completed_at"):
+            try:
+                elapsed = (datetime.now(UTC) - datetime.fromisoformat(self.last_maintenance["completed_at"])).total_seconds()
+                if elapsed < config.ml_maintenance_interval_hours * 3600:
+                    return {"status": "not_due", "last": self.last_maintenance}
+            except (TypeError, ValueError):
+                pass
         path = Path(config.ml_dataset_path)
         path = path if path.is_absolute() else ROOT / path
         if not path.exists():
