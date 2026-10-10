@@ -326,7 +326,11 @@ class EngineService:
                 "business_warning": False,
                 "live": True,
             }
-            analysis = analyze_stock(analysis_fixture, self.settings(db).horizon, now)
+            # A DataEngine research worker may run without a database session;
+            # use the normal settings default in that isolated copy. The
+            # committed live service still supplies the persisted horizon.
+            horizon = self.settings(db).horizon if db is not None else Settings().horizon
+            analysis = analyze_stock(analysis_fixture, horizon, now)
             for key in (
                 "company_type", "classification_confidence", "classification_version", "opportunity",
                 "risk", "confidence", "confidence_label", "opportunity_components", "risk_components",
