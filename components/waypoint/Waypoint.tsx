@@ -783,6 +783,51 @@ function MLOutlook({ prediction, shadow }: { prediction: NonNullable<Stock["ml"]
   );
 }
 
+function HistoricalProjectionOutlook({ projection }: { projection: NonNullable<Stock["projection"]> }) {
+  const horizon = projection.horizons[String(projection.selected_horizon)];
+  if (!horizon) return null;
+  const percent = (value: number | null | undefined) => value == null ? "—" : `${Math.round(value * 100)}%`;
+  const priceRange = (range: [number | null, number | null]) => range[0] == null || range[1] == null
+    ? "—" : `$${range[0].toFixed(2)}–$${range[1].toFixed(2)}`;
+  return (
+    <section className="projection-outlook" aria-label="Historical projection">
+      <div className="projection-heading">
+        <div>
+          <span className="eyebrow">HISTORICAL PROJECTION · NEXT {projection.selected_horizon} TRADING DAYS</span>
+          <strong>{projection.analogue_quality} analogue confidence</strong>
+        </div>
+        <small>{projection.analogue_count} similar cases</small>
+      </div>
+      <p className="projection-note">Historical outcome range, not a guaranteed future price.</p>
+      <div className="projection-ranges">
+        <div><span>Weak historical range</span><strong>{priceRange(horizon.weak_range)}</strong></div>
+        <div><span>Typical historical range</span><strong>{priceRange(horizon.typical_range)}</strong></div>
+        <div><span>Strong historical range</span><strong>{priceRange(horizon.strong_range)}</strong></div>
+      </div>
+      <div className="projection-metrics">
+        <div><span>Positive outcomes</span><strong>{percent(projection.positive_rate)}</strong></div>
+        <div><span>Target first</span><strong>{percent(projection.target_first_rate)}</strong></div>
+        <div><span>Reconsider first</span><strong>{percent(projection.reconsider_first_rate)}</strong></div>
+        <div><span>Median return</span><strong>{percent(projection.median_return)}</strong></div>
+      </div>
+      {projection.disagreement && <p className="projection-warning">⚠ {projection.disagreement.status}. Confidence reduced.</p>}
+      {horizon.path && horizon.path.length > 1 && (
+        <div className="projection-cone" aria-label="Historical outcome range by day">
+          {horizon.path.filter((point) => point.day % Math.max(1, Math.floor(projection.selected_horizon / 5)) === 0 || point.day === 1).map((point) => {
+            const width = Math.max(8, Math.min(100, ((point.p90 - point.p10) / Math.max(0.01, projection.current_price)) * 100));
+            return <div className="projection-cone-row" key={point.day}><span>D{point.day}</span><div className="projection-cone-track"><i style={{ width: `${width}%` }} /><b style={{ left: `${Math.max(0, Math.min(100, ((point.median - point.p10) / Math.max(0.01, point.p90 - point.p10)) * 100))}%` }} /></div><strong>${point.median.toFixed(2)}</strong></div>;
+          })}
+        </div>
+      )}
+      <details className="projection-details">
+        <summary>View similar cases and why</summary>
+        <p>{projection.explanation}</p>
+        {projection.cases.slice(0, 3).map((item) => <div key={`${item.symbol}-${item.as_of}`}><strong>{item.symbol}</strong> · {new Date(item.as_of).toLocaleDateString()} · {Math.round(item.similarity * 100)}% similar<p>{item.why_similar.join(" · ")}</p></div>)}
+      </details>
+    </section>
+  );
+}
+
 function Details({
   stock,
   onSource,
@@ -1904,6 +1949,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                             </p>
                           </div>
                           {selected.ml && <MLOutlook prediction={selected.ml} shadow={data.ml?.shadow_mode ?? true} />}
+                          {selected.projection && <HistoricalProjectionOutlook projection={selected.projection} />}
                           {position && (
                             <div className="owned-summary">
                               <Stat

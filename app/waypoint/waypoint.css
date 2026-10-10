@@ -3127,3 +3127,24 @@
 .ml-why > div { display: inline-block; width: 49%; margin-top: 12px; vertical-align: top; }
 .ml-why p { margin: 5px 0; color: var(--ink); }
 @media (max-width: 600px) { .ml-outlook-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.projection-outlook { margin: 18px 0 4px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fbfaf3; }
+.projection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.projection-heading strong { display: block; margin-top: 6px; font-size: 12px; }
+.projection-heading small, .projection-note { color: var(--muted); font-size: 10px; }
+.projection-note { margin: 10px 0 0; }
+.projection-ranges, .projection-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.projection-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.projection-ranges span, .projection-metrics span { display: block; color: var(--muted); font-size: 10px; }
+.projection-ranges strong, .projection-metrics strong { display: block; margin-top: 5px; font-size: 15px; }
+.projection-warning { margin: 14px 0 0; color: #98601c; font-size: 11px; font-weight: 600; }
+.projection-cone { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.projection-cone-row { display: grid; grid-template-columns: 24px 1fr 60px; align-items: center; gap: 8px; margin: 7px 0; font-size: 10px; }
+.projection-cone-track { position: relative; height: 8px; border-radius: 10px; background: #e9e9dd; overflow: visible; }
+.projection-cone-track i { position: absolute; left: 0; top: 0; height: 8px; border-radius: 10px; background: #c8d6bd; }
+.projection-cone-track b { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--ink); }
+.projection-cone-row strong { text-align: right; font-size: 11px; }
+.projection-details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; color: var(--muted); font-size: 11px; }
+.projection-details summary { cursor: pointer; color: var(--green); font-weight: 600; }
+.projection-details > div { margin-top: 10px; color: var(--ink); }
+.projection-details p { margin: 4px 0; color: var(--muted); }
+@media (max-width: 600px) { .projection-ranges { grid-template-columns: 1fr; } .projection-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

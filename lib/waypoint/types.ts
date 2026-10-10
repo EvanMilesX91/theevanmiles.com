@@ -127,6 +127,7 @@ export type Stock = {
   business_warning: boolean;
   research?: LiveResearch;
   ml?: MLPrediction;
+  projection?: HistoricalProjection;
 };
 export type MLPrediction = {
   model_version: string;
@@ -151,6 +152,36 @@ export type MLPrediction = {
     target_first_rate: number | null;
     median_drawdown_10d: number | null;
   };
+};
+export type HistoricalProjection = {
+  as_of: string;
+  current_price: number;
+  selected_horizon: number;
+  horizons: Record<string, {
+    horizon_days: number;
+    samples: number;
+    quantiles: { p10: number | null; p25: number | null; p50: number | null; p75: number | null; p90: number | null };
+    weak_range: [number | null, number | null];
+    typical_range: [number | null, number | null];
+    strong_range: [number | null, number | null];
+    path?: { day: number; p10: number; p25: number; median: number; p75: number; p90: number }[];
+  }>;
+  groups: Record<string, number>;
+  analogue_count: number;
+  analogue_quality: "HIGH" | "MEDIUM" | "LOW";
+  average_similarity: number;
+  feature_completeness: number;
+  positive_rate: number | null;
+  target_first_rate: number | null;
+  reconsider_first_rate: number | null;
+  neither_rate: number | null;
+  median_return: number | null;
+  median_max_upside: number | null;
+  median_max_drawdown: number | null;
+  cases: { symbol: string; as_of: string; similarity: number; group: string; horizon_return: number | null; why_similar: string[] }[];
+  disagreement?: { status: string; all_history: string; same_regime: string | null; detail: string } | null;
+  explanation: string;
+  data_status: string;
 };
 export type Position = {
   symbol: string;
@@ -229,6 +260,7 @@ export type Dashboard = {
     shadow_predictions: number;
     evaluated_outcomes: number;
     drift: { status: string; confidence_reduced?: boolean };
+    historical_projection?: { enabled: boolean; snapshots: number; labelled_snapshots: number; status: string };
   };
 };
 export type ProviderUsage = {

@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from ..config import ROOT, config
 from ..models import Setting
-from .datasets import PointInTimeSnapshot, make_snapshot
+from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl
 from .predict import predict_with_model, similar_setups
+from .projections import HORIZONS, build_projection, disagreement, rank_analogues
 from .registry import ModelRegistry
 from .shadow import compare_deterministic_and_ml
 from .drift import assess_drift
@@ -30,6 +31,8 @@ class MLEngine:
         self.shadow_mode = config.ml_shadow_mode
         self.influence_enabled = config.ml_influence_enabled
         self.history: list[PointInTimeSnapshot] = []
+        self.projection_history: list[PointInTimeSnapshot] = []
+        self._projection_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def status(self) -> dict[str, Any]:
         active = self.registry.active() if config.ml_enabled else None
@@ -59,7 +62,7 @@ class MLEngine:
         return self._model
 
     def capture(self, db: Session, *, symbol: str, stock: dict[str, Any], now: datetime) -> None:
-        if not config.ml_enabled:
+        if not config.ml_enabled and not config.historical_projection_enabled:
             return
         snapshot = make_snapshot(stock, symbol=symbol, as_of=now)
         row = db.get(Setting, ML_SETTING_ID)
@@ -73,6 +76,88 @@ class MLEngine:
         else:
             db.add(Setting(id=ML_SETTING_ID, data=data))
 
+    def _load_history(self, db: Session) -> list[PointInTimeSnapshot]:
+        rows: list[PointInTimeSnapshot] = []
+        path = Path(config.ml_dataset_path)
+        path = path if path.is_absolute() else ROOT / path
+        if path.exists():
+            try:
+                rows.extend(read_jsonl(str(path)))
+            except (OSError, ValueError, KeyError, TypeError):
+                # A partially written offline dataset must not break the live dashboard.
+                rows = []
+        row = db.get(Setting, ML_SETTING_ID)
+        for item in (row.data.get("snapshots", []) if row else []):
+            try:
+                rows.append(PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
+                                                labels=item.get("labels"), provenance=item.get("provenance", []),
+                                                regime=item.get("regime", "unknown"),
+                                                company_type=item.get("company_type", "unknown"),
+                                                sector=item.get("sector", "unknown"), metadata=item.get("metadata", {})))
+            except (KeyError, TypeError, ValueError):
+                continue
+        unique = {(item.symbol, item.as_of): item for item in rows}
+        return sorted(unique.values(), key=lambda item: item.as_of)
+
+    def project(self, stock: dict[str, Any], *, symbol: str, now: datetime, db: Session) -> dict[str, Any] | None:
+        """Return historical outcome ranges, or None when labelled analogues are unavailable."""
+        if not config.historical_projection_enabled or stock.get("price", 0) <= 0:
+            return None
+        point = make_snapshot(stock, symbol=symbol, as_of=now)
+        bucket = int(now.timestamp() // config.historical_projection_cache_seconds)
+        cache_key = f"{symbol}:{stock.get('price')}:{bucket}"
+        cached = self._projection_cache.get(cache_key)
+        if cached and cached[0] > now.timestamp():
+            return cached[1]
+        history = self._load_history(db)
+        self.projection_history = history
+        if not any(row.labels for row in history):
+            return None
+        horizons: dict[str, Any] = {}
+        broad_by_horizon: dict[int, dict[str, Any] | None] = {}
+        same_regime_by_horizon: dict[int, dict[str, Any] | None] = {}
+        groups: dict[str, int] = {}
+        for horizon_days in HORIZONS:
+            broad = rank_analogues(point, history, horizon_days=horizon_days, group="broad",
+                                   top_n=config.historical_projection_top_n)
+            same_regime = rank_analogues(point, history, horizon_days=horizon_days, group="broad",
+                                         same_regime=True, top_n=config.historical_projection_top_n)
+            projection = build_projection(point, broad, current_price=float(stock["price"]), horizon_days=horizon_days)
+            regime_projection = build_projection(point, same_regime, current_price=float(stock["price"]), horizon_days=horizon_days)
+            if projection:
+                horizons[str(horizon_days)] = projection
+                broad_by_horizon[horizon_days] = projection
+                same_regime_by_horizon[horizon_days] = regime_projection
+            for group in ("same_stock", "peers"):
+                groups[group] = max(groups.get(group, 0), len(rank_analogues(point, history, horizon_days=horizon_days,
+                                                                                group=group, top_n=config.historical_projection_top_n)))
+            groups["broad"] = max(groups.get("broad", 0), len(broad))
+        selected_horizon: int | None = 10 if "10" in horizons else (int(next(iter(horizons))) if horizons else None)
+        if selected_horizon is None:
+            return None
+        selected = horizons[str(selected_horizon)]
+        selected["horizon_days"] = selected_horizon
+        regime_selected = same_regime_by_horizon.get(selected_horizon)
+        selected["disagreement"] = disagreement(selected, regime_selected)
+        selected["explanation"] = "We found historical situations that looked similar to this one and measured what happened afterward. These are historical projections, not guaranteed future prices."
+        result = {"as_of": now.isoformat(), "current_price": float(stock["price"]), "selected_horizon": int(selected_horizon),
+                  "horizons": horizons, "groups": groups, "analogue_count": selected["samples"],
+                  "analogue_quality": selected["analogue_quality"], "average_similarity": selected["average_similarity"],
+                  "feature_completeness": selected["feature_completeness"], "positive_rate": selected["positive_rate"],
+                  "target_first_rate": selected["target_first_rate"], "reconsider_first_rate": selected["reconsider_first_rate"],
+                  "neither_rate": selected["neither_rate"], "median_return": selected["median_return"],
+                  "median_max_upside": selected["median_max_upside"], "median_max_drawdown": selected["median_max_drawdown"],
+                  "cases": selected["cases"], "disagreement": selected["disagreement"], "explanation": selected["explanation"],
+                  "data_status": "historical_outcome_range"}
+        self._projection_cache[cache_key] = (now.timestamp() + config.historical_projection_cache_seconds, result)
+        return result
+
+    def projection_status(self, db: Session) -> dict[str, Any]:
+        history = self._load_history(db) if config.historical_projection_enabled else []
+        labelled = sum(bool(row.labels) for row in history)
+        return {"enabled": config.historical_projection_enabled, "snapshots": len(history),
+                "labelled_snapshots": labelled, "status": "ready" if labelled else "awaiting_labelled_history"}
+
     def predict(self, stock: dict[str, Any], *, symbol: str, now: datetime | None = None, db: Session | None = None) -> dict[str, Any] | None:
         if not config.ml_enabled:
             return None
@@ -85,7 +170,8 @@ class MLEngine:
             if row:
                 self.history = [PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
                                                     labels=item.get("labels"), provenance=item.get("provenance", []),
-                                                    regime=item.get("regime", "unknown")) for item in row.data.get("snapshots", [])]
+                                                    regime=item.get("regime", "unknown"), company_type=item.get("company_type", "unknown"),
+                                                    sector=item.get("sector", "unknown"), metadata=item.get("metadata", {})) for item in row.data.get("snapshots", [])]
         result = predict_with_model(model, point)
         result["similar_setups"] = similar_setups(model, point, self.history)
         return result
@@ -121,8 +207,11 @@ class MLEngine:
         outcomes = row.data.get("outcomes", []) if row else []
         active = self._load()
         snapshots = [PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
-                                          labels=item.get("labels"), provenance=item.get("provenance", []), regime=item.get("regime", "unknown"))
+                                          labels=item.get("labels"), provenance=item.get("provenance", []), regime=item.get("regime", "unknown"),
+                                          company_type=item.get("company_type", "unknown"), sector=item.get("sector", "unknown"),
+                                          metadata=item.get("metadata", {}))
                      for item in (row.data.get("snapshots", []) if row else [])]
         drift = assess_drift(active, snapshots[-200:], outcomes=outcomes[-200:]) if active else self.status()["drift"]
         return {**self.status(), "drift": drift, "predictions": len(predictions), "shadow_predictions": sum(item.get("mode") == "shadow" for item in predictions),
-                "evaluated_outcomes": len(outcomes), "comparison": compare_deterministic_and_ml(outcomes)}
+                "evaluated_outcomes": len(outcomes), "comparison": compare_deterministic_and_ml(outcomes),
+                "historical_projection": self.projection_status(db)}

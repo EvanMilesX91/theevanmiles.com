@@ -32,7 +32,7 @@ The manual ledger starts at €20; the €200 goal does not affect calculations.
 
 The local Python process owns one Alpaca IEX WebSocket and publishes coalesced snapshots to the signed-in browser over Server-Sent Events. The fast price loop is independent of the slower research loop. A deterministic HOT set is capped at 30 symbols; WARM names retain slower cached research. All HOT names receive quotes and minute bars. Alpaca's observed Basic allowance counts quote and trade subscriptions together, so spare capacity is assigned to trades after quotes while bars use their separate allowance.
 
-Optional ML evidence is documented in [ML.md](docs/ML.md). It is disabled and shadow-only by default, uses point-in-time snapshots and chronological walk-forward evaluation, and cannot override deterministic risk controls.
+Optional ML and historical projection evidence are documented in [ML.md](docs/ML.md). Both are disabled or fail-closed until labelled evidence exists, use point-in-time snapshots and chronological walk-forward evaluation, and cannot override deterministic risk controls.
 
 Supabase stores the engine state, provider cache and ledger in a private `waypoint` schema. Vercel continues to serve the private page and authenticated proxy. Its serverless functions cannot own the persistent market-data connection, so the streaming build stays local until an always-on host is configured. See [HOSTING.md](docs/HOSTING.md) for the boundary and later deployment steps.
 

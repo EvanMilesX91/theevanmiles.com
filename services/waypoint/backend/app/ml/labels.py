@@ -18,6 +18,16 @@ def _bars_after(bars: list[dict[str, Any]], as_of: datetime, days: int) -> list[
     return [item for _, item in sorted(result, key=lambda value: value[0])]
 
 
+def _trading_bars_after(bars: list[dict[str, Any]], as_of: datetime, count: int) -> list[dict[str, Any]]:
+    """Return the first *count* observations after the snapshot timestamp."""
+    result = []
+    for bar in bars:
+        timestamp = parse_time(bar.get("timestamp") or bar.get("time") or bar.get("date"))
+        if timestamp and timestamp > as_of:
+            result.append((timestamp, bar))
+    return [item for _, item in sorted(result, key=lambda value: value[0])[:count]]
+
+
 def _number(value: Any) -> float | None:
     try:
         result = float(value)
@@ -57,7 +67,7 @@ def make_labels(
         raise ValueError("A timezone-aware as_of and positive entry price are required")
     result: dict[str, Any] = {"entry_price": entry_price, "target": target, "reconsider": reconsider}
     for days in (1, 5, 10, 20):
-        window = _bars_after(bars, point, days)
+        window = _trading_bars_after(bars, point, days)
         close = _number(window[-1].get("close")) if window else None
         result[f"return_{days}d"] = close / entry_price - 1 if close is not None else None
         if window:
@@ -72,6 +82,18 @@ def make_labels(
         else:
             result[f"max_upside_{days}d"] = None
             result[f"max_drawdown_{days}d"] = None
-    result["barrier_outcome_20d"] = _path_label(_bars_after(bars, point, 20), entry_price, target, reconsider)
+    result["barrier_outcome_20d"] = _path_label(_trading_bars_after(bars, point, 20), entry_price, target, reconsider)
+    path: list[dict[str, float]] = []
+    for day, bar in enumerate(_trading_bars_after(bars, point, 60), start=1):
+        close = _number(bar.get("close"))
+        if close is None:
+            continue
+        item: dict[str, float] = {"day": float(day), "close": close / entry_price}
+        for key in ("high", "low"):
+            value = _number(bar.get(key))
+            if value is not None:
+                item[key] = value / entry_price
+        path.append(item)
+    result["forward_path"] = path
     result["label_as_of"] = datetime.now(UTC).isoformat()
     return result

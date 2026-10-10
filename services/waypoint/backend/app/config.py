@@ -41,6 +41,9 @@ class Config(BaseSettings):
     ml_dataset_path: str = "data/ml_snapshots.jsonl"
     ml_snapshot_limit: int = Field(default=10000, ge=100, le=100000)
     ml_prediction_limit: int = Field(default=5000, ge=100, le=50000)
+    historical_projection_enabled: bool = True
+    historical_projection_top_n: int = Field(default=100, ge=25, le=250)
+    historical_projection_cache_seconds: int = Field(default=30, ge=5, le=3600)
 
     @field_validator("live_symbols")
     @classmethod

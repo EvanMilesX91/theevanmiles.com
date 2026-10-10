@@ -20,10 +20,14 @@ class PointInTimeSnapshot:
     labels: dict[str, Any] | None = None
     provenance: list[dict[str, str]] = field(default_factory=list)
     regime: str = "unknown"
+    company_type: str = "unknown"
+    sector: str = "unknown"
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {"symbol": self.symbol, "as_of": self.as_of, "features": self.features,
-                "labels": self.labels, "provenance": self.provenance, "regime": self.regime}
+                "labels": self.labels, "provenance": self.provenance, "regime": self.regime,
+                "company_type": self.company_type, "sector": self.sector, "metadata": self.metadata}
 
 
 def make_snapshot(snapshot: dict[str, Any], *, symbol: str, as_of: datetime | str,
@@ -41,7 +45,10 @@ def make_snapshot(snapshot: dict[str, Any], *, symbol: str, as_of: datetime | st
     volatility = features["market_volatility_20d"]
     regime = "bull" if market_return > 0.05 else "bear" if market_return < -0.05 else "high_vol" if volatility > 0.25 else "range"
     return PointInTimeSnapshot(symbol=symbol, as_of=point.isoformat(), features=features, labels=labels,
-                               provenance=feature_provenance(snapshot, point), regime=regime)
+                               provenance=feature_provenance(snapshot, point), regime=regime,
+                               company_type=str(snapshot.get("company_type", "unknown")),
+                               sector=str(snapshot.get("sector", "unknown")),
+                               metadata=dict(snapshot.get("projection_metadata", {})))
 
 
 def assert_no_lookahead(snapshot: PointInTimeSnapshot) -> None:
@@ -81,7 +88,9 @@ def read_jsonl(path: str) -> list[PointInTimeSnapshot]:
             item = json.loads(line)
             row = PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
                                       labels=item.get("labels"), provenance=item.get("provenance", []),
-                                      regime=item.get("regime", "unknown"))
+                                      regime=item.get("regime", "unknown"),
+                                      company_type=item.get("company_type", "unknown"),
+                                      sector=item.get("sector", "unknown"), metadata=item.get("metadata", {}))
             assert_no_lookahead(row)
             rows.append(row)
     return sorted(rows, key=lambda row: row.as_of)

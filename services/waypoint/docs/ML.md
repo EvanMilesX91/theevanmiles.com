@@ -7,7 +7,7 @@ when enabled it starts in shadow mode and cannot create a trade plan.
 
 The flow is:
 
-`DATA → point-in-time features → deterministic opportunity/risk → ML prediction → conservative decision bridge → dashboard`
+`DATA → point-in-time features → deterministic opportunity/risk → ML prediction and historical projection → conservative decision bridge → dashboard`
 
 ## Runtime modes
 
@@ -43,6 +43,26 @@ Labels include 1/5/10/20-day returns, maximum upside and drawdown for 5/10/20
 days, and the 20-day barrier outcome `TARGET_FIRST`, `RECONSIDER_FIRST`, or
 `NEITHER`. If both barriers are touched in one OHLC bar, the outcome is treated
 as `NEITHER` because the intrabar order is unknowable.
+
+## Historical projection mapping
+
+`app/ml/projections.py` is a separate evidence module. It standardizes the
+current point-in-time feature snapshot, ranks weighted nearest historical cases,
+and maps their normalized forward paths to 1, 5, 10, 20 and 60 trading-day
+outcome ranges. The dashboard uses the 10-day view when available and shows the
+10th/25th/50th/75th/90th percentiles, weak/typical/strong ranges, positive and
+barrier rates, analogue quality, and a few inspectable cases. Groups are kept
+separate for same-stock, peer and broad-market comparisons; same-regime matches
+are compared with all-history matches and materially different outcomes lower
+confidence.
+
+Projection mapping only reads labelled snapshots whose provenance is available
+before the snapshot timestamp. It never uses future prices or revised data to
+construct features, and it returns no projection until labelled historical
+rows exist. The dashboard wording is deliberately “historical outcome range”:
+these are distributions of comparable past outcomes, not guaranteed prices or
+confidence intervals. The deterministic trade plan and risk controls remain
+authoritative.
 
 Training uses chronological walk-forward folds. It never randomly mixes future
 rows into training. Evaluation reports Brier score, reliability bins, regime
