@@ -43,6 +43,12 @@ Stock = {
  freshness:{market_at:string|null,financial_period:string,news_checked_at:string|null,feed:"DEMO DATA"|"REAL-TIME"|"DELAYED"|"END OF DAY"|"MARKET CLOSED"|"UNAVAILABLE",status:"current"|"stale"|"missing"},
  reasons:{text:string,source_id:string}[], risks:{text:string,source_id:string}[], next_events:{label:string,date:string|null,detail:string,source_id:string}[], changes:string[],sources:Source[],business_warning:boolean
 }
+Stock may also include optional `projection` and `ml` evidence objects. A
+HistoricalProjection contains the selected horizon, quantiles, weak/typical/
+strong historical ranges, normalized forward path percentiles, analogue counts
+and quality, barrier rates, disagreement and inspectable past cases. It is
+historical outcome evidence, never a guaranteed target price, and is omitted
+until labelled point-in-time rows exist.
 Source = {id,provider,url:string|null,published_at,retrieved_at,reporting_period:string|null,raw_value:any,normalized_value:any,description:string}
 
 ## Engine interface (agent implements)
