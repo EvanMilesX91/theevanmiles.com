@@ -32,7 +32,7 @@ class MLEngine:
         self.history: list[PointInTimeSnapshot] = []
 
     def status(self) -> dict[str, Any]:
-        active = self.registry.active()
+        active = self.registry.active() if config.ml_enabled else None
         return {"enabled": config.ml_enabled, "shadow_mode": self.shadow_mode,
                 "influence_enabled": self.influence_enabled and bool(active),
                 "active_model": active.get("version") if active else None,
@@ -41,6 +41,10 @@ class MLEngine:
                 "drift": active.get("drift", {"status": "unknown", "confidence_reduced": True}) if active else {"status": "no_model", "confidence_reduced": True}}
 
     def _load(self) -> TrainedModel | None:
+        if not config.ml_enabled:
+            self._model = None
+            self._model_version = None
+            return None
         active = self.registry.active()
         if not active:
             self._model = None
