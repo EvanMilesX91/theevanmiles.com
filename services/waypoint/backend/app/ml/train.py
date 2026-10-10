@@ -59,13 +59,15 @@ def _label(row: PointInTimeSnapshot, target: str) -> float | None:
     return float(value) if value is not None else None
 
 
-def _logistic_fit(x: np.ndarray, y: np.ndarray, steps: int = 700, learning_rate: float = 0.08) -> tuple[np.ndarray, float]:
+def _logistic_fit(x: np.ndarray, y: np.ndarray, steps: int = 700, learning_rate: float = 0.08,
+                  l2: float = 10.0) -> tuple[np.ndarray, float]:
     weights = np.zeros(x.shape[1])
     bias = 0.0
     for _ in range(steps):
         scores = np.clip(x @ weights + bias, -30, 30)
         predictions = 1 / (1 + np.exp(-scores))
-        weights -= learning_rate * (x.T @ (predictions - y)) / max(1, len(y))
+        gradient = (x.T @ (predictions - y)) / max(1, len(y))
+        weights -= learning_rate * (gradient + l2 * weights)
         bias -= learning_rate * float(np.mean(predictions - y))
     return weights, bias
 
@@ -117,7 +119,10 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
         if target.startswith("probability_"):
             weights, bias = _logistic_fit(x, y)
             raw = 1 / (1 + np.exp(-np.clip(x @ weights + bias, -30, 30)))
-            calibration[target] = fit_platt(raw.tolist(), y.astype(int).tolist())
+            calibration[target] = fit_platt(raw.tolist(), y.astype(int).tolist()) | {
+                "prior": float(np.mean(y)),
+                "shrinkage": 0.75,
+            }
             heads[target] = {"kind": "logistic", "weights": weights.tolist(), "bias": bias}
         else:
             weights, bias = _linear_fit(x, y)
@@ -128,4 +133,5 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
                         feature_names=FEATURE_NAMES, means=means.tolist(), scales=scales.tolist(), heads=heads,
                         calibration=calibration, training_period={"start": ordered[0].as_of, "end": ordered[-1].as_of},
                         dataset_version=dataset_version(rows), trained_at=datetime.now().astimezone().isoformat(),
-                        hyperparameters={"logistic_steps": 700, "learning_rate": 0.08, "ridge": 0.001})
+                        hyperparameters={"logistic_steps": 700, "learning_rate": 0.08,
+                                        "logistic_l2": 10.0, "probability_shrinkage": 0.75, "ridge": 0.001})

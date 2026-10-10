@@ -59,4 +59,7 @@ def calibrate(probability: float, params: dict[str, float] | None) -> float:
     safe = max(1e-6, min(1 - 1e-6, probability))
     logit = math.log(safe / (1 - safe))
     score = max(-30.0, min(30.0, params.get("a", 1.0) * logit + params.get("b", 0.0)))
-    return 1 / (1 + math.exp(-score))
+    calibrated = 1 / (1 + math.exp(-score))
+    prior = max(0.0, min(1.0, float(params.get("prior", 0.5))))
+    shrinkage = max(0.0, min(1.0, float(params.get("shrinkage", 0.0))))
+    return prior + (calibrated - prior) * (1.0 - shrinkage)
