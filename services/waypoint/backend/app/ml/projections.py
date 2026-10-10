@@ -224,7 +224,8 @@ def build_projection(
     return_values = [value for match in matches if (value := _label_number(match.row, f"return_{horizon_days}d")) is not None]
     upside = [value for match in matches if (value := _label_number(match.row, f"max_upside_{horizon_days}d")) is not None]
     drawdown = [value for match in matches if (value := _label_number(match.row, f"max_drawdown_{horizon_days}d")) is not None]
-    barriers = [(match.row.labels or {}).get("barrier_outcome_20d") for match in matches]
+    barrier_key = f"barrier_outcome_{horizon_days}d"
+    barriers = [(match.row.labels or {}).get(barrier_key, (match.row.labels or {}).get("barrier_outcome_20d")) for match in matches]
     barrier_counts = {name: barriers.count(name) / len(barriers) for name in ("TARGET_FIRST", "RECONSIDER_FIRST", "NEITHER")}
     cases = [{"symbol": match.row.symbol, "as_of": match.row.as_of, "similarity": round(match.similarity, 4),
               "group": match.group, "horizon_return": _label_number(match.row, f"return_{horizon_days}d"),

@@ -82,6 +82,7 @@ def make_labels(
         else:
             result[f"max_upside_{days}d"] = None
             result[f"max_drawdown_{days}d"] = None
+        result[f"barrier_outcome_{days}d"] = _path_label(window, entry_price, target, reconsider)
     result["barrier_outcome_20d"] = _path_label(_trading_bars_after(bars, point, 20), entry_price, target, reconsider)
     path: list[dict[str, float]] = []
     for day, bar in enumerate(_trading_bars_after(bars, point, 60), start=1):
