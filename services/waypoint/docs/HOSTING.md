@@ -20,7 +20,8 @@ In the engine `.env` locally, or the **engine project's** Vercel environment var
 | `APCA_API_SECRET_KEY` | Alpaca Paper Trading Secret Key |
 | `ALPHA_VANTAGE_API_KEY` | Optional; free key from https://www.alphavantage.co/support/#api-key |
 | `SEC_USER_AGENT` | Optional; `Waypoint your-real-contact-email@example.com` with your actual contact address |
-| `LIVE_SYMBOLS` | Start with `AAPL,MSFT`; large watchlists need a job-budget review |
+| `LIVE_SYMBOLS` | Core monitored symbols, for example `AAPL,MSFT` |
+| `SCAN_SYMBOLS` | Optional wider pre-market universe. It is combined with `LIVE_SYMBOLS`; start with 10–20 liquid symbols and expand only after checking provider budgets. |
 
 Alpaca: sign in at https://app.alpaca.markets/account/login, choose **Paper Trading**, find **API Keys** on Home, then **Generate New Key**. The secret is displayed once; regenerating keys invalidates the prior pair. Save privately. Waypoint makes market-data requests only and contains no order endpoint.
 

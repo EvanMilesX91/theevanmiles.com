@@ -56,6 +56,14 @@ It fetches daily bars, creates one snapshot every configured stride, leaves a
 same operation is available to an authenticated operator as `POST /api/ml/ingest`.
 No current quote is used to backfill an earlier snapshot.
 
+The live engine evaluates every symbol in `LIVE_SYMBOLS` plus the optional
+`SCAN_SYMBOLS` universe during startup, pre-market refresh and scheduled scans.
+It ranks the resulting deterministic setups, then uses the historical analogue
+and ML evidence as additional context. Free feeds cannot cheaply and reliably
+scan every listed US stock, so a curated 10–20 symbol universe is the safe V1;
+the universe can be expanded after request budgets and data freshness are
+observed.
+
 ## Historical projection mapping
 
 `app/ml/projections.py` is a separate evidence module. It standardizes the

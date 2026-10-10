@@ -24,6 +24,8 @@ class Config(BaseSettings):
     alpha_vantage_api_key: str = Field(default="", repr=False)
     sec_user_agent: str = ""
     live_symbols: str = "AAPL,MSFT"
+    # Optional broader pre-market scan universe. It is combined with LIVE_SYMBOLS.
+    scan_symbols: str = ""
     scheduler_enabled: bool = True
     max_hot_symbols: int = Field(default=30, ge=1, le=30)
     price_stale_seconds: float = Field(default=30, ge=2, le=90)
@@ -56,6 +58,16 @@ class Config(BaseSettings):
         symbols = list(dict.fromkeys(symbol.strip().upper() for symbol in value.split(",") if symbol.strip()))
         if not 1 <= len(symbols) <= 100 or any(not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,11}", s) for s in symbols):
             raise ValueError("LIVE_SYMBOLS must contain 1 to 100 ordinary share symbols separated by commas.")
+        return ",".join(symbols)
+
+    @field_validator("scan_symbols")
+    @classmethod
+    def valid_scan_symbols(cls, value: str) -> str:
+        if not value.strip():
+            return ""
+        symbols = list(dict.fromkeys(symbol.strip().upper() for symbol in value.split(",") if symbol.strip()))
+        if len(symbols) > 100 or any(not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,11}", s) for s in symbols):
+            raise ValueError("SCAN_SYMBOLS must contain up to 100 ordinary share symbols separated by commas.")
         return ",".join(symbols)
 
     @model_validator(mode="after")

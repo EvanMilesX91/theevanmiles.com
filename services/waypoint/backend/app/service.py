@@ -147,7 +147,7 @@ class EngineService:
         from .live_data import build_live_research
         from .providers import AlpacaMarketDataProvider, AlphaVantageProvider, ProviderError, SECProvider
 
-        symbols = list(dict.fromkeys(s.strip().upper() for s in config.live_symbols.split(",") if s.strip()))
+        symbols = list(dict.fromkeys(s.strip().upper() for raw in (config.live_symbols + "," + config.scan_symbols).split(",") if (s := raw.strip())))
         now = datetime.now(UTC)
         if self.provider is None:
             try:
