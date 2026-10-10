@@ -170,7 +170,13 @@ export const money = (value: number, currency = "EUR") =>
 export const signed = (value: number, currency = "EUR") =>
   `${value >= 0.005 ? "+" : ""}${money(value, currency)}`;
 export const price = (value: number) =>
-  value > 0 ? money(value, "USD") : "Unavailable";
+  value > 0
+    ? new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      }).format(value)
+    : "Unavailable";
 export const range = (low: number, high: number) =>
   `${price(low)} – ${price(high)}`;
 export function dateTime(

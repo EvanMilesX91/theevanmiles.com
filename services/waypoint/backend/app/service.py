@@ -48,6 +48,7 @@ class EngineService:
         self.usage_checkpoint: Any = None
         self.last_equity_at = datetime(1970, 1, 1, tzinfo=UTC)
         self.ml = MLEngine()
+        self.ml_maintenance_task: asyncio.Task[Any] | None = None
 
     @property
     def mode(self) -> str:
@@ -134,14 +135,28 @@ class EngineService:
             prediction = self.ml.predict(stock, symbol=stock["symbol"], now=now, db=db)
             if prediction is not None and self.ml.shadow_mode:
                 self.ml.attach_shadow(db, stock["symbol"], prediction, now)
-        if config.ml_maintenance_enabled:
-            try:
-                self.ml.scheduled_maintenance(db)
-            except (OSError, ValueError):
-                # Maintenance is offline work; a failed candidate must never
-                # interrupt live price/state updates.
-                pass
+        if config.ml_maintenance_enabled and (
+            self.ml_maintenance_task is None or self.ml_maintenance_task.done()
+        ):
+            # Walk-forward evaluation and candidate training are deliberately
+            # kept off the event loop. A slow model job must never make the
+            # health endpoint, live stream, or price ticks appear offline.
+            self.ml_maintenance_task = asyncio.create_task(self._run_ml_maintenance())
         self.last_slow_refresh = now
+
+    async def _run_ml_maintenance(self) -> None:
+        def run() -> dict[str, Any]:
+            with SessionLocal() as maintenance_db:
+                result = self.ml.scheduled_maintenance(maintenance_db)
+                maintenance_db.commit()
+                return result
+
+        try:
+            await asyncio.to_thread(run)
+        except (OSError, ValueError):
+            # Maintenance is offline work; a failed candidate must never
+            # interrupt live price/state updates.
+            return
 
     async def refresh_live(self, history: bool = False, db: Session | None = None) -> None:
         from .live_data import build_live_research
@@ -195,24 +210,53 @@ class EngineService:
             prior = self.stocks.get(symbol, {})
             record = self.research.get(symbol, {})
             quote = quotes.get(symbol)
+            stream_state = self.market_values.get(symbol, {})
+            stream_quote_current = False
+            stream_timestamp = None
+            try:
+                stream_timestamp = datetime.fromisoformat(str(stream_state.get("timestamp")).replace("Z", "+00:00"))
+                stream_quote_current = (
+                    stream_state.get("price_basis") == "quote"
+                    and stream_state.get("bid") is not None
+                    and stream_state.get("ask") is not None
+                    and -5 <= (now - stream_timestamp).total_seconds() <= 90
+                )
+            except (TypeError, ValueError):
+                stream_quote_current = False
+            analysis_record = copy.deepcopy(record)
             previous_close = record.get("previous_close", prior.get("previous_close"))
-            price = float(quote.price) if quote else prior.get("price") or previous_close or 0.0
-            timestamp = quote.timestamp.isoformat() if quote else prior.get("freshness", {}).get("market_at")
-            using_completed_close = not quote and previous_close is not None and not market_status(now)["is_open"]
+            price = float(quote.price) if quote else (float(stream_state["price"]) if stream_quote_current else prior.get("price") or previous_close or 0.0)
+            timestamp = quote.timestamp.isoformat() if quote else (stream_timestamp.isoformat() if stream_quote_current else prior.get("freshness", {}).get("market_at"))
+            using_completed_close = not quote and not stream_quote_current and previous_close is not None and not market_status(now)["is_open"]
             if using_completed_close:
                 price = previous_close
-                timestamp = None
+                timestamp = record.get("history_at") or timestamp
             history_values = record.get("history", prior.get("history", []))
             change_reference = history_values[-2] if using_completed_close and len(history_values) > 1 else previous_close
-            quote_current = quote is not None and -5 <= (now - quote.timestamp).total_seconds() <= 90
+            quote_current = (quote is not None and -5 <= (now - quote.timestamp).total_seconds() <= 90) or stream_quote_current
             sources = copy.deepcopy(record.get("sources", []))
             if quote:
                 source = quote.source.model_dump(mode="json")
                 source["id"] = f"alpaca-{symbol.lower()}-quote"
                 sources.insert(0, source)
+            elif stream_quote_current:
+                source = {
+                    "id": f"alpaca-{symbol.lower()}-quote",
+                    "provider": "Alpaca IEX streaming",
+                    "url": "https://docs.alpaca.markets/docs/real-time-stock-pricing-data",
+                    "retrieved_at": now.isoformat(),
+                    "published_at": stream_timestamp.isoformat(),
+                    "reporting_period": None,
+                    "raw_value": {"bid": stream_state.get("bid"), "ask": stream_state.get("ask")},
+                    "normalized_value": {"price": price, "spread_pct": (float(stream_state["ask"]) - float(stream_state["bid"])) / price},
+                    "description": "Indicative IEX bid/ask midpoint and observed spread; not a Trading 212 executable quote.",
+                }
+                sources.insert(0, source)
+                analysis_record.setdefault("metrics", {})["spread_pct"] = source["normalized_value"]["spread_pct"]
+                analysis_record.setdefault("metric_sources", {})["spread_pct"] = source["id"]
             else:
                 sources[0:0] = [s for s in prior.get("sources", []) if s["id"] == f"alpaca-{symbol.lower()}-quote"]
-            feed = quote.feed if quote_current and quote is not None else "UNAVAILABLE"
+            feed = quote.feed if quote_current and quote is not None else "REAL-TIME" if stream_quote_current else "UNAVAILABLE"
             if not market_status(now)["is_open"]:
                 if quote_current:
                     feed = "MARKET CLOSED"
@@ -244,15 +288,58 @@ class EngineService:
                 "reasons": [],
                 "risks": [{"text": reason, "source_id": ""} for reason in missing],
                 "next_events": events,
-                "changes": ["Verified observations only. Missing eligibility inputs keep trade plans paused."],
-                "sources": sources, "business_warning": False, "research": copy.deepcopy(record),
+                "changes": ["Verified observations only. Core evidence and a current quote are required before a plan can be actionable."],
+                "sources": sources, "business_warning": False, "research": copy.deepcopy(analysis_record),
             }
+            # Run the same deterministic engine used by demo mode against the
+            # point-in-time live snapshot.  Previously live mode stopped after
+            # fetching providers, so the UI could only show NO_SETUP with empty
+            # Opportunity/Risk values even when the feeds were healthy.  The
+            # engine still owns eligibility and keeps ``plan`` as None when a
+            # required input is unavailable.
+            source_ids = {item.get("id") for item in sources}
+            metric_sources = dict(analysis_record.get("metric_sources", {}))
+            if "price" not in metric_sources:
+                history_id = f"alpaca-{symbol.lower()}-history"
+                quote_id = f"alpaca-{symbol.lower()}-quote"
+                if quote_id in source_ids:
+                    metric_sources["price"] = quote_id
+                elif history_id in source_ids:
+                    metric_sources["price"] = history_id
+            analysis_fixture = {
+                "symbol": symbol,
+                "name": record.get("name", symbol),
+                "sector": record.get("sector", "Industry unavailable"),
+                "sector_group": record.get("sector_group", "other"),
+                "metrics": analysis_record.get("metrics", {}),
+                "history": history_values,
+                "history_timestamps": record.get("history_timestamps", prior.get("history_timestamps", [])),
+                "price": price,
+                "market_at": timestamp or record.get("history_at"),
+                "financial_as_of": record.get("financial_as_of"),
+                "financial_period": record.get("financial_period"),
+                "news_checked_at": record.get("news_checked_at"),
+                "feed": feed,
+                "metric_sources": metric_sources,
+                "sources": sources,
+                "events": events,
+                "business_warning": False,
+                "live": True,
+            }
+            analysis = analyze_stock(analysis_fixture, self.settings(db).horizon, now)
+            for key in (
+                "company_type", "classification_confidence", "classification_version", "opportunity",
+                "risk", "confidence", "confidence_label", "opportunity_components", "risk_components",
+                "plan", "explanation", "freshness", "reasons", "risks", "next_events", "eligibility",
+            ):
+                self.stocks[symbol][key] = analysis[key]
+            self.stocks[symbol]["research"] = copy.deepcopy(analysis_record)
             if price > 0:
                 self.prices[symbol] = price
         self.provider_status = (
             ("LIVE PRICES UNAVAILABLE. " if not self.stream_status.get("connected") else "") +
             "LIVE FEED: ALPACA IEX. NOT CONSOLIDATED NBBO. "
-            "Trading 212 is the final execution-price check. Incomplete research keeps trade plans paused."
+            "Trading 212 is the final execution-price check. Optional evidence gaps lower confidence and remain visible."
         )
 
     def accept_market_event(self, event: dict[str, Any]) -> bool:

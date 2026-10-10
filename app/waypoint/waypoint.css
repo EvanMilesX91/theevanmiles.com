@@ -1,19 +1,21 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap");
 
 .waypoint-app {
-  --bg: #f7f8f5;
+  --bg: #f7f8fa;
   --paper: #fff;
-  --ink: #233c34;
-  --muted: #7b8982;
-  --line: #e5eae3;
-  --green: #22705a;
-  --green-soft: #edf5ee;
-  --orange: #b87842;
-  --amber: #aa842f;
-  --purple: #8274a5;
-  --blue: #5e85a0;
-  --red: #b56859;
-  --radius: 18px;
+  --ink: #011627;
+  --muted: #60717b;
+  --line: #e1e7eb;
+  --green: #248232;
+  --green-soft: #eaf5eb;
+  --orange: #e89005;
+  --amber: #e89005;
+  --purple: #c56fba;
+  --blue: #011627;
+  --red: #ff0022;
+  --pink: #f9b9f2;
+  --navy: #011627;
+  --radius: 16px;
 }
 .waypoint-app * {
   box-sizing: border-box;
@@ -3067,6 +3069,36 @@
 .waypoint-app .research-coverage-details summary { cursor: pointer; color: var(--green); font-weight: 600; }
 .waypoint-app .research-coverage-details ul { padding-left: 19px; margin: 12px 0 0; list-style: disc; }
 .waypoint-app .research-coverage-details li + li { margin-top: 6px; }
+
+.waypoint-app .plan-gap {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--orange) 30%, var(--line));
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.waypoint-app .plan-gap summary {
+  cursor: pointer;
+  color: var(--orange);
+  font-weight: 700;
+}
+.waypoint-app .plan-gap p { margin: 10px 0 8px; }
+.waypoint-app .plan-gap ul { margin: 0; padding-left: 18px; }
+.waypoint-app .plan-gap li + li { margin-top: 4px; }
+.waypoint-app .plan-freshness-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 2px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--orange) 12%, white);
+  color: #805208;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.waypoint-app .plan-freshness-note svg { flex: 0 0 auto; margin-top: 1px; }
 .waypoint-app .observed-news article { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--line); }
 .waypoint-app .observed-news article > a,
 .waypoint-app .observed-news article > p { display: block; font-size: 12px; font-weight: 500; line-height: 1.7; text-decoration: none; }
@@ -3164,3 +3196,201 @@
 .performance-grid span { display: block; color: var(--muted); font-size: 10px; }
 .performance-grid strong { display: block; margin-top: 5px; font-size: 18px; }
 @media (max-width: 760px) { .quote-check-form, .projection-page-grid { grid-template-columns: 1fr; } .performance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Waypoint visual refresh: a small, high-contrast palette with one clear
+   action colour and plain status surfaces. */
+.waypoint-app {
+  background: var(--bg);
+}
+.waypoint-app .sidebar {
+  background: var(--navy);
+  border-right: 0;
+  color: #fff;
+}
+.waypoint-app .brand,
+.waypoint-app .brand span:not(.brand-mark) { color: #fff; }
+.waypoint-app .brand > svg,
+.waypoint-app .brand-mark { background: var(--pink); color: var(--navy); }
+.waypoint-app .nav-label { color: #9fb2bd; }
+.waypoint-app .sidebar nav button { color: #c8d5db; }
+.waypoint-app .sidebar nav button:hover { background: #173245; color: #fff; }
+.waypoint-app .sidebar nav button.active { background: var(--pink); color: var(--navy); }
+.waypoint-app .sidebar nav small { background: var(--orange); color: var(--navy); }
+.waypoint-app .paper-callout { background: #102c3d; border-color: #27485a; }
+.waypoint-app .paper-icon { background: var(--orange); color: var(--navy); }
+.waypoint-app .paper-callout strong { color: #fff; }
+.waypoint-app .paper-callout p { color: #b9cbd2; }
+.waypoint-app .paper-callout button { color: var(--pink); }
+.waypoint-app .profile { border-color: #27485a; }
+.waypoint-app .profile > div { background: #173245; color: var(--pink); }
+.waypoint-app .profile > span { color: #fff; }
+.waypoint-app .profile small { color: #9fb2bd; }
+.waypoint-app .topbar { background: #fff; }
+.waypoint-app .connection-dot.on { background: var(--green); box-shadow: 0 0 0 3px #24823220; }
+.waypoint-app .primary { background: var(--green); border-color: var(--green); }
+.waypoint-app .primary:hover:not(:disabled) { background: #1b6728; }
+.waypoint-app .secondary:hover:not(:disabled) { background: #f0f5f7; }
+.waypoint-app .heading-dot { color: var(--red); }
+.waypoint-app .mode-badge.live { background: var(--green-soft); color: var(--green); border-color: #c7e3cb; }
+.waypoint-app .mode-badge { background: #fff3df; color: #9b6000; border-color: #f4d7a3; }
+.waypoint-app .demo-strip { background: #fff3df; border-color: #f4d7a3; color: #8c650d; }
+.waypoint-app .demo-strip strong { color: #8c5600; }
+.waypoint-app .connection-alert { background: #fff3df; border-color: #f4d7a3; color: #875700; }
+.waypoint-app .connection-alert .text-button { color: #875700; }
+.waypoint-app .card { box-shadow: 0 8px 22px #01162708; }
+.waypoint-app .setup-card { border-top: 3px solid var(--pink); }
+.waypoint-app .tiny-compass { background: var(--pink); color: var(--navy); }
+.waypoint-app .positive,
+.waypoint-app .green { color: var(--green); }
+.waypoint-app .negative,
+.waypoint-app .red { color: var(--red); }
+.waypoint-app .orange,
+.waypoint-app .amber { color: #b46800; }
+.waypoint-app .purple { color: #a4539b; }
+.waypoint-app .waypoint-data-status { background: #fff; border-left: 4px solid var(--orange); }
+.waypoint-app .live-setup-strip { background: #fff3df; border-left: 4px solid var(--orange); }
+.waypoint-app .explanation { background: #f1e9f2; border-color: #ead4e8; color: #543c52; }
+.waypoint-app .no-plan { background: #edf4f6; border-color: #d5e3e8; color: #46606b; }
+.waypoint-app .access-card { box-shadow: 0 18px 70px #01162714; }
+.waypoint-app .access-brand > span:first-child { background: var(--pink); color: var(--navy); }
+.waypoint-app .access-card input:focus { outline-color: var(--pink); }
+.waypoint-app .access-card button { background: var(--green); border-color: var(--green); }
+.waypoint-app .access-error { color: var(--red); }
+.waypoint-app .access-notice,
+.waypoint-app .access-status { background: #f1e9f2; color: #543c52; }
+.waypoint-app .stock-mark { background: var(--navy); color: #fff; }
+.waypoint-app .state-badge.green { background: var(--green-soft); color: var(--green); }
+.waypoint-app .state-badge.amber,
+.waypoint-app .state-badge.orange { background: #fff3df; color: #9b6000; }
+.waypoint-app .state-badge.purple { background: #f1e9f2; color: #a4539b; }
+.waypoint-app .state-badge.blue { background: #edf4f6; color: #46606b; }
+.waypoint-app .state-badge.red { background: #ffe8ec; color: var(--red); }
+@media (max-width: 900px) {
+  .waypoint-app .sidebar { width: 82px; padding-inline: 12px; }
+  .waypoint-app main { margin-left: 82px; width: calc(100% - 82px); }
+  .waypoint-app .brand { justify-content: center; margin-inline: 0; }
+  .waypoint-app .brand span:not(.brand-mark),
+  .waypoint-app .nav-label,
+  .waypoint-app .sidebar nav button span,
+  .waypoint-app .paper-callout,
+  .waypoint-app .profile > span { display: none; }
+  .waypoint-app .sidebar nav button { justify-content: center; padding-inline: 10px; }
+  .waypoint-app .profile { justify-content: center; }
+}
+
+/* Final Waypoint theme: deep navy surfaces and saturated status colours. */
+.waypoint-app {
+  --bg: #011627;
+  --paper: #0b2435;
+  --ink: #f4fbff;
+  --muted: #a9c0ca;
+  --line: #244555;
+  --green: #248232;
+  --green-soft: #123d2a;
+  --orange: #e89005;
+  --amber: #e89005;
+  --purple: #f9b9f2;
+  --blue: #4cb5f5;
+  --red: #ff0022;
+  --pink: #f9b9f2;
+  --navy: #011627;
+  color-scheme: dark;
+  background: #011627 !important;
+  color: #f4fbff;
+}
+.waypoint-app .app,
+.waypoint-app main,
+.waypoint-app #main-content,
+.waypoint-app .page-content,
+.waypoint-app .waypoint-access { background: #011627 !important; color: #f4fbff; }
+.waypoint-app .topbar { background: #011627 !important; border-color: #244555 !important; color: #f4fbff; }
+.waypoint-app .topbar > span, .waypoint-app .timezone, .waypoint-app .workspace-label { color: #a9c0ca; }
+.waypoint-app .card,
+.waypoint-app .setup-card,
+.waypoint-app .access-card,
+.waypoint-app .opportunity-board { background: #0b2435 !important; border-color: #244555 !important; color: #f4fbff; box-shadow: 0 16px 42px #0009; }
+.waypoint-app h1, .waypoint-app h2, .waypoint-app h3, .waypoint-app strong, .waypoint-app .company-heading p { color: #f4fbff; }
+.waypoint-app p, .waypoint-app small, .waypoint-app .eyebrow, .waypoint-app .section-heading > span, .waypoint-app .chart-footer { color: #a9c0ca; }
+.waypoint-app .brand-logo { width: 148px; height: auto; display: block; object-fit: contain; }
+.waypoint-app .access-logo { width: min(260px, 82vw); height: auto; display: block; object-fit: contain; }
+.waypoint-app .brand { min-height: 38px; }
+.waypoint-app .access-brand { display: block; }
+.waypoint-app .primary { background: #248232 !important; border-color: #248232 !important; color: #fff !important; }
+.waypoint-app .primary:hover:not(:disabled) { background: #2da33f !important; }
+.waypoint-app .secondary { background: #123449 !important; border-color: #2d566b !important; color: #f4fbff !important; }
+.waypoint-app .secondary:hover:not(:disabled) { background: #1a455b !important; }
+.waypoint-app .mode-badge.live, .waypoint-app .state-badge.green { background: #123d2a !important; color: #64dc75 !important; border-color: #248232 !important; }
+.waypoint-app .mode-badge, .waypoint-app .state-badge.amber, .waypoint-app .state-badge.orange { background: #4d3103 !important; color: #ffbd45 !important; border-color: #e89005 !important; }
+.waypoint-app .state-badge.red { background: #4b0a16 !important; color: #ff667b !important; border-color: #ff0022 !important; }
+.waypoint-app .state-badge.purple { background: #4b2146 !important; color: #f9b9f2 !important; border-color: #f9b9f2 !important; }
+.waypoint-app .state-badge.blue { background: #123e58 !important; color: #68c7ff !important; border-color: #4cb5f5 !important; }
+.waypoint-app .demo-strip, .waypoint-app .connection-alert, .waypoint-app .live-setup-strip { background: #4d3103 !important; border-color: #e89005 !important; color: #ffcf72 !important; }
+.waypoint-app .waypoint-data-status { background: #0b2435 !important; border-left-color: #e89005 !important; }
+.waypoint-app .explanation { background: #341f39 !important; border-color: #693a66 !important; color: #f9b9f2 !important; }
+.waypoint-app .no-plan { background: #102f43 !important; border-color: #2d566b !important; color: #b8d3df !important; }
+.waypoint-app .plan-freshness-note { background: #4d3103 !important; color: #ffcf72 !important; }
+.waypoint-app .access-notice, .waypoint-app .access-status { background: #341f39 !important; color: #f9b9f2 !important; }
+.waypoint-app .access-card input, .waypoint-app input, .waypoint-app select { background: #061d2d !important; color: #f4fbff !important; border-color: #2d566b !important; }
+.waypoint-app .stock-mark { background: #011627 !important; color: #fff !important; border: 1px solid #2d566b; }
+.waypoint-app .positive, .waypoint-app .green { color: #64dc75 !important; }
+.waypoint-app .negative, .waypoint-app .red { color: #ff667b !important; }
+.waypoint-app .orange, .waypoint-app .amber { color: #ffbd45 !important; }
+.waypoint-app .purple { color: #f9b9f2 !important; }
+.waypoint-app .opportunity-board { margin-bottom: 18px; padding: 20px; }
+.opportunity-board-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.opportunity-board-heading h2 { margin: 5px 0 0; font-size: 19px; }
+.opportunity-board-heading > span { color: #a9c0ca; font-size: 11px; }
+.opportunity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 11px; margin-top: 16px; }
+.opportunity-tile { min-width: 0; padding: 14px; border: 1px solid #244555; border-radius: 12px; background: #102f43; color: #f4fbff; text-align: left; cursor: pointer; transition: transform .16s ease, border-color .16s ease, background .16s ease; }
+.opportunity-tile:hover { transform: translateY(-2px); border-color: #f9b9f2; background: #143b51; }
+.opportunity-tile.selected { border-color: #f9b9f2; box-shadow: 0 0 0 1px #f9b9f2; }
+.opportunity-tile.in-buy-range { border-color: #248232; box-shadow: 0 0 0 1px #248232, 0 0 24px #24823288; }
+.opportunity-tile.in-buy-range:hover { border-color: #64dc75; box-shadow: 0 0 0 1px #64dc75, 0 0 28px #248232aa; }
+.opportunity-tile.in-buy-range .opportunity-plan::before { content: "● "; color: #64dc75; }
+.opportunity-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.company-heading.compact { gap: 9px; }
+.company-heading.compact strong, .company-heading.compact small { display: block; }
+.company-heading.compact strong { font-size: 13px; }
+.company-heading.compact small { margin-top: 3px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a9c0ca; font-size: 10px; }
+.opportunity-tile-price { display: flex; align-items: baseline; justify-content: space-between; margin-top: 15px; }
+.opportunity-tile-price strong { font-size: 19px; }
+.opportunity-tile-price span { font-size: 11px; }
+.opportunity-tile-metrics { display: flex; flex-wrap: wrap; gap: 7px 12px; margin-top: 11px; color: #a9c0ca; font-size: 10px; }
+.opportunity-tile-metrics b { color: #f4fbff; font-size: 12px; }
+.opportunity-plan, .opportunity-research { margin: 11px 0 0; font-size: 11px; }
+.opportunity-plan { color: #64dc75 !important; }
+.opportunity-research { color: #ffbd45 !important; }
+.opportunity-size { margin: 7px 0 0; color: #a9c0ca !important; font-size: 10px; }
+.opportunity-size strong { color: #f9b9f2 !important; font-size: 11px; }
+.opportunity-sell { margin: 7px 0 0; color: #ffbd45 !important; font-size: 10px; }
+.opportunity-sell .info-tip { color: #ffbd45; }
+.worth-score.good b { color: #64dc75 !important; }
+.worth-score.caution b { color: #ffbd45 !important; }
+.worth-score.weak b { color: #ff667b !important; }
+.worth-score em { color: inherit; font-size: 9px; font-style: normal; font-weight: 700; }
+.opportunity-sell.strong { color: #f9b9f2 !important; }
+.opportunity-reconsider { margin: 7px 0 0; color: #ff667b !important; font-size: 10px; }
+.info-tip { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin-left: 3px; border: 1px solid currentColor; border-radius: 50%; color: #a9c0ca; font-size: 9px; font-weight: 800; line-height: 1; cursor: help; vertical-align: 1px; }
+.info-tip:hover { color: #f9b9f2; }
+.opportunity-board-footer { display: flex; align-items: center; gap: 6px; margin: 15px 0 0; font-size: 10px; }
+.chart-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 8px; color: #a9c0ca; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.chart-ranges { display: flex; gap: 5px; }
+.chart-range { padding: 5px 8px; border: 1px solid #2d566b; border-radius: 6px; background: #102f43; color: #a9c0ca; font-size: 10px; cursor: pointer; }
+.chart-range:hover, .chart-range.active { background: #f9b9f2; border-color: #f9b9f2; color: #011627; }
+.chart-wrap { min-height: 260px; }
+.chart-note { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 4px 2px 0; color: #a9c0ca; font-size: 10px; }
+.chart-key { display: inline-block; width: 18px; height: 0; border-top: 3px solid #248232; margin-right: -8px; }
+.chart-key-projection { border-top-color: #f9b9f2; border-top-style: dashed; }
+@media (max-width: 600px) { .opportunity-grid { grid-template-columns: 1fr; } .chart-toolbar { align-items: flex-start; flex-direction: column; } .chart-wrap { min-height: 220px; } }
+
+/* Watchlist contrast: selected rows and paused states stay readable on navy. */
+.waypoint-app .watch-item { border-top-color: #244555 !important; color: #f4fbff !important; }
+.waypoint-app .watch-item:hover,
+.waypoint-app .watch-item.selected { background: #143b51 !important; border-top-color: #2d566b !important; color: #f4fbff !important; }
+.waypoint-app .watch-item.selected .watch-name > strong,
+.waypoint-app .watch-item.selected .watch-price > strong { color: #ffffff !important; }
+.waypoint-app .watch-name > strong, .waypoint-app .watch-price > strong { color: #f4fbff !important; }
+.waypoint-app .watch-name > span { color: #a9c0ca !important; }
+.waypoint-app .watchlist-footer { border-top-color: #244555 !important; color: #a9c0ca !important; }
+.waypoint-app .state-badge.gray { background: #123e58 !important; color: #bfe8ff !important; border: 1px solid #4cb5f5 !important; }
+.waypoint-app .state-badge.gray .state-dot { background: #4cb5f5 !important; }

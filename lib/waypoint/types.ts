@@ -89,6 +89,7 @@ export type Stock = {
   previous_close: number | null;
   change_pct: number | null;
   history: number[];
+  history_timestamps?: string[];
   state: State;
   explanation: string;
   opportunity: number | null;

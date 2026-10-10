@@ -35,6 +35,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
@@ -139,16 +140,22 @@ function Badge({
   state,
   safe = true,
   large = false,
+  marketOpen,
 }: {
   state: State;
   safe?: boolean;
   large?: boolean;
+  marketOpen?: boolean;
 }) {
   const info = safe
     ? (stateInfo[state] ?? stateInfo.NO_SETUP)
-    : { label: "Signals paused", tone: "gray" };
+    : marketOpen === false
+      ? { label: "Market Closed", tone: "red", short: "The US market is closed" }
+      : marketOpen === true
+        ? { label: "Market Active", tone: "green", short: "The US market is open" }
+        : { label: "Signals paused", tone: "gray", short: "Fresh market data is not available" };
   return (
-    <span className={`state-badge ${info.tone} ${large ? "large" : ""}`}>
+    <span className={`state-badge ${info.tone} ${large ? "large" : ""}`} title={!safe ? "Fresh market data is not available, so action labels are paused." : (info.short ?? info.label)}>
       <span className="state-dot" />
       {info.label}
     </span>
@@ -266,50 +273,119 @@ function Modal({
   );
 }
 
-function Chart({ stock, safe }: { stock: Stock; safe: boolean }) {
-  const points = [...stock.history, stock.price].map((value, index) => ({
-    index,
-    price: value,
-  }));
+type ChartRange = "24h" | "7d" | "30d" | "180d" | "365d";
+const chartRanges: { id: ChartRange; label: string; days: number }[] = [
+  { id: "24h", label: "24H", days: 1 },
+  { id: "7d", label: "1W", days: 7 },
+  { id: "30d", label: "1M", days: 30 },
+  { id: "180d", label: "6M", days: 180 },
+  { id: "365d", label: "1Y", days: 365 },
+];
+function Chart({ stock, safe, projection }: { stock: Stock; safe: boolean; projection?: Stock["projection"] }) {
+  const [chartRange, setChartRange] = useState<ChartRange>("30d");
+  const latest = new Date(stock.price_as_of ?? stock.freshness.market_at ?? Date.now());
+  const timestamps = stock.history_timestamps ?? [];
+  const history = stock.history.map((value, index) => {
+    const parsed = timestamps[index] ? new Date(timestamps[index]) : null;
+    const fallback = new Date(latest);
+    fallback.setDate(fallback.getDate() - (stock.history.length - index));
+    return { time: (parsed && !Number.isNaN(parsed.getTime()) ? parsed : fallback).getTime(), price: value };
+  });
+  const allPoints = [...history, { time: latest.getTime(), price: stock.price }].sort((a, b) => a.time - b.time);
+  const selectedDays = chartRanges.find((item) => item.id === chartRange)?.days ?? 30;
+  const cutoff = latest.getTime() - selectedDays * 24 * 60 * 60 * 1000;
+  let points = allPoints.filter((point) => point.time >= cutoff);
+  if (points.length < 2) points = allPoints.slice(-2);
+  // Use an ordinal trading-session axis so weekends and missing sessions do
+  // not create artificial empty space. Each two-point segment receives its
+  // own direction colour, keeping the stroke continuous at every turn.
+  const directed = points.map((point, index) => ({ ...point, index }));
+  const historicalEndIndex = Math.max(0, directed.length - 1);
+  const selectedProjection = projection?.horizons[String(projection.selected_horizon)];
+  const projectionPath = selectedProjection?.path ?? [];
+  const projectionData = [
+    { day: 0, index: historicalEndIndex, p10: stock.price, p25: stock.price, median: stock.price, p75: stock.price, p90: stock.price },
+    ...projectionPath.map((point) => ({ ...point, index: historicalEndIndex + point.day })),
+  ];
+  const projectionMaxIndex = projectionData.length ? projectionData[projectionData.length - 1].index : historicalEndIndex;
   const plan = safe ? stock.plan : null;
+  const addTradingDays = (start: Date, days: number) => {
+    const value = new Date(start);
+    let remaining = days;
+    while (remaining > 0) {
+      value.setDate(value.getDate() + 1);
+      const weekday = value.getDay();
+      if (weekday !== 0 && weekday !== 6) remaining -= 1;
+    }
+    return value;
+  };
+  const projectionDates = new Map(projectionData.map((point) => [point.index, addTradingDays(latest, point.day).getTime()]));
+  const formatDate = (time: number) => {
+    const date = new Date(time);
+    return chartRange === "24h"
+      ? date.toLocaleTimeString("en-IE", { hour: "2-digit", minute: "2-digit" })
+      : date.toLocaleDateString("en-IE", { day: "numeric", month: "short" });
+  };
+  const formatTick = (value: number) => formatDate(directed[Math.round(value)]?.time ?? projectionDates.get(Math.round(value)) ?? latest.getTime());
   return (
-    <div
+    <>
+      <div className="chart-toolbar">
+        <span>Historical price</span>
+        <div className="chart-ranges" role="group" aria-label="Chart time range">
+          {chartRanges.map((item) => (
+            <button key={item.id} className={`chart-range ${chartRange === item.id ? "active" : ""}`} onClick={() => setChartRange(item.id)}>{item.label}</button>
+          ))}
+        </div>
+      </div>
+      <div
       className="chart-wrap"
       role="img"
-      aria-label={`${stock.symbol} historical price line. Latest supplied price ${price(stock.price)}. ${plan ? `Entry range ${range(plan.entry_low, plan.entry_high)}.` : "Trading overlays unavailable."}`}
+      aria-label={`${stock.symbol} historical price line for the last ${chartRange}. Latest supplied price ${price(stock.price)}. ${projectionData.length > 1 ? `Historical outcome projection for the next ${selectedProjection?.horizon_days ?? projection?.selected_horizon ?? 0} trading days.` : "Historical projection unavailable."} ${plan ? `Entry range ${range(plan.entry_low, plan.entry_high)}.` : "Trading overlays unavailable."}`}
     >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
-          data={points}
-          margin={{ top: 16, right: 4, bottom: 0, left: -18 }}
+          data={directed}
+          margin={{ top: 16, right: 4, bottom: 8, left: -18 }}
         >
           <defs>
-            <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#107366" stopOpacity={0.15} />
-              <stop offset="100%" stopColor="#107366" stopOpacity={0} />
+            <linearGradient id={`priceGradient-${stock.symbol}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#248232" stopOpacity={0.2} />
+              <stop offset="100%" stopColor="#248232" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid
             vertical={false}
-            stroke="#e7e9e5"
+            stroke="#244555"
             strokeDasharray="3 5"
           />
-          <XAxis dataKey="index" hide />
+          <XAxis
+            type="number"
+            dataKey="index"
+            domain={[0, Math.max(1, projectionMaxIndex)]}
+            tickFormatter={formatTick}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: "#a9c0ca", fontSize: 10 }}
+            tickCount={Math.min(7, Math.max(directed.length, projectionData.length))}
+            minTickGap={26}
+          />
           <YAxis
             orientation="right"
             tickFormatter={(v) => `$${v}`}
             axisLine={false}
             tickLine={false}
-            tick={{ fill: "#929b98", fontSize: 11 }}
+            tick={{ fill: "#a9c0ca", fontSize: 11 }}
             domain={["auto", "auto"]}
             tickCount={4}
             width={54}
           />
           <Tooltip
-            labelFormatter={() => "Supplied price history"}
+            labelFormatter={(value) => directed[Math.round(Number(value))] ? formatDate(directed[Math.round(Number(value))].time) : "Historical observation"}
             formatter={(v) => [price(Number(v)), "Price"]}
             contentStyle={{
-              border: "1px solid #e2e7e2",
+              border: "1px solid #244555",
+              background: "#0b2435",
+              color: "#f4fbff",
               borderRadius: 10,
               fontSize: 12,
             }}
@@ -318,15 +394,15 @@ function Chart({ stock, safe }: { stock: Stock; safe: boolean }) {
             <ReferenceArea
               y1={plan.entry_low}
               y2={plan.entry_high}
-              fill="#d8eee0"
-              fillOpacity={0.6}
+              fill="#248232"
+              fillOpacity={0.18}
               ifOverflow="extendDomain"
             />
           )}
           {plan && (
             <ReferenceLine
               y={plan.reconsider}
-              stroke="#d59984"
+              stroke="#ff0022"
               strokeDasharray="4 4"
               ifOverflow="extendDomain"
             />
@@ -334,14 +410,134 @@ function Chart({ stock, safe }: { stock: Stock; safe: boolean }) {
           <Area
             type="monotone"
             dataKey="price"
-            stroke="#16796b"
-            strokeWidth={2.5}
-            fill="url(#priceGradient)"
+            stroke="transparent"
+            fill={`url(#priceGradient-${stock.symbol})`}
             isAnimationActive={false}
           />
+          {directed.slice(1).map((point, index) => {
+            const previous = directed[index];
+            return (
+              <Line
+                key={`${stock.symbol}-segment-${point.index}`}
+                data={[previous, point]}
+                type="monotone"
+                dataKey="price"
+                stroke={point.price >= previous.price ? "#248232" : "#ff0022"}
+                strokeWidth={3}
+                dot={false}
+                isAnimationActive={false}
+              />
+            );
+          })}
+          {projectionData.length > 1 && (
+            <>
+              <ReferenceLine
+                x={historicalEndIndex}
+                stroke="#f9b9f2"
+                strokeDasharray="2 4"
+                strokeOpacity={0.65}
+                ifOverflow="extendDomain"
+              />
+              <Line data={projectionData} type="monotone" dataKey="p10" stroke="#f9b9f2" strokeOpacity={0.42} strokeDasharray="3 4" dot={false} isAnimationActive={false} />
+              <Line data={projectionData} type="monotone" dataKey="p25" stroke="#f9b9f2" strokeOpacity={0.22} strokeDasharray="2 3" dot={false} isAnimationActive={false} />
+              <Line data={projectionData} type="monotone" dataKey="median" stroke="#f9b9f2" strokeWidth={2} strokeDasharray="7 4" dot={false} isAnimationActive={false} />
+              <Line data={projectionData} type="monotone" dataKey="p75" stroke="#f9b9f2" strokeOpacity={0.22} strokeDasharray="2 3" dot={false} isAnimationActive={false} />
+              <Line data={projectionData} type="monotone" dataKey="p90" stroke="#f9b9f2" strokeOpacity={0.42} strokeDasharray="3 4" dot={false} isAnimationActive={false} />
+            </>
+          )}
         </AreaChart>
       </ResponsiveContainer>
-    </div>
+      </div>
+      <div className="chart-note">
+        <span className="chart-key chart-key-history" />Observed price path
+        {projectionData.length > 1 && <><span className="chart-key chart-key-projection" />Historical outcome range (not a forecast)</>}
+      </div>
+    </>
+  );
+}
+
+function InfoTip({ text }: { text: string }) {
+  return <span className="info-tip" title={text} aria-label={text}>i</span>;
+}
+
+function OpportunityBoard({
+  stocks,
+  selectedSymbol,
+  onSelect,
+  isFresh,
+  marketOpen,
+}: {
+  stocks: Stock[];
+  selectedSymbol?: string;
+  onSelect: (symbol: string) => void;
+  isFresh: (stock: Stock) => boolean;
+  marketOpen: boolean;
+}) {
+  const ordered = [...stocks].sort((a, b) => {
+    const aPlan = a.plan && !["SKIP", "NO_SETUP"].includes(a.state) ? 1 : 0;
+    const bPlan = b.plan && !["SKIP", "NO_SETUP"].includes(b.state) ? 1 : 0;
+    return bPlan - aPlan || (b.opportunity ?? -1) - (a.opportunity ?? -1);
+  });
+  return (
+    <section className="card opportunity-board" aria-label="All monitored opportunities">
+      <div className="opportunity-board-heading">
+        <div>
+          <p className="eyebrow">LIVE WATCHLIST</p>
+          <h2>Opportunities today</h2>
+        </div>
+        <span>{ordered.length} monitored</span>
+      </div>
+      <div className="opportunity-grid">
+        {ordered.map((stock) => {
+          const safe = isFresh(stock);
+          const actionable = !!stock.plan && !["SKIP", "NO_SETUP"].includes(stock.state);
+          const inBuyRange = !!stock.plan && stock.price >= stock.plan.entry_low && stock.price <= stock.plan.entry_high;
+          const worthScore = stock.opportunity == null || stock.risk == null
+            ? null
+            : Math.round(Math.max(0, Math.min(100, stock.opportunity * 0.55 + (100 - stock.risk) * 0.3 + stock.confidence * 0.15)));
+          const worthTone = worthScore == null ? "" : worthScore >= 67 ? "good" : worthScore >= 45 ? "caution" : "weak";
+          const worthLabel = worthScore == null ? "Unavailable" : worthScore >= 67 ? "Strong" : worthScore >= 45 ? "Mixed" : "Weak";
+          const opportunityWhy = "Opportunity combines the setup trend, momentum, volume, company evidence, catalysts, and data quality.";
+          const riskWhy = "Risk combines volatility, downside distance, event risk, liquidity, and missing or uncertain evidence.";
+          const worthWhy = "Worth considering blends Opportunity, inverse Risk, and Confidence. It is a guide, not a trade instruction.";
+          const sizeWhy = stock.sizing.viable
+            ? `This suggested amount follows your account size, configured risk limits, planned downside, fees, and minimum order rules. ${stock.sizing.reason}`
+            : "No position size is currently viable under the account, fee, and risk limits.";
+          const buyWhy = stock.plan ? "This buy range is the deterministic entry area from the setup price structure, volatility, reward/risk, and risk controls." : "A buy range will appear after the required evidence is verified.";
+          const sellWhy = stock.plan ? "This sell range is the first profit area from the trade plan, constrained by historical outcomes and risk controls." : "A sell range will appear with a verified trade plan.";
+          return (
+            <button
+              key={stock.symbol}
+              className={`opportunity-tile ${selectedSymbol === stock.symbol ? "selected" : ""} ${inBuyRange ? "in-buy-range" : ""}`}
+              onClick={() => onSelect(stock.symbol)}
+              aria-pressed={selectedSymbol === stock.symbol}
+            >
+              <div className="opportunity-tile-top">
+                <div className="company-heading compact">
+                  <StockMark symbol={stock.symbol} small />
+                  <div><strong>{stock.symbol}</strong><small>{stock.name}</small></div>
+                </div>
+                <Badge state={stock.state} safe={safe} marketOpen={marketOpen} />
+              </div>
+              <div className="opportunity-tile-price"><strong>{price(stock.price)}</strong><span className={(stock.change_pct ?? 0) >= 0 ? "positive" : "negative"}>{stock.change_pct == null ? "—" : `${stock.change_pct >= 0 ? "+" : ""}${stock.change_pct.toFixed(2)}%`}</span></div>
+              <div className="opportunity-tile-metrics">
+                <span title={opportunityWhy}>Opportunity <b>{stock.opportunity ?? "—"}</b> <InfoTip text={opportunityWhy} /></span>
+                <span title={riskWhy}>Risk <b>{stock.risk ?? "—"}</b> <InfoTip text={riskWhy} /></span>
+                <span className={`worth-score ${worthTone}`} title={worthWhy}>Worth considering <b>{worthScore ?? "—"}</b> <em>{worthLabel}</em> <InfoTip text={worthWhy} /></span>
+              </div>
+              <p className={actionable ? "opportunity-plan" : "opportunity-research"} title={buyWhy}>{actionable && stock.plan ? <>Buy {range(stock.plan.entry_low, stock.plan.entry_high)} <InfoTip text={buyWhy} /></> : <>Research in progress <InfoTip text={buyWhy} /></>}</p>
+              <p className="opportunity-size" title={sizeWhy}>Suggested amount: <strong>{stock.sizing.viable ? money(stock.sizing.amount_eur) : "—"}</strong> <InfoTip text={sizeWhy} /></p>
+              {stock.plan ? <>
+                <p className="opportunity-sell" title={sellWhy}>Sell low: {range(stock.plan.first_profit_low, stock.plan.first_profit_high)} <InfoTip text="The lower sell range is the first profit area: a more cautious exit if the setup moves in your favour." /></p>
+                <p className="opportunity-sell strong" title={sellWhy}>Sell high: {range(stock.plan.strong_profit_low, stock.plan.strong_profit_high)} <InfoTip text="The higher sell range is the strong profit area: a more ambitious exit when the historical and deterministic evidence supports it." /></p>
+                <p className="opportunity-reconsider">Reconsider below: {price(stock.plan.reconsider)} <InfoTip text="If price falls below this level, the original setup needs review rather than waiting for a profit target." /></p>
+              </> : <p className="opportunity-sell">Sell target unavailable <InfoTip text={sellWhy} /></p>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="opportunity-board-footer"><RefreshCw size={13} /> Updates automatically as new prices and evidence arrive · “Worth considering” combines opportunity, risk, and confidence.</p>
+    </section>
   );
 }
 
@@ -1635,10 +1831,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
     <div className="app">
       <aside className="sidebar">
         <Link className="brand" href="/waypoint" aria-label="Waypoint home">
-          <span>
-            <Navigation size={22} fill="currentColor" />
-          </span>
-          waypoint<span className="brand-period">.</span>
+          <img className="brand-logo" src="/waypoint-logo.png" alt="Waypoint" />
         </Link>
         <p className="sidebar-caption">A CLEARER NEXT STEP</p>
         <nav aria-label="Main navigation">
@@ -1773,8 +1966,8 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
             <section className="card waypoint-data-status" aria-label="Data status">
               <details>
                 <summary><strong>DATA STATUS</strong> · Alpaca {data.data_status?.stream.status ?? "unavailable"} · HOT {data.data_status?.hot_symbols.length ?? 0} / {data.data_status?.max_hot_symbols ?? 30}</summary>
-                <p><strong>LIVE FEED: ALPACA IEX</strong> · <strong>NOT CONSOLIDATED NBBO</strong></p>
-                <p>Trading 212 remains the final execution-price check. IEX prices may differ from its executable quote.</p>
+                <p><strong>LIVE PRICE FEED: ALPACA IEX</strong> · <strong>EXECUTION CHECK: TRADING 212</strong></p>
+                <p>Prices are real observations. Before acting, compare the live quote and spread in Trading 212.</p>
                 <p>HOT: {data.data_status?.hot_symbols.join(", ") || "Waiting for stream"} · WARM: {data.data_status?.warm_symbols.join(", ") || "None"}</p>
                 {data.data_status?.stream.last_error && <p role="status">{data.data_status.stream.last_error}</p>}
                 <div className="waypoint-provider-grid">
@@ -1803,7 +1996,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
           {data?.mode === "live" && Object.values(data.provider_health ?? {}).some((health) => health.code === "not_configured") && (
             <div className="demo-strip live-setup-strip" role="status">
               <Activity size={16} />
-              <p><strong>Limited research coverage.</strong> View available price history and news below. Some company data and live FX are unavailable; live trade plans remain paused.</p>
+              <p><strong>Research is still loading.</strong> Prices and news are available, but some verified company inputs are missing. Trade plans will appear when the evidence is complete.</p>
             </div>
           )}
           {(error || (data && !freshConnection)) && (
@@ -1932,6 +2125,13 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                           setups to explore
                         </span>
                       </div>
+                      <OpportunityBoard
+                        stocks={data.stocks}
+                        selectedSymbol={selected?.symbol}
+                        onSelect={(next) => { setSymbol(next); setShowWhy(false); }}
+                        isFresh={stockSafe}
+                        marketOpen={data.market.is_open}
+                      />
                       {selected ? (
                         <article className="card setup-card">
                           <div className="setup-header">
@@ -1957,10 +2157,10 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                           </div>
                           <div className="setup-state">
                             <div>
-                              <Badge state={selected.state} safe={safe} large />
+                              <Badge state={selected.state} safe={safe} marketOpen={data.market.is_open} large />
                               <p>
                                 {livePlanPaused
-                                  ? "Research inputs are incomplete; no trade plan is available."
+                                  ? "Live price found. Waiting for the company evidence needed to build a trade plan."
                                   : safe
                                   ? stateInfo[selected.state]?.short
                                   : "Fresh market data is needed before a next step."}
@@ -1995,7 +2195,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                             <MapPin size={18} />
                             <p>
                               {livePlanPaused
-                                ? "Available prices and news are real observations. They do not yet establish all the inputs required for a live trade plan."
+                                ? "We have a live price and current news, but not enough verified company data to calculate a live trade plan yet."
                                 : safe
                                 ? selected.explanation
                                 : "This is the last received price. Actionable labels and the trade plan are paused until the data is current."}
@@ -2020,18 +2220,32 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                               />
                             </div>
                           )}
-                          {safe && selected.plan ? (
-                            <PriceMap stock={selected} />
+                          {selected.plan ? (
+                            <>
+                              <PriceMap stock={selected} />
+                              {!safe && <div className="plan-freshness-note"><Clock3 size={16} /> Research plan shown for context. Wait for a current Alpaca quote and compare Trading 212 before acting.</div>}
+                            </>
                           ) : (
                             <div className="no-plan">
                               <ShieldCheck size={20} />
-                              <span>
-                                {livePlanPaused
-                                  ? "Live trade plans are paused while required research inputs are missing."
-                                  : safe
-                                  ? "No qualifying trade plan. Sitting this one out is a valid outcome."
-                                  : "The price plan will return with fresh data."}
-                              </span>
+                              <div>
+                                <span>
+                                  {livePlanPaused
+                                    ? "No live trade plan yet. We’ll show the entry, profit area, and reconsider level when the required evidence is verified."
+                                    : safe
+                                    ? "No qualifying trade plan. Sitting this one out is a valid outcome."
+                                    : "The price plan will return with fresh data."}
+                                </span>
+                                {livePlanPaused && selected.research?.missing_reasons?.length ? (
+                                  <details className="plan-gap">
+                                    <summary>Why the plan is paused</summary>
+                                    <p>These are evidence gaps, not failed API connections. The configured feeds are current, but free public data does not provide every input required for a responsible plan.</p>
+                                    <ul>
+                                      {selected.research.missing_reasons.slice(0, 8).map((reason: string, index: number) => <li key={index}>{reason}</li>)}
+                                    </ul>
+                                  </details>
+                                ) : null}
+                              </div>
                             </div>
                           )}
                           <div className="chart-heading">
@@ -2041,7 +2255,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                               {selected.freshness.feed}
                             </div>
                           </div>
-                          <Chart stock={selected} safe={safe} />
+                          <Chart stock={selected} safe={safe} projection={selected.projection} />
                           <div className="chart-footer">
                             <span>
                               {selected.price_basis === "completed_close" ? "Completed-session historical closes" : "Supplied historical closes + latest quote"}
@@ -2195,6 +2409,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                                 <Badge
                                   state={stock.state}
                                   safe={stockSafe(stock)}
+                                  marketOpen={data.market.is_open}
                                 />
                               </div>
                             </button>
