@@ -6,7 +6,13 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ROOT = Path(__file__).resolve().parents[2]
+_FILE_ROOT = Path(__file__).resolve()
+# In the source tree the app lives at services/waypoint/backend/app, while
+# the Docker image copies that package to /app/app. Resolve the data/config
+# root from the layout that actually exists so mounted datasets and the model
+# registry are available in both environments.
+_CONTAINER_ROOT = _FILE_ROOT.parents[1]
+ROOT = _CONTAINER_ROOT if (_CONTAINER_ROOT / "data").exists() else _FILE_ROOT.parents[2]
 
 
 class Config(BaseSettings):
