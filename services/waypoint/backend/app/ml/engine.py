@@ -140,8 +140,18 @@ class MLEngine:
         regime_selected = same_regime_by_horizon.get(selected_horizon)
         selected["disagreement"] = disagreement(selected, regime_selected)
         selected["explanation"] = "We found historical situations that looked similar to this one and measured what happened afterward. These are historical projections, not guaranteed future prices."
+        group_projections: dict[str, Any] = {}
+        for group in ("same_stock", "peers", "broad"):
+            group_matches = rank_analogues(point, history, horizon_days=selected_horizon, group=group,
+                                            top_n=config.historical_projection_top_n)
+            group_projection = build_projection(point, group_matches, current_price=float(stock["price"]),
+                                                 horizon_days=selected_horizon)
+            if group_projection:
+                group_projections[group] = group_projection
+        if regime_selected:
+            group_projections["same_regime"] = regime_selected
         result = {"as_of": now.isoformat(), "current_price": float(stock["price"]), "selected_horizon": int(selected_horizon),
-                  "horizons": horizons, "groups": groups, "analogue_count": selected["samples"],
+                  "horizons": horizons, "groups": groups, "group_projections": group_projections, "analogue_count": selected["samples"],
                   "analogue_quality": selected["analogue_quality"], "average_similarity": selected["average_similarity"],
                   "feature_completeness": selected["feature_completeness"], "positive_rate": selected["positive_rate"],
                   "target_first_rate": selected["target_first_rate"], "reconsider_first_rate": selected["reconsider_first_rate"],
