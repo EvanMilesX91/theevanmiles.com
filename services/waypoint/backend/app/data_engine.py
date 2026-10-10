@@ -204,6 +204,16 @@ class DataEngine:
                         self.service.stocks[symbol] = stock
                         if stock['price'] > 0:
                             self.service.prices[symbol] = stock['price']
+                        # Capture the refreshed point-in-time snapshot and
+                        # shadow prediction alongside the deterministic
+                        # analysis. This never changes the state decision;
+                        # it only creates the later evidence record needed to
+                        # evaluate ML against what actually happened.
+                        refresh_now = datetime.now(UTC)
+                        self.service.ml.capture(db, symbol=symbol, stock=stock, now=refresh_now)
+                        prediction = self.service.ml.predict(stock, symbol=symbol, now=refresh_now, db=db)
+                        if prediction is not None and self.service.ml.shadow_mode:
+                            self.service.ml.attach_shadow(db, symbol, prediction, refresh_now)
                         last = db.scalar(select(Analysis).where(Analysis.symbol == symbol, Analysis.mode == 'live')
                                          .order_by(Analysis.id.desc()).limit(1))
                         if not last or accounting.utc(last.created_at).date() < datetime.now(UTC).date():
