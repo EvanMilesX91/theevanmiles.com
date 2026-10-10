@@ -261,23 +261,25 @@ class MLEngine:
             self.last_maintenance = result
             return result
         from .datasets import read_jsonl
-        from .evaluate import walk_forward
+        from .evaluate import promotion_gate, walk_forward
         from .train import train
 
         rows = read_jsonl(str(path))
         report = walk_forward(rows)
+        gate = promotion_gate(report["metrics"])
         model = train(rows)
+        model_record = model.to_dict() | {"validation": report["metrics"], "promotion_gate": gate}
         try:
-            registry = self.registry.register(model.to_dict(), activate=False)
+            registry = self.registry.register(model_record, activate=False)
         except ValueError:
             registry = self.registry.list()
             result = {"status": "candidate_exists", "candidate_version": model.version,
                       "evaluation": report, "registry_models": len(registry.get("models", {})),
-                      "activated": False, "completed_at": datetime.now(UTC).isoformat()}
+                      "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
             self.last_maintenance = result
             return result
         result = {"status": "candidate_ready", "candidate_version": model.version,
                   "evaluation": report, "registry_models": len(registry.get("models", {})),
-                  "activated": False, "completed_at": datetime.now(UTC).isoformat()}
+                  "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
         self.last_maintenance = result
         return result

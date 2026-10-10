@@ -19,6 +19,7 @@ FEATURE_NAMES = (
     "earnings_in_days", "news_count_7d", "news_sentiment_7d", "news_novelty_7d",
     "news_importance_7d", "market_return_20d", "sector_return_20d", "market_volatility_20d",
     "rate_environment", "regime_bull", "regime_bear", "regime_high_vol", "regime_risk_on",
+    "filing_count_90d", "filing_recency_days", "fundamental_freshness_days",
 )
 
 
@@ -54,10 +55,10 @@ def _number(value: Any, as_of: datetime, default: float = 0.0) -> float:
     return result if math.isfinite(result) else default
 
 
-def _history(snapshot: dict[str, Any], as_of: datetime) -> list[tuple[datetime, float, float]]:
+def _history(snapshot: dict[str, Any], as_of: datetime, key: str = "history_rows") -> list[tuple[datetime, float, float]]:
     """Return available (time, close, volume) observations in time order."""
     rows: list[tuple[datetime, float, float]] = []
-    for item in snapshot.get("history_rows", snapshot.get("history", [])):
+    for item in snapshot.get(key, snapshot.get("history", []) if key == "history_rows" else []):
         if isinstance(item, dict):
             timestamp = parse_time(item.get("timestamp") or item.get("time") or item.get("date"))
             close = item.get("close", item.get("price"))
@@ -91,6 +92,8 @@ def build_features(snapshot: dict[str, Any], as_of: datetime | str) -> dict[str,
     if point is None:
         raise ValueError("as_of must be a timezone-aware ISO timestamp")
     rows = _history(snapshot, point)
+    market_rows = _history(snapshot, point, "market_history_rows")
+    sector_rows = _history(snapshot, point, "sector_history_rows")
     closes = [row[1] for row in rows]
     volumes = [row[2] for row in rows if row[2] > 0]
     last = closes[-1] if closes else _number(snapshot.get("price"), point)
@@ -109,9 +112,23 @@ def build_features(snapshot: dict[str, Any], as_of: datetime | str) -> dict[str,
     novelty = sum(_number(item.get("novelty"), point) for item in news) / max(1, len(news))
     importance = sum(_number(item.get("importance"), point) for item in news) / max(1, len(news))
     rate = _number(snapshot.get("rate_environment", metrics.get("rate_environment")), point)
-    market_return = _number(snapshot.get("market_return_20d", metrics.get("market_return_20d")), point)
-    sector_return = _number(snapshot.get("sector_return_20d", metrics.get("sector_return_20d")), point)
-    market_vol = abs(_number(snapshot.get("market_volatility_20d", metrics.get("market_volatility_20d")), point))
+    market_closes = [row[1] for row in market_rows]
+    sector_closes = [row[1] for row in sector_rows]
+    market_return = (_returns(market_closes, 20) if len(market_closes) > 20
+                     else _number(snapshot.get("market_return_20d", metrics.get("market_return_20d")), point))
+    sector_return = (_returns(sector_closes, 20) if len(sector_closes) > 20
+                     else _number(snapshot.get("sector_return_20d", metrics.get("sector_return_20d")), point))
+    market_returns = [(market_closes[index] / market_closes[index - 1] - 1.0)
+                      for index in range(1, len(market_closes)) if market_closes[index - 1] > 0]
+    market_variance = sum((item - (sum(market_returns[-20:]) / max(1, len(market_returns[-20:]))) ) ** 2
+                           for item in market_returns[-20:]) / max(1, len(market_returns[-20:]))
+    market_vol = (math.sqrt(market_variance) * math.sqrt(252) if market_returns
+                  else abs(_number(snapshot.get("market_volatility_20d", metrics.get("market_volatility_20d")), point)))
+    filing_events = [event for event in events if str(event.get("kind", "")).upper() == "SEC_FILING"]
+    latest_filing = max((parse_time(event.get("published_at")) for event in filing_events), default=None)
+    filing_recency = max(0.0, (point - latest_filing).total_seconds() / 86400) if latest_filing else 999.0
+    fundamental_as_of = parse_time(metrics.get("fundamental_available_at") or metrics.get("fundamental_as_of"))
+    fundamental_freshness = max(0.0, (point - fundamental_as_of).total_seconds() / 86400) if fundamental_as_of else 999.0
     result = {
         "return_1d": _returns(closes, 1),
         "return_5d": _returns(closes, 5),
@@ -143,6 +160,11 @@ def build_features(snapshot: dict[str, Any], as_of: datetime | str) -> dict[str,
         "regime_bear": float(market_return < -0.05),
         "regime_high_vol": float(market_vol > 0.25 or math.sqrt(variance) * math.sqrt(252) > 0.4),
         "regime_risk_on": float(market_return > 0 and sector_return > 0 and market_vol < 0.3),
+        "filing_count_90d": float(sum(1 for event in filing_events
+                                       if parse_time(event.get("published_at")) and
+                                       (point - parse_time(event["published_at"])).total_seconds() <= 90 * 86400)),
+        "filing_recency_days": filing_recency,
+        "fundamental_freshness_days": fundamental_freshness,
     }
     return {name: float(result.get(name, 0.0)) if math.isfinite(float(result.get(name, 0.0))) else 0.0 for name in FEATURE_NAMES}
 

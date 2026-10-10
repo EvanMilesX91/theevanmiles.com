@@ -26,6 +26,30 @@ class Friction:
         return 2 * (self.spread_bps + self.slippage_bps + self.fx_cost_bps + self.fees_bps) / 10000
 
 
+def promotion_gate(metrics: dict[str, Any], *, minimum_selected: int = 100) -> dict[str, Any]:
+    """Decide whether a candidate has earned the right to influence decisions.
+
+    The gate is intentionally conservative: a candidate must beat the
+    prevalence-only probability baseline and have positive net return on a
+    sufficiently large selected sample after configured friction.
+    """
+    baseline = metrics.get("baseline_brier_score_5d")
+    brier = metrics.get("brier_score_5d")
+    selected = (metrics.get("signal_thresholds_5d") or {}).get("0.55", {})
+    count = int(selected.get("count") or 0)
+    selected_return = selected.get("mean_net_return_5d")
+    reasons: list[str] = []
+    if baseline is None or brier is None or float(brier) >= float(baseline):
+        reasons.append("probability calibration does not beat the prevalence baseline")
+    if count < minimum_selected:
+        reasons.append(f"fewer than {minimum_selected} selected out-of-sample cases")
+    if selected_return is None or float(selected_return) <= 0:
+        reasons.append("selected signals are not positive after configured costs")
+    return {"eligible": not reasons, "reasons": reasons, "minimum_selected": minimum_selected,
+            "selected_count": count, "selected_mean_net_return_5d": selected_return,
+            "brier_score_5d": brier, "baseline_brier_score_5d": baseline}
+
+
 def _folds(rows: list[PointInTimeSnapshot], minimum_train: int = 8) -> list[tuple[list[PointInTimeSnapshot], list[PointInTimeSnapshot]]]:
     ordered = sorted(rows, key=lambda row: row.as_of)
     if len(ordered) < minimum_train + 1:

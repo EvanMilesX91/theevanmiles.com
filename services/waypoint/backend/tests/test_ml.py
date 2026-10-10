@@ -57,13 +57,15 @@ def test_baseline_training_prediction_and_registry_are_explicit(tmp_path):
 
 
 def test_walk_forward_inputs_never_randomly_mix_time_and_probability_metrics():
-    from app.ml.evaluate import walk_forward
+    from app.ml.evaluate import promotion_gate, walk_forward
 
     result = walk_forward([_row(index) for index in range(24)])
     assert result["method"] == "chronological_walk_forward"
     assert result["folds"] >= 1
     assert 0 <= result["metrics"]["brier_score_5d"] <= 1
     assert result["metrics"]["friction"]["spread_bps"] > 0
+    assert "baseline_brier_score_5d" in result["metrics"]
+    assert promotion_gate(result["metrics"])["eligible"] is False
 
 
 def test_calibration_and_similarity_are_explanatory_not_authoritative():

@@ -11,11 +11,12 @@ import asyncio
 import argparse
 import os
 import tempfile
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from ..providers import MarketDataProvider
+from ..providers import CompanyIdentity, Fundamentals, MarketDataProvider, ProviderError, SECProvider
+from ..live_data import normalize_fundamentals
 from .datasets import PointInTimeSnapshot, make_snapshot, write_jsonl
 
 
@@ -25,8 +26,28 @@ def _bar_dict(bar: Any) -> dict[str, Any]:
     return dict(bar)
 
 
+SECTOR_PROXY = {
+    "AMD": "SOXX", "AVGO": "SOXX", "NVDA": "SOXX", "TSM": "SOXX",
+    "JPM": "XLF", "HOOD": "XLF", "COIN": "XLF", "SOFI": "XLF",
+    "XOM": "XLE", "CVX": "XLE", "BA": "XLI", "GE": "XLI", "RKLB": "XLI",
+    "LLY": "XLV", "AMZN": "XLY", "TSLA": "XLY", "COST": "XLP", "WMT": "XLP",
+}
+
+
+def _available_at(fundamentals: Fundamentals, as_of: datetime) -> str | None:
+    facts = [fact for fact in fundamentals.facts
+             if fact.filed_on < as_of.date() and fact.period_end <= as_of.date()]
+    if not facts:
+        return None
+    # Filing dates are date-only in EDGAR. Make availability conservative by
+    # using the following UTC day rather than assuming a filing was visible at
+    # that day's market open.
+    return datetime.combine(max(f.filed_on for f in facts) + timedelta(days=1), datetime.min.time(), UTC).isoformat()
+
+
 def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
-                     target_pct: float, reconsider_pct: float) -> PointInTimeSnapshot | None:
+                     target_pct: float, reconsider_pct: float,
+                     context: dict[str, Any] | None = None) -> PointInTimeSnapshot | None:
     bar = bars[index]
     price = float(bar["close"])
     if price <= 0:
@@ -36,8 +57,11 @@ def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
     snapshot = {
         "price": price,
         "history_rows": history_rows,
-        "projection_metadata": {"source": "alpaca_daily_bars", "bar_timestamp": bar["timestamp"]},
+        "projection_metadata": {"source": "alpaca_daily_bars", "bar_timestamp": bar["timestamp"],
+                                "target_pct": target_pct, "reconsider_pct": reconsider_pct},
     }
+    if context:
+        snapshot.update({key: value for key, value in context.items() if value})
     # A fixed, versioned barrier definition makes labels comparable across runs.
     return make_snapshot(snapshot, symbol=symbol, as_of=as_of, bars=bars,
                          target=price * (1 + target_pct),
@@ -45,8 +69,9 @@ def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
 
 
 async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, years: int = 5,
-                        stride_days: int = 5, target_pct: float = 0.15,
-                        reconsider_pct: float = 0.08) -> list[PointInTimeSnapshot]:
+                        stride_days: int = 5, target_pct: float = 0.08,
+                        reconsider_pct: float = 0.05,
+                        sec: SECProvider | None = None) -> list[PointInTimeSnapshot]:
     if not symbols:
         raise ValueError("At least one symbol is required")
     if years < 1 or stride_days < 1 or not 0 < target_pct < 1 or not 0 < reconsider_pct < 1:
@@ -54,6 +79,21 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
     end = datetime.now(UTC)
     start = end - timedelta(days=365 * years + 90)
     rows: list[PointInTimeSnapshot] = []
+    proxy_symbols = {"SPY", "QQQ"} | {SECTOR_PROXY.get(symbol, "SPY") for symbol in symbols}
+    proxy_bars: dict[str, list[dict[str, Any]]] = {}
+    for proxy in sorted(proxy_symbols):
+        try:
+            proxy_bars[proxy] = [_bar_dict(item) for item in await provider.historical_bars(proxy, start, end, timeframe="1Day")]
+        except (ProviderError, ValueError):
+            proxy_bars[proxy] = []
+    fundamental_cache: dict[str, tuple[CompanyIdentity, Fundamentals] | None] = {}
+    if sec is not None:
+        for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()):
+            try:
+                identity = await sec.resolve_company(symbol)
+                fundamental_cache[symbol] = (identity, await sec.fundamentals(identity.cik))
+            except (ProviderError, ValueError):
+                fundamental_cache[symbol] = None
     for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()):
         bars = [_bar_dict(item) for item in await provider.historical_bars(symbol, start, end, timeframe="1Day")]
         bars.sort(key=lambda item: str(item.get("timestamp", "")))
@@ -61,7 +101,33 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
         # train/test leak from incomplete labels at the end of the range.
         last_usable = max(0, len(bars) - 61)
         for index in range(60, last_usable + 1, stride_days):
-            row = _snapshot_record(symbol, bars, index, target_pct=target_pct, reconsider_pct=reconsider_pct)
+            bar_timestamp = datetime.fromisoformat(str(bars[index]["timestamp"]).replace("Z", "+00:00")).astimezone(UTC)
+            proxy = SECTOR_PROXY.get(symbol, "SPY")
+            facts = fundamental_cache.get(symbol)
+            metrics: dict[str, Any] = {}
+            events: list[dict[str, Any]] = []
+            if facts:
+                identity, fundamentals = facts
+                normalized = normalize_fundamentals(fundamentals, identity, bar_timestamp)
+                metrics = dict(normalized.get("metrics", {}))
+                available_at = _available_at(fundamentals, bar_timestamp)
+                if available_at:
+                    metrics["fundamental_available_at"] = available_at
+                seen_filings: set[tuple[str, str]] = set()
+                for fact in fundamentals.facts:
+                    available = datetime.combine(fact.filed_on + timedelta(days=1), datetime.min.time(), UTC)
+                    filing_key = (fact.accession, fact.form)
+                    if (bar_timestamp - timedelta(days=90)) <= available <= bar_timestamp and filing_key not in seen_filings:
+                        seen_filings.add(filing_key)
+                        events.append({"kind": "SEC_FILING", "form": fact.form,
+                                       "published_at": available.isoformat(), "date": fact.filed_on.isoformat()})
+            context = {
+                "market_history_rows": [item for item in proxy_bars.get("SPY", []) if str(item.get("timestamp", "")) <= str(bars[index]["timestamp"])],
+                "sector_history_rows": [item for item in proxy_bars.get(proxy, proxy_bars.get("QQQ", [])) if str(item.get("timestamp", "")) <= str(bars[index]["timestamp"])],
+                "metrics": metrics,
+                "events": events,
+            }
+            row = _snapshot_record(symbol, bars, index, target_pct=target_pct, reconsider_pct=reconsider_pct, context=context)
             if row is not None:
                 rows.append(row)
     return sorted(rows, key=lambda row: (row.as_of, row.symbol))
@@ -91,15 +157,22 @@ async def _cli(args: argparse.Namespace) -> None:
     from ..providers import AlpacaMarketDataProvider
 
     provider = AlpacaMarketDataProvider(api_key=config.apca_api_key_id, secret_key=config.apca_api_secret_key)
+    sec = None
+    try:
+        sec = SECProvider(user_agent=config.sec_user_agent)
+    except ProviderError:
+        pass
     try:
         path = Path(config.ml_dataset_path)
         if not path.is_absolute():
             path = ROOT / path
         result = await ingest_to_path(provider, args.symbols.split(","), path,
                                       years=args.years, stride_days=args.stride_days,
-                                      target_pct=args.target_pct, reconsider_pct=args.reconsider_pct)
+                                      target_pct=args.target_pct, reconsider_pct=args.reconsider_pct, sec=sec)
         print(result)
     finally:
+        if sec:
+            await sec.aclose()
         await provider.aclose()
 
 
@@ -108,8 +181,8 @@ if __name__ == "__main__":
     parser.add_argument("--symbols", default="", help="Comma-separated symbols; defaults to the core, scan and discovery universes")
     parser.add_argument("--years", type=int, default=5)
     parser.add_argument("--stride-days", type=int, default=5)
-    parser.add_argument("--target-pct", type=float, default=0.15)
-    parser.add_argument("--reconsider-pct", type=float, default=0.08)
+    parser.add_argument("--target-pct", type=float, default=0.08)
+    parser.add_argument("--reconsider-pct", type=float, default=0.05)
     arguments = parser.parse_args()
     if not arguments.symbols:
         from ..config import config

@@ -342,6 +342,7 @@ async def ml_train(activate: bool = False) -> dict[str, Any]:
     if not config.ml_enabled:
         raise HTTPException(409, "ML is disabled. Set ML_ENABLED=true for offline training.")
     from .ml.datasets import read_jsonl
+    from .ml.evaluate import promotion_gate, walk_forward
     from .ml.train import train
 
     path = config.ml_dataset_path
@@ -349,11 +350,17 @@ async def ml_train(activate: bool = False) -> dict[str, Any]:
         path = str(ROOT / path)
     try:
         rows = read_jsonl(path)
+        evaluation = walk_forward(rows)
         model = train(rows)
     except (OSError, ValueError) as error:
         raise HTTPException(409, str(error)) from None
-    registry = service.ml.registry.register(model.to_dict(), activate=activate)
-    return {"status": "trained", "activated": activate, "model": model.to_dict(), "registry": registry}
+    gate = promotion_gate(evaluation["metrics"])
+    activated = bool(activate and gate["eligible"])
+    model_record = model.to_dict() | {"validation": evaluation["metrics"], "promotion_gate": gate}
+    registry = service.ml.registry.register(model_record, activate=activated)
+    return {"status": "trained", "activated": activated, "requested_activation": activate,
+            "promotion_gate": gate, "evaluation": evaluation["metrics"],
+            "model": model_record, "registry": registry}
 
 
 @app.get("/api/ml/evaluate")
@@ -378,15 +385,26 @@ async def ml_ingest(symbols: str | None = None, years: int | None = None, stride
     if service.provider is None:
         raise HTTPException(409, "Alpaca market data is not connected; run this job in live mode with valid keys.")
     from .ml.ingest import ingest_to_path
+    from .providers import ProviderError, SECProvider
     path = Path(config.ml_dataset_path)
     if not path.is_absolute():
         path = ROOT / path
     selected = [item.strip().upper() for item in (symbols or ",".join(filter(None, (config.live_symbols, config.scan_symbols, config.discovery_symbols)))).split(",") if item.strip()]
+    sec = None
     try:
+        try:
+            sec = SECProvider(user_agent=config.sec_user_agent, cache=service.provider_cache,
+                              checkpoint=service.usage_checkpoint)
+        except ProviderError:
+            pass
         return await ingest_to_path(service.provider, selected, path, years=years or config.ml_ingest_years,
-                                    stride_days=stride_days or config.ml_ingest_stride_days)
+                                    stride_days=stride_days or config.ml_ingest_stride_days,
+                                    sec=sec)
     except (OSError, ValueError, RuntimeError) as error:
         raise HTTPException(409, str(error)) from None
+    finally:
+        if sec:
+            await sec.aclose()
 
 
 @app.post("/api/ml/maintenance")
