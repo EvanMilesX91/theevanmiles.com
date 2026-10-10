@@ -33,6 +33,7 @@ class MLEngine:
         self.history: list[PointInTimeSnapshot] = []
         self.projection_history: list[PointInTimeSnapshot] = []
         self._projection_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._history_cache: tuple[str, float, list[PointInTimeSnapshot]] | None = None
         self.last_maintenance: dict[str, Any] = {}
 
     def status(self) -> dict[str, Any]:
@@ -81,6 +82,12 @@ class MLEngine:
         rows: list[PointInTimeSnapshot] = []
         path = Path(config.ml_dataset_path)
         path = path if path.is_absolute() else ROOT / path
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            modified = -1.0
+        if self._history_cache and self._history_cache[0] == str(path) and self._history_cache[1] == modified:
+            return self._history_cache[2]
         if path.exists():
             try:
                 rows.extend(read_jsonl(str(path)))
@@ -103,6 +110,7 @@ class MLEngine:
             # Keep the most recent point-in-time cases for responsive live
             # projections; the complete JSONL remains the training source.
             ordered = ordered[-config.historical_projection_runtime_rows:]
+        self._history_cache = (str(path), modified, ordered)
         return ordered
 
     def project(self, stock: dict[str, Any], *, symbol: str, now: datetime, db: Session) -> dict[str, Any] | None:
