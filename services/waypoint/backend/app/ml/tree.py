@@ -1,13 +1,21 @@
-"""Optional tree backend discovery.
+"""Optional tree challengers.
 
-The installed baseline needs no third-party ML package. If a deployment adds
-LightGBM, XGBoost, or CatBoost, training jobs can select it explicitly rather
-than silently changing the production model family.
+Tree models are evaluated as candidates only. They do not replace the
+serializable baseline or influence live decisions until the promotion gate
+has passed.
 """
 
 from __future__ import annotations
 
 import importlib.util
+from typing import Any
+
+import numpy as np
+
+from .calibration import brier_score, calibrate, fit_platt
+from .datasets import PointInTimeSnapshot
+from .evaluate import Friction, _folds
+from .train import _label, _matrix
 
 
 TREE_BACKENDS = ("lightgbm", "xgboost", "catboost")
@@ -23,3 +31,66 @@ def require_backend(name: str) -> str:
     if name not in available_backends():
         raise RuntimeError(f"{name} is not installed; baseline logistic/linear training remains available.")
     return name
+
+
+def walk_forward_xgboost(rows: list[PointInTimeSnapshot], *, friction: Friction | None = None) -> dict[str, Any]:
+    """Evaluate an XGBoost probability challenger chronologically.
+
+    The model is deliberately kept in this offline evaluator rather than the
+    live inference path until its serialized registry contract is approved.
+    """
+    require_backend("xgboost")
+    import xgboost as xgb
+
+    friction = friction or Friction()
+    folds = _folds(rows)
+    predictions: list[dict[str, Any]] = []
+    for training_rows, validation_rows in folds:
+        train_rows = [row for row in training_rows if _label(row, "probability_positive_5d") is not None]
+        valid_rows = [row for row in validation_rows if _label(row, "probability_positive_5d") is not None]
+        if len(train_rows) < 20 or not valid_rows:
+            continue
+        x_train = _matrix(train_rows)
+        y_train = np.asarray([_label(row, "probability_positive_5d") for row in train_rows], dtype=int)
+        model = xgb.train({
+            "objective": "binary:logistic", "eval_metric": "logloss", "tree_method": "hist",
+            "max_depth": 3, "eta": 0.04, "min_child_weight": 20, "subsample": 0.8,
+            "colsample_bytree": 0.8, "lambda": 10.0, "alpha": 0.1, "nthread": 1,
+            "seed": 7,
+        }, xgb.DMatrix(x_train, label=y_train), num_boost_round=240)
+        train_raw = model.predict(xgb.DMatrix(x_train))
+        calibration = fit_platt(train_raw.tolist(), y_train.tolist()) | {
+            "prior": float(np.mean(y_train)), "shrinkage": 0.75,
+        }
+        for row in valid_rows:
+            raw = float(model.predict(xgb.DMatrix(_matrix([row])))[0])
+            predictions.append({
+                "probability_positive_5d": calibrate(raw, calibration),
+                "actual": row.labels,
+                "regime": row.regime,
+                "as_of": row.as_of,
+            })
+    probabilities = [float(item["probability_positive_5d"]) for item in predictions]
+    outcomes = [int(float(item["actual"]["return_5d"]) > 0) for item in predictions]
+    baseline = float(np.mean(outcomes)) if outcomes else None
+    baseline_brier = ((baseline - 1) ** 2 * sum(outcomes) + baseline ** 2 * (len(outcomes) - sum(outcomes))) / len(outcomes) if outcomes and baseline is not None else None
+    thresholds: dict[str, dict[str, Any]] = {}
+    for threshold in (0.55, 0.60, 0.65):
+        selected = [item for item in predictions if item["probability_positive_5d"] >= threshold]
+        returns = [float(item["actual"]["return_5d"]) - friction.round_trip for item in selected]
+        thresholds[str(threshold)] = {
+            "count": len(selected), "selection_rate": len(selected) / len(predictions) if predictions else 0.0,
+            "win_rate": sum(float(item["actual"]["return_5d"]) > 0 for item in selected) / len(selected) if selected else None,
+            "mean_net_return_5d": float(np.mean(returns)) if returns else None,
+        }
+    return {
+        "method": "chronological_walk_forward_xgboost", "folds": len(folds),
+        "predictions": len(predictions),
+        "metrics": {
+            "brier_score_5d": brier_score(probabilities, outcomes) if outcomes else None,
+            "baseline_probability_5d": baseline, "baseline_brier_score_5d": baseline_brier,
+            "signal_thresholds_5d": thresholds, "friction": friction.__dict__,
+        },
+        "hyperparameters": {"n_estimators": 240, "max_depth": 3, "learning_rate": 0.04,
+                             "min_child_weight": 20, "reg_lambda": 10.0, "reg_alpha": 0.1},
+    }

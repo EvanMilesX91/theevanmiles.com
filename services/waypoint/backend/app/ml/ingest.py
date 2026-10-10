@@ -11,6 +11,7 @@ import asyncio
 import argparse
 import os
 import tempfile
+import re
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,21 @@ SECTOR_PROXY = {
     "XOM": "XLE", "CVX": "XLE", "BA": "XLI", "GE": "XLI", "RKLB": "XLI",
     "LLY": "XLV", "AMZN": "XLY", "TSLA": "XLY", "COST": "XLP", "WMT": "XLP",
 }
+POSITIVE_NEWS = {"beat", "beats", "growth", "approval", "contract", "award", "upgrade", "profit", "surge", "record"}
+NEGATIVE_NEWS = {"miss", "misses", "decline", "lawsuit", "offering", "downgrade", "loss", "cut", "probe", "recall"}
+IMPORTANT_NEWS = {"earnings", "guidance", "approval", "contract", "offering", "lawsuit", "bankruptcy", "recall"}
+
+
+def _news_context(item: Any) -> dict[str, Any]:
+    title = str(getattr(item, "title", "") or (item.get("title", "") if isinstance(item, dict) else ""))
+    published = getattr(item, "published_at", None) or (item.get("published_at") if isinstance(item, dict) else None)
+    words = set(re.findall(r"[a-z]+", title.lower()))
+    positive = len(words & POSITIVE_NEWS)
+    negative = len(words & NEGATIVE_NEWS)
+    sentiment = (positive - negative) / max(1, positive + negative)
+    return {"title": title[:500], "published_at": published.isoformat() if hasattr(published, "isoformat") else str(published),
+            "sentiment": float(sentiment), "novelty": 1.0,
+            "importance": 1.0 if words & IMPORTANT_NEWS else 0.25}
 
 
 def _available_at(fundamentals: Fundamentals, as_of: datetime) -> str | None:
@@ -87,6 +103,14 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
         except (ProviderError, ValueError):
             proxy_bars[proxy] = []
     fundamental_cache: dict[str, tuple[CompanyIdentity, Fundamentals] | None] = {}
+    news_cache: dict[str, list[dict[str, Any]]] = {}
+    news_provider = getattr(provider, "news", None)
+    if callable(news_provider):
+        for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()):
+            try:
+                news_cache[symbol] = [_news_context(item) for item in await news_provider([symbol], start)]
+            except (ProviderError, ValueError):
+                news_cache[symbol] = []
     if sec is not None:
         for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()):
             try:
@@ -126,6 +150,9 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
                 "sector_history_rows": [item for item in proxy_bars.get(proxy, proxy_bars.get("QQQ", [])) if str(item.get("timestamp", "")) <= str(bars[index]["timestamp"])],
                 "metrics": metrics,
                 "events": events,
+                "news": [item for item in news_cache.get(symbol, [])
+                         if item.get("published_at") and
+                         bar_timestamp - timedelta(days=7) <= datetime.fromisoformat(str(item["published_at"]).replace("Z", "+00:00")) <= bar_timestamp],
             }
             row = _snapshot_record(symbol, bars, index, target_pct=target_pct, reconsider_pct=reconsider_pct, context=context)
             if row is not None:

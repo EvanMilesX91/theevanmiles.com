@@ -88,6 +88,30 @@ Training uses chronological walk-forward folds. It never randomly mixes future
 rows into training. Evaluation reports Brier score, reliability bins, regime
 breakdowns and mean net return after spread, slippage, FX cost and fees.
 
+### Historical news coverage
+
+The ingestion job has an optional, deterministic news feature lane. It stores
+headline timestamp, simple keyword sentiment, novelty and importance only when
+the headline was published inside the seven-day window ending at the snapshot;
+`features.py` applies the same timestamp filter again when materializing the
+vector. No current headline is copied backward into history. The free Alpaca
+news endpoint is a bounded recent feed rather than a complete five-year archive,
+so missing coverage remains neutral and should reduce confidence. A complete
+point-in-time news backtest requires an archive with historical availability
+timestamps; the current feed is not enough to claim that result.
+
+### Tree challengers
+
+`app/ml/tree.py` contains an offline XGBoost challenger. It uses the same
+chronological folds, labels and transaction-cost assumptions as the baseline,
+then calibrates probabilities on each training fold. XGBoost is intentionally
+not installed in the always-on runtime image: its optional dependency is large
+and a challenger should not silently change production behavior. A challenger
+must beat the prevalence Brier baseline, produce enough selected cases, and
+show positive net return after costs before it can even be considered for the
+existing promotion gate. Until then the deterministic engine and the current
+registered baseline remain the only decision inputs.
+
 ## Explainability and monitoring
 
 The dashboard only shows a compact model outlook: positive-return probability,
