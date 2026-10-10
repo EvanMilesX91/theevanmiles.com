@@ -98,7 +98,12 @@ class MLEngine:
             except (KeyError, TypeError, ValueError):
                 continue
         unique = {(item.symbol, item.as_of): item for item in rows}
-        return sorted(unique.values(), key=lambda item: item.as_of)
+        ordered = sorted(unique.values(), key=lambda item: item.as_of)
+        if len(ordered) > config.historical_projection_runtime_rows:
+            # Keep the most recent point-in-time cases for responsive live
+            # projections; the complete JSONL remains the training source.
+            ordered = ordered[-config.historical_projection_runtime_rows:]
+        return ordered
 
     def project(self, stock: dict[str, Any], *, symbol: str, now: datetime, db: Session) -> dict[str, Any] | None:
         """Return historical outcome ranges, or None when labelled analogues are unavailable."""
