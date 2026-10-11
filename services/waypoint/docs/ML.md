@@ -116,6 +116,20 @@ the current dashboard cache. SEC filing events are also written to
 a discovery-only lane with explicit start/end times; it never becomes verified
 issuer evidence and cannot change the deterministic decision by itself.
 
+Codex can also curate historical articles and primary announcements, but web
+research is not a complete or continuously running news feed. Save reviewed
+records as JSONL and import them explicitly:
+
+```powershell
+python -m app.codex_research --input data/codex_research.jsonl
+```
+
+Each record must include `symbol`, `title`, `url`, and `published_at`. Supply
+`available_at` when the source provides a reliable earliest-known timestamp.
+Imported records are labelled `provider=codex`, `source_tier=research`, and
+remain unverified until reviewed. They must not enter point-in-time training
+unless `available_at` is no later than the snapshot timestamp.
+
 ### Tree challengers
 
 `app/ml/tree.py` contains an offline XGBoost challenger. It uses the same

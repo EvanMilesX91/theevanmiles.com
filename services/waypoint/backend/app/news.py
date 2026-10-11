@@ -39,6 +39,9 @@ SOURCE_TIERS = {
     "alpaca": ("verified", True),
     "alpha_vantage": ("verified", True),
     "gdelt": ("discovery", False),
+    # Codex-curated records are useful research evidence, but remain
+    # unverified until the source and point-in-time availability are checked.
+    "codex": ("research", False),
 }
 
 
@@ -107,6 +110,45 @@ def candidates_from_filings(research: dict[str, Any], now: datetime) -> list[dic
             rows.append(_candidate(provider="sec", symbol=symbol, title=title, url=url,
                                    published_at=filed, first_seen_at=now,
                                    data={"form": filing.get("form"), "accession": filing.get("accession")}))
+    return rows
+
+
+def candidates_from_codex(records: Iterable[dict[str, Any]], now: datetime | None = None) -> list[dict[str, Any]]:
+    """Normalize Codex-researched historical news into immutable observations.
+
+    Records must carry a source URL and a publication date. ``available_at``
+    is deliberately explicit: it is the earliest time the item could have
+    been known to the engine, which prevents a page retrieved today from
+    silently becoming historical training data.
+    """
+    observed = (now or datetime.now(UTC)).astimezone(UTC)
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        symbol = str(record.get("symbol", "")).strip().upper()
+        title = str(record.get("title", "")).strip()
+        url = str(record.get("url", "")).strip()
+        published = record.get("published_at") or record.get("event_date")
+        if not symbol or not title or not url.startswith("https://") or not published:
+            continue
+        first_seen = _utc(record.get("retrieved_at"), observed)
+        available = _utc(record.get("available_at") or published, first_seen)
+        # Availability cannot be later than retrieval, but it may be earlier
+        # when the source gives a reliable publication timestamp.
+        available = min(available, first_seen)
+        row = _candidate(provider="codex", symbol=symbol, title=title, url=url,
+                         published_at=published, first_seen_at=first_seen,
+                         data={
+                             "source_type": "codex_web_research",
+                             "review_status": str(record.get("review_status", "needs_review")),
+                             "source_name": str(record.get("source_name", "")),
+                             "availability_basis": str(record.get("availability_basis", "published_at")),
+                             "summary": str(record.get("summary", ""))[:2000],
+                             "original": record,
+                         })
+        row["available_at"] = available
+        rows.append(row)
     return rows
 
 
