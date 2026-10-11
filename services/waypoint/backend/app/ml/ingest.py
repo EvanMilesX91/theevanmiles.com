@@ -152,6 +152,22 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
                         seen_filings.add(filing_key)
                         events.append({"kind": "SEC_FILING", "form": fact.form,
                                        "published_at": available.isoformat(), "date": fact.filed_on.isoformat()})
+            filing_news = [
+                {
+                    "title": f"SEC {event.get('form', 'filing')} filing",
+                    "published_at": event["published_at"],
+                    "sentiment": 0.0,
+                    "novelty": 1.0,
+                    "importance": 1.0,
+                    "source_tier": "primary",
+                }
+                for event in events
+                if event.get("kind") == "SEC_FILING"
+                and event.get("published_at")
+                and bar_timestamp - timedelta(days=7) <= datetime.fromisoformat(
+                    str(event["published_at"]).replace("Z", "+00:00")
+                ) <= bar_timestamp
+            ]
             context = {
                 "market_history_rows": [item for item in proxy_bars.get("SPY", []) if str(item.get("timestamp", "")) <= str(bars[index]["timestamp"])],
                 "sector_history_rows": [item for item in proxy_bars.get(proxy, proxy_bars.get("QQQ", [])) if str(item.get("timestamp", "")) <= str(bars[index]["timestamp"])],
@@ -159,7 +175,7 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
                 "events": events,
                 "news": [item for item in news_cache.get(symbol, [])
                          if item.get("published_at") and
-                         bar_timestamp - timedelta(days=7) <= datetime.fromisoformat(str(item["published_at"]).replace("Z", "+00:00")) <= bar_timestamp],
+                         bar_timestamp - timedelta(days=7) <= datetime.fromisoformat(str(item["published_at"]).replace("Z", "+00:00")) <= bar_timestamp] + filing_news,
             }
             row = _snapshot_record(symbol, bars, index, target_pct=target_pct, reconsider_pct=reconsider_pct, context=context)
             if row is not None:
