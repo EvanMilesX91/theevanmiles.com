@@ -107,6 +107,15 @@ so missing coverage remains neutral and should reduce confidence. A complete
 point-in-time news backtest requires an archive with historical availability
 timestamps; the current feed is not enough to claim that result.
 
+The live worker now keeps a separate SEC archive in
+`fundamental_observations`. It stores the raw fact, accession, reporting
+period, filing date and a conservative next-day `available_at` timestamp, so
+historical research can be rebuilt from the database rather than depending on
+the current dashboard cache. SEC filing events are also written to
+`news_articles` as primary evidence. GDELT collection is enabled by default as
+a discovery-only lane with explicit start/end times; it never becomes verified
+issuer evidence and cannot change the deterministic decision by itself.
+
 ### Tree challengers
 
 `app/ml/tree.py` contains an offline XGBoost challenger. It uses the same

@@ -44,8 +44,11 @@ class Config(BaseSettings):
     alpha_vantage_daily_limit: int = Field(default=25, ge=1, le=25)
     # GDELT is a broad discovery feed; it is stored as unverified evidence and
     # never treated as proof that an issuer made an announcement.
-    news_gdelt_enabled: bool = False
+    # GDELT is discovery-only and cannot influence deterministic decisions;
+    # enable collection by default so the archive grows without extra setup.
+    news_gdelt_enabled: bool = True
     news_collection_interval_minutes: int = Field(default=60, ge=15, le=1440)
+    sec_archive_interval_hours: int = Field(default=24, ge=1, le=168)
     morning_refresh_hour: int = Field(default=9, ge=0, le=23)
     # ML is optional, offline-first, and shadow-only until explicitly enabled.
     ml_enabled: bool = False

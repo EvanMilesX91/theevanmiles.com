@@ -1,0 +1,145 @@
+"""Daily SEC archive worker for point-in-time fundamentals and filing events."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+from collections.abc import Callable
+from datetime import UTC, datetime, time, timedelta
+from typing import Any
+
+from sqlalchemy import select
+
+from .config import config
+from .models import FundamentalObservation
+from .news import candidates_from_filings, persist_candidates
+from .providers import SECProvider
+
+
+def _fingerprint(symbol: str, fact: Any) -> str:
+    values = (
+        symbol.upper(), str(fact.concept), str(fact.value), str(fact.unit),
+        str(fact.period_start), str(fact.period_end), str(fact.filed_on),
+        str(fact.accession), str(fact.form),
+    )
+    return hashlib.sha256("|".join(values).encode("utf-8")).hexdigest()
+
+
+def _available_at(filed_on: Any) -> datetime:
+    # EDGAR exposes a date for some facts. Treat the next UTC day as the first
+    # safe availability time rather than assuming the filing was known at the
+    # market open on its filing date.
+    return datetime.combine(filed_on + timedelta(days=1), time.min, UTC)
+
+
+class SECArchiveCollector:
+    def __init__(self, service: Any, sessions: Callable[[], Any], checkpoint: Callable[[], None] | None = None):
+        self.service = service
+        self.sessions = sessions
+        self.checkpoint = checkpoint
+        self.interval_seconds = config.sec_archive_interval_hours * 3600
+
+    def symbols(self) -> list[str]:
+        configured = [
+            raw.strip().upper()
+            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+            if raw.strip()
+        ]
+        return list(dict.fromkeys(configured + list(self.service.stocks)))
+
+    def _persist(self, facts: list[dict[str, Any]], filings: dict[str, dict[str, Any]], now: datetime) -> int:
+        with self.sessions() as db:
+            inserted = 0
+            fingerprints = [row["fingerprint"] for row in facts]
+            existing: set[str] = set()
+            for offset in range(0, len(fingerprints), 500):
+                chunk = fingerprints[offset:offset + 500]
+                existing.update(db.scalars(select(FundamentalObservation.fingerprint).where(
+                    FundamentalObservation.fingerprint.in_(chunk)
+                )).all())
+            for row in facts:
+                if row["fingerprint"] in existing:
+                    continue
+                db.add(FundamentalObservation(**row))
+                inserted += 1
+            if filings:
+                inserted += persist_candidates(db, candidates_from_filings(filings, now))
+            db.commit()
+            return inserted
+
+    async def collect_once(self, reason: str = "scheduled") -> dict[str, Any]:
+        started = datetime.now(UTC)
+        if not config.sec_user_agent or "@" not in config.sec_user_agent:
+            status = {
+                "sec_archive_last_run": started.isoformat(),
+                "sec_archive_last_error": "SEC_USER_AGENT is not configured with a contact email.",
+                "sec_archive_inserted": 0,
+            }
+            self.service.schedule_status.update(**status)
+            return status
+        symbols = self.symbols()
+        provider = SECProvider(cache=self.service.provider_cache, checkpoint=self.checkpoint,
+                               user_agent=config.sec_user_agent)
+        rows: list[dict[str, Any]] = []
+        filing_research: dict[str, dict[str, Any]] = {}
+        resolved = 0
+        failures = 0
+        try:
+            for symbol in symbols:
+                try:
+                    identity = await provider.resolve_company(symbol)
+                    fundamentals = await provider.fundamentals(identity.cik)
+                    filing_rows = await provider.filings(identity.cik)
+                    resolved += 1
+                    filing_research[symbol] = {"filings": [item.model_dump(mode="json") for item in filing_rows]}
+                    for fact in fundamentals.facts:
+                        rows.append({
+                            "fingerprint": _fingerprint(symbol, fact),
+                            "symbol": symbol,
+                            "cik": fundamentals.cik,
+                            "concept": fact.concept,
+                            "value": str(fact.value),
+                            "unit": fact.unit,
+                            "period_start": fact.period_start,
+                            "period_end": fact.period_end,
+                            "filed_on": fact.filed_on,
+                            "accession": fact.accession,
+                            "form": fact.form,
+                            "available_at": _available_at(fact.filed_on),
+                            "source_url": fact.source.url,
+                            "retrieved_at": fundamentals.retrieved_at,
+                            "data": fact.model_dump(mode="json"),
+                        })
+                except Exception:
+                    failures += 1
+        finally:
+            await provider.aclose()
+        inserted = await asyncio.to_thread(self._persist, rows, filing_research, started)
+        status = {
+            "sec_archive_last_run": started.isoformat(),
+            "sec_archive_last_success": datetime.now(UTC).isoformat(),
+            "sec_archive_last_reason": reason,
+            "sec_archive_symbols": len(symbols),
+            "sec_archive_resolved": resolved,
+            "sec_archive_failures": failures,
+            "sec_archive_facts": len(rows),
+            "sec_archive_inserted": inserted,
+            "sec_archive_last_error": None,
+        }
+        self.service.schedule_status.update(**status)
+        if self.service.data_engine:
+            self.service.data_engine.changed = True
+        return status
+
+    async def run(self) -> None:
+        while True:
+            try:
+                await self.collect_once("startup" if not self.service.schedule_status.get("sec_archive_last_success") else "scheduled")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.service.schedule_status.update(
+                    sec_archive_last_error="SEC archive collection failed; existing observations remain available.",
+                    sec_archive_last_error_at=datetime.now(UTC).isoformat(),
+                )
+            await asyncio.sleep(self.interval_seconds)

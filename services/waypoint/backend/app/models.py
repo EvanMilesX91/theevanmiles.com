@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -97,4 +97,26 @@ class NewsArticle(Base):
     sentiment: Mapped[float] = mapped_column(Float, default=0.0)
     importance: Mapped[float] = mapped_column(Float, default=0.0)
     is_major: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class FundamentalObservation(Base):
+    """Immutable SEC fact with the date it became available to the engine."""
+
+    __tablename__ = "fundamental_observations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    symbol: Mapped[str] = mapped_column(String(12), index=True)
+    cik: Mapped[str] = mapped_column(String(10), index=True)
+    concept: Mapped[str] = mapped_column(String(200), index=True)
+    value: Mapped[str] = mapped_column(String(80))
+    unit: Mapped[str] = mapped_column(String(80))
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date] = mapped_column(Date)
+    filed_on: Mapped[date] = mapped_column(Date, index=True)
+    accession: Mapped[str] = mapped_column(String(24), index=True)
+    form: Mapped[str] = mapped_column(String(20))
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    source_url: Mapped[str] = mapped_column(Text)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     data: Mapped[dict[str, Any]] = mapped_column(JSON)

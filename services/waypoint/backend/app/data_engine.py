@@ -35,6 +35,7 @@ class DataEngine:
         self.refresh_lock = asyncio.Lock()
         self.tasks: list[asyncio.Task[Any]] = []
         self.news_collector: Any = None
+        self.sec_archive: Any = None
         self.stream: Any = None
         self.changed = True
         self.promoted: str | None = None
@@ -84,6 +85,9 @@ class DataEngine:
             from .news_worker import NewsCollector
             self.news_collector = NewsCollector(self.service, self.sessions, self.usage_checkpoint)
             self.tasks.append(asyncio.create_task(self.news_collector.run()))
+            from .sec_archive import SECArchiveCollector
+            self.sec_archive = SECArchiveCollector(self.service, self.sessions, self.usage_checkpoint)
+            self.tasks.append(asyncio.create_task(self.sec_archive.run()))
 
     async def stop(self) -> None:
         if self.stream:

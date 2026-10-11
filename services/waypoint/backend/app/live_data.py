@@ -184,6 +184,20 @@ def normalize_fundamentals(
             [income, revenue],
             "Net income / same-duration revenue × 100.",
         )
+        prior_income = [
+            f for f in rows_for(("NetIncomeLoss",))
+            if f.period_start is not None
+            and 350 <= (end - f.period_end).days <= 380
+            and abs((f.period_end - f.period_start).days + 1 - duration) <= 7
+        ]
+        if prior_income and prior_income[0].value != 0:
+            prior = min(prior_income, key=lambda f: abs((end - f.period_end).days - 365))
+            add(
+                "earnings_growth_pct",
+                (income.value / prior.value - 1) * 100,
+                [income, prior],
+                "100 × (same-duration net income / comparable prior-year net income − 1); percentage points.",
+            )
     cashflow = exact(("NetCashProvidedByUsedInOperatingActivities",), start, end)
     capex = exact(("PaymentsToAcquirePropertyPlantAndEquipment",), start, end)
     if cashflow:
@@ -262,9 +276,26 @@ def normalize_fundamentals(
             "Reported diluted weighted-average shares for the displayed duration.",
             True,
         )
-        # Retain observed share comparison as research only. Split consistency
-        # cannot be guaranteed by companyfacts, so no dilution risk score is set.
-        result["missing_reasons"].append("Dilution scoring requires split-consistent share-count comparison.")
+        # Retain observed share comparison as research only. The comparison is
+        # deliberately labeled as a reported-period change; it is not a
+        # split-adjusted forecast.
+        prior_shares = [
+            f for f in rows_for(("WeightedAverageNumberOfDilutedSharesOutstanding",), "shares")
+            if f.period_start is not None
+            and 350 <= (end - f.period_end).days <= 380
+            and abs((f.period_end - f.period_start).days + 1 - duration) <= 7
+            and f.value > 0
+        ]
+        if prior_shares:
+            prior = min(prior_shares, key=lambda f: abs((end - f.period_end).days - 365))
+            add(
+                "dilution_pct",
+                (shares.value / prior.value - 1) * 100,
+                [shares, prior],
+                "100 × (diluted weighted-average shares / comparable prior-year shares − 1).",
+            )
+        else:
+            result["missing_reasons"].append("A comparable prior-year diluted share count is unavailable.")
     eps = exact(("EarningsPerShareDiluted",), start, end, "USD/shares")
     if eps and 350 <= duration <= 380:
         add(

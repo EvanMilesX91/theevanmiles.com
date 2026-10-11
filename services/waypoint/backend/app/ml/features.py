@@ -137,9 +137,25 @@ def build_features(snapshot: dict[str, Any], as_of: datetime | str) -> dict[str,
         "revenue_growth_pct", "earnings_growth_pct", "operating_margin_pct",
         "cash_eur", "debt_eur", "free_cash_flow_eur", "valuation_multiple",
     )
+    # The legacy feature names use the account's EUR display convention, while
+    # SEC company facts are reported in USD. Keep the vector version stable and
+    # explicitly map the observed SEC names rather than silently dropping them.
+    aliases = {
+        "cash_eur": ("cash_eur", "cash_usd"),
+        "debt_eur": ("debt_eur", "total_debt_usd", "debt_usd"),
+        "free_cash_flow_eur": ("free_cash_flow_eur", "free_cash_flow_usd"),
+    }
+    def metric_present(name: str) -> bool:
+        candidates = aliases.get(name, (name,))
+        return any(
+            metrics.get(candidate) is not None
+            and _number(metrics.get(candidate), point, default=float("nan"))
+            == _number(metrics.get(candidate), point, default=float("nan"))
+            for candidate in candidates
+        )
     fundamental_coverage = sum(
         1 for name in fundamental_fields
-        if metrics.get(name) is not None and _number(metrics.get(name), point, default=float("nan")) == _number(metrics.get(name), point, default=float("nan"))
+        if metric_present(name)
     ) / len(fundamental_fields)
     has_news_observation = "news" in snapshot or (isinstance(research, dict) and "news" in research)
     has_event_observation = "events" in snapshot or "next_events" in snapshot
@@ -157,9 +173,9 @@ def build_features(snapshot: dict[str, Any], as_of: datetime | str) -> dict[str,
         "revenue_growth_pct": _number(metrics.get("revenue_growth_pct"), point),
         "earnings_growth_pct": _number(metrics.get("earnings_growth_pct"), point),
         "operating_margin_pct": _number(metrics.get("operating_margin_pct"), point),
-        "cash_eur": _number(metrics.get("cash_eur", metrics.get("cash")), point),
-        "debt_eur": _number(metrics.get("debt_eur", metrics.get("debt")), point),
-        "free_cash_flow_eur": _number(metrics.get("free_cash_flow_eur", metrics.get("free_cash_flow")), point),
+        "cash_eur": _number(metrics.get("cash_eur", metrics.get("cash_usd", metrics.get("cash"))), point),
+        "debt_eur": _number(metrics.get("debt_eur", metrics.get("total_debt_usd", metrics.get("debt"))), point),
+        "free_cash_flow_eur": _number(metrics.get("free_cash_flow_eur", metrics.get("free_cash_flow_usd", metrics.get("free_cash_flow"))), point),
         "dilution_pct": _number(metrics.get("dilution_pct"), point),
         "valuation_multiple": _number(metrics.get("valuation_multiple"), point),
         "earnings_in_days": _number(metrics.get("earnings_in_days"), point),

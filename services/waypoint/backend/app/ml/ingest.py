@@ -134,6 +134,13 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
                 identity, fundamentals = facts
                 normalized = normalize_fundamentals(fundamentals, identity, bar_timestamp)
                 metrics = dict(normalized.get("metrics", {}))
+                raw_metrics = normalized.get("raw_metrics", {})
+                # A historical, point-in-time P/E proxy is computable when the
+                # filing reported annual diluted EPS. It is intentionally left
+                # absent when EPS is zero or unavailable.
+                eps = raw_metrics.get("annual_diluted_eps_usd")
+                if not metrics.get("valuation_multiple") and eps and float(eps) > 0:
+                    metrics["valuation_multiple"] = float(bars[index]["close"]) / float(eps)
                 available_at = _available_at(fundamentals, bar_timestamp)
                 if available_at:
                     metrics["fundamental_available_at"] = available_at

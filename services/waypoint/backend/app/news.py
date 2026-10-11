@@ -119,7 +119,11 @@ async def _gdelt(symbols: list[str], since: datetime, now: datetime) -> list[dic
     if not symbols:
         return []
     terms = " OR ".join(f'"{symbol}"' for symbol in symbols[:30])
-    params = {"query": f"({terms})", "mode": "ArtList", "maxrecords": "250", "format": "json", "sort": "HybridRel"}
+    params = {
+        "query": f"({terms})", "mode": "ArtList", "maxrecords": "250", "format": "json",
+        "sort": "HybridRel", "startdatetime": since.strftime("%Y%m%d%H%M%S"),
+        "enddatetime": now.strftime("%Y%m%d%H%M%S"),
+    }
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
             response = await client.get("https://api.gdeltproject.org/api/v2/doc/doc", params=params)
