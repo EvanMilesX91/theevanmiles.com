@@ -78,8 +78,11 @@ class SECArchiveCollector:
             self.service.schedule_status.update(**status)
             return status
         symbols = self.symbols()
-        provider = SECProvider(cache=self.service.provider_cache, checkpoint=self.checkpoint,
-                               user_agent=config.sec_user_agent)
+        # Raw companyfacts are large and belong in the archive table, not in
+        # the runtime snapshot persisted by the engine. Keep this cache local
+        # to the archive pass so it cannot bloat settings or hold the engine
+        # advisory lock during a snapshot write.
+        provider = SECProvider(cache={}, checkpoint=None, user_agent=config.sec_user_agent)
         rows: list[dict[str, Any]] = []
         filing_research: dict[str, dict[str, Any]] = {}
         resolved = 0
