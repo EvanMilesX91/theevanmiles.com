@@ -196,13 +196,20 @@ async def collect_candidates(*, symbols: Iterable[str], market: Any, alpha: Any 
 
 def persist_candidates(db: Session, rows: Iterable[dict[str, Any]]) -> int:
     """Insert only unseen observations; existing records are immutable."""
-    inserted = 0
-    for row in rows:
-        if db.scalar(select(NewsArticle).where(NewsArticle.fingerprint == row["fingerprint"])):
-            continue
-        db.add(NewsArticle(**row))
-        inserted += 1
-    return inserted
+    pending = list(rows)
+    if not pending:
+        return 0
+    unique: dict[str, dict[str, Any]] = {row["fingerprint"]: row for row in pending}
+    pending = list(unique.values())
+    fingerprints = list(unique)
+    existing: set[str] = set()
+    for offset in range(0, len(fingerprints), 500):
+        chunk = fingerprints[offset:offset + 500]
+        existing.update(db.scalars(select(NewsArticle.fingerprint).where(NewsArticle.fingerprint.in_(chunk))).all())
+    fresh = [row for row in pending if row["fingerprint"] not in existing]
+    if fresh:
+        db.add_all(NewsArticle(**row) for row in fresh)
+    return len(fresh)
 
 
 def recent_articles(db: Session, *, symbol: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
