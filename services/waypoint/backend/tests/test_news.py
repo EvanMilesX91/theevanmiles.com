@@ -30,4 +30,7 @@ def test_news_persistence_is_immutable_and_deduplicated():
         assert persist_candidates(db, [row, row]) == 1
         db.commit()
         assert persist_candidates(db, [{**row, "title": "changed"}]) == 0
-        assert recent_articles(db, symbol="aapl")[0]["title"] == "AAPL contract award"
+        article = recent_articles(db, symbol="aapl")[0]
+        assert article["title"] == "AAPL contract award"
+        assert article["source_tier"] == "discovery"
+        assert article["verified"] is False

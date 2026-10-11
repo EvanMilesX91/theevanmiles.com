@@ -34,6 +34,13 @@ MAJOR_EVENTS = {
     "insider": ("insider", "form 4", "director buys", "director sells"),
 }
 
+SOURCE_TIERS = {
+    "sec": ("primary", True),
+    "alpaca": ("verified", True),
+    "alpha_vantage": ("verified", True),
+    "gdelt": ("discovery", False),
+}
+
 
 def _utc(value: Any, fallback: datetime) -> datetime:
     if isinstance(value, datetime):
@@ -76,9 +83,11 @@ def _candidate(*, provider: str, symbol: str, title: str, url: str,
                published_at: datetime, first_seen_at: datetime, data: dict[str, Any] | None = None) -> dict[str, Any]:
     published = _utc(published_at, first_seen_at)
     details = classify_title(title)
+    source_tier, verified = SOURCE_TIERS.get(provider, ("discovery", False))
     return {
         "fingerprint": fingerprint(provider=provider, symbol=symbol, title=details["title"], url=url, published_at=published),
-        "symbol": symbol.upper(), "provider": provider, "title": details["title"],
+        "symbol": symbol.upper(), "provider": provider, "source_tier": source_tier,
+        "verified": verified, "title": details["title"],
         "url": url if str(url).startswith("https://") else "https://gdeltproject.org/",
         "published_at": published, "first_seen_at": first_seen_at,
         "available_at": first_seen_at, "event_type": details["event_type"],
@@ -198,6 +207,7 @@ def recent_articles(db: Session, *, symbol: str | None = None, limit: int = 100)
         query = query.where(NewsArticle.symbol == symbol.upper())
     return [
         {"symbol": row.symbol, "provider": row.provider, "title": row.title, "url": row.url,
+         "source_tier": row.source_tier, "verified": row.verified,
          "published_at": row.published_at.isoformat(), "first_seen_at": row.first_seen_at.isoformat(),
          "event_type": row.event_type, "sentiment": row.sentiment, "importance": row.importance,
          "is_major": row.is_major, "data": row.data}

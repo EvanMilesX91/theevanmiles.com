@@ -3105,6 +3105,9 @@
 .waypoint-app .observed-news article > a:hover { color: var(--green); text-decoration: underline; }
 .waypoint-app .observed-news article > a svg { display: inline; margin-left: 7px; vertical-align: middle; }
 .waypoint-app .observed-news article > small { display: block; color: var(--muted); font-size: 10px; margin: 7px 0; }
+.waypoint-app .waypoint-news-status { margin: 18px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: rgba(36,130,50,.08); }
+.waypoint-app .waypoint-news-status strong { color: var(--text); font-size: 11px; letter-spacing: .08em; }
+.waypoint-app .waypoint-news-status p, .waypoint-app .waypoint-news-status small { display: block; margin: 6px 0 0; color: var(--muted); line-height: 1.5; }
 .waypoint-app .observed-coverage > div { margin-top: 17px; border-top: 1px solid var(--line); padding-top: 14px; }
 .waypoint-app .observed-coverage > div > p { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
 .waypoint-app .observed-coverage small { display: block; color: var(--muted); font-size: 10px; line-height: 1.7; margin-top: 5px; }

@@ -1968,9 +1968,22 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                 <summary><strong>DATA STATUS</strong> · Alpaca {data.data_status?.stream.status ?? "unavailable"} · HOT {data.data_status?.hot_symbols.length ?? 0} / {data.data_status?.max_hot_symbols ?? 30}</summary>
                 <p><strong>LIVE PRICE FEED: ALPACA IEX</strong> · <strong>EXECUTION CHECK: TRADING 212</strong></p>
                 <p>Prices are real observations. Before acting, compare the live quote and spread in Trading 212.</p>
-                <p>HOT: {data.data_status?.hot_symbols.join(", ") || "Waiting for stream"} · WARM: {data.data_status?.warm_symbols.join(", ") || "None"}</p>
-                {data.data_status?.stream.last_error && <p role="status">{data.data_status.stream.last_error}</p>}
-                <div className="waypoint-provider-grid">
+                 <p>HOT: {data.data_status?.hot_symbols.join(", ") || "Waiting for stream"} · WARM: {data.data_status?.warm_symbols.join(", ") || "None"}</p>
+                 {data.data_status?.stream.last_error && <p role="status">{data.data_status.stream.last_error}</p>}
+                 <div className="waypoint-news-status">
+                   <strong>NEWS EVIDENCE COLLECTOR</strong>
+                   <p>
+                     {data.data_status?.schedule?.news_last_success
+                       ? `Last run ${dateTime(data.data_status.schedule.news_last_success)}`
+                       : "Waiting for the first independent collection run"}
+                     {typeof data.data_status?.schedule?.news_inserted === "number" && ` · ${data.data_status.schedule.news_inserted} new observations`}
+                   </p>
+                   <small>
+                     Primary SEC: {data.data_status?.schedule?.news_sources?.primary ?? 0} · Verified feeds: {data.data_status?.schedule?.news_sources?.verified ?? 0} · Discovery: {data.data_status?.schedule?.news_sources?.discovery ?? 0}
+                   </small>
+                   {data.data_status?.schedule?.news_last_error && <small role="status">{data.data_status.schedule.news_last_error}</small>}
+                 </div>
+                 <div className="waypoint-provider-grid">
                   {Object.entries(data.data_status?.providers ?? {}).map(([name, usage]) => (
                     <div key={name}>
                       <strong>{name === "alpha_vantage" ? "Alpha Vantage" : name === "sec" ? "SEC EDGAR" : "Alpaca REST"}</strong>

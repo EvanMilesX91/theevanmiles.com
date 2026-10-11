@@ -290,6 +290,15 @@ export type DataStatus = {
   max_hot_symbols: number;
   price_stale_seconds?: number;
   providers: Record<string, ProviderUsage>;
+  schedule?: {
+    news_last_run?: string | null;
+    news_last_success?: string | null;
+    news_last_reason?: string | null;
+    news_collected?: number;
+    news_inserted?: number;
+    news_sources?: Record<string, number>;
+    news_last_error?: string | null;
+  };
 };
 export type TradeInput = {
   symbol: string;

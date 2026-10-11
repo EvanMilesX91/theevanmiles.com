@@ -84,6 +84,10 @@ class NewsArticle(Base):
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     symbol: Mapped[str] = mapped_column(String(12), index=True)
     provider: Mapped[str] = mapped_column(String(40), index=True)
+    # Source tier is explicit so the UI and later models can distinguish
+    # issuer/regulator evidence from broker feeds and broad discovery hits.
+    source_tier: Mapped[str] = mapped_column(String(20), index=True, default="discovery")
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     title: Mapped[str] = mapped_column(Text)
     url: Mapped[str] = mapped_column(Text)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
