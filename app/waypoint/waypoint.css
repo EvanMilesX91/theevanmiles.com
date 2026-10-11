@@ -3396,5 +3396,109 @@
 .waypoint-app .watch-name > strong, .waypoint-app .watch-price > strong { color: #f4fbff !important; }
 .waypoint-app .watch-name > span { color: #a9c0ca !important; }
 .waypoint-app .watchlist-footer { border-top-color: #244555 !important; color: #a9c0ca !important; }
+
+/* Phone layout: keep the dashboard readable and prevent the desktop grid from
+   collapsing into narrow, side-by-side cards. */
+@media (max-width: 600px) {
+  .waypoint-app {
+    overflow-x: hidden;
+  }
+
+  .waypoint-app .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .waypoint-app .header-actions {
+    width: 100%;
+    padding-top: 0;
+    justify-content: space-between;
+  }
+
+  .waypoint-app .header-actions .mode-badge {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .waypoint-app .right-column {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .waypoint-app .watchlist-card {
+    grid-column: 1;
+  }
+
+  .waypoint-app .watchlist {
+    display: grid;
+    grid-template-columns: 1fr;
+    column-gap: 0;
+  }
+
+  .waypoint-app .watch-item {
+    min-height: 57px;
+    padding: 11px 0;
+  }
+
+  .waypoint-app .watch-item .stock-mark {
+    display: grid;
+  }
+
+  .waypoint-app .watch-name > span {
+    max-width: 155px;
+    font-size: 9px;
+  }
+
+  .waypoint-app .watch-price > strong {
+    font-size: 12px;
+  }
+
+  .waypoint-app .watch-price .state-badge {
+    font-size: 8px;
+    padding: 4px 6px;
+  }
+
+  /* Seven destinations cannot fit as fixed-width desktop tabs. Let each
+     destination share the bar evenly while retaining a small horizontal
+     overflow safety net on the narrowest phones. */
+  .waypoint-app .sidebar {
+    background: #011627 !important;
+    border-top: 1px solid #244555;
+  }
+
+  .waypoint-app .sidebar nav {
+    justify-content: flex-start;
+    gap: 2px;
+    padding: 0 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .waypoint-app .sidebar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .waypoint-app .sidebar nav button {
+    flex: 1 0 50px;
+    min-width: 50px;
+    max-width: 66px;
+    padding: 7px 3px;
+    color: #c8d5db;
+  }
+
+  .waypoint-app .sidebar nav button.active {
+    background: #f9b9f2;
+    color: #011627;
+  }
+
+  .waypoint-app .sidebar nav button > span {
+    display: block;
+    max-width: 62px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
 .waypoint-app .state-badge.gray { background: #123e58 !important; color: #bfe8ff !important; border: 1px solid #4cb5f5 !important; }
 .waypoint-app .state-badge.gray .state-dot { background: #4cb5f5 !important; }
