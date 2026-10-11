@@ -191,9 +191,13 @@ class EngineService:
         if history:
             sec = None
             alpha = None
+            # SEC companyfacts responses are large raw archives. Keep them out
+            # of the runtime snapshot; only the normalized research cache and
+            # provider usage counters belong in the persistent engine state.
+            sec_cache: dict[str, Any] = {}
             try:
                 try:
-                    sec = SECProvider(user_agent=config.sec_user_agent, cache=self.provider_cache, checkpoint=self.usage_checkpoint)
+                    sec = SECProvider(user_agent=config.sec_user_agent, cache=sec_cache, checkpoint=None)
                 except ProviderError:
                     pass
                 try:
@@ -213,6 +217,8 @@ class EngineService:
             finally:
                 if sec:
                     await sec.aclose()
+                    if "api_usage_v1" in sec_cache:
+                        self.provider_cache["api_usage_v1"] = sec_cache["api_usage_v1"]
                 if alpha:
                     await alpha.aclose()
 
