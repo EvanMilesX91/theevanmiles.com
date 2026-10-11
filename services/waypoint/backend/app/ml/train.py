@@ -99,7 +99,9 @@ class TrainedModel:
         return self.__dict__ | {"feature_names": list(self.feature_names)}
 
 
-def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", version: str | None = None) -> TrainedModel:
+def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", version: str | None = None,
+          logistic_steps: int = 700, learning_rate: float = 0.08,
+          logistic_l2: float = 10.0, ridge: float = 1e-3) -> TrainedModel:
     labelled = [row for row in rows if row.labels]
     if len(labelled) < 8:
         raise ValueError("At least 8 labelled point-in-time snapshots are required to train ML baselines.")
@@ -117,7 +119,7 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
         indices = [item[0] for item in valid]
         x, y = matrix[indices], np.asarray([item[1] for item in valid], dtype=float)
         if target.startswith("probability_"):
-            weights, bias = _logistic_fit(x, y)
+            weights, bias = _logistic_fit(x, y, steps=logistic_steps, learning_rate=learning_rate, l2=logistic_l2)
             raw = 1 / (1 + np.exp(-np.clip(x @ weights + bias, -30, 30)))
             calibration[target] = fit_platt(raw.tolist(), y.astype(int).tolist()) | {
                 "prior": float(np.mean(y)),
@@ -125,7 +127,7 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
             }
             heads[target] = {"kind": "logistic", "weights": weights.tolist(), "bias": bias}
         else:
-            weights, bias = _linear_fit(x, y)
+            weights, bias = _linear_fit(x, y, ridge=ridge)
             heads[target] = {"kind": "linear", "weights": weights.tolist(), "bias": bias}
     ordered = sorted(labelled, key=lambda row: row.as_of)
     version = version or f"{name}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -133,5 +135,5 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
                         feature_names=FEATURE_NAMES, means=means.tolist(), scales=scales.tolist(), heads=heads,
                         calibration=calibration, training_period={"start": ordered[0].as_of, "end": ordered[-1].as_of},
                         dataset_version=dataset_version(rows), trained_at=datetime.now().astimezone().isoformat(),
-                        hyperparameters={"logistic_steps": 700, "learning_rate": 0.08,
-                                        "logistic_l2": 10.0, "probability_shrinkage": 0.75, "ridge": 0.001})
+                        hyperparameters={"logistic_steps": logistic_steps, "learning_rate": learning_rate,
+                                        "logistic_l2": logistic_l2, "probability_shrinkage": 0.75, "ridge": ridge})

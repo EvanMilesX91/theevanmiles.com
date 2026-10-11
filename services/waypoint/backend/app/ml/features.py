@@ -20,6 +20,10 @@ FEATURE_NAMES = (
     "news_importance_7d", "market_return_20d", "sector_return_20d", "market_volatility_20d",
     "rate_environment", "regime_bull", "regime_bear", "regime_high_vol", "regime_risk_on",
     "filing_count_90d", "filing_recency_days", "fundamental_freshness_days",
+    # Explicit coverage signals stop a missing provider response looking like
+    # a neutral financial value. These are inputs, not confidence claims.
+    "history_coverage", "volume_coverage", "fundamental_coverage",
+    "news_coverage", "event_coverage", "market_context_coverage",
 )
 
 
@@ -129,6 +133,17 @@ def build_features(snapshot: dict[str, Any], as_of: datetime | str) -> dict[str,
     filing_recency = max(0.0, (point - latest_filing).total_seconds() / 86400) if latest_filing else 999.0
     fundamental_as_of = parse_time(metrics.get("fundamental_available_at") or metrics.get("fundamental_as_of"))
     fundamental_freshness = max(0.0, (point - fundamental_as_of).total_seconds() / 86400) if fundamental_as_of else 999.0
+    fundamental_fields = (
+        "revenue_growth_pct", "earnings_growth_pct", "operating_margin_pct",
+        "cash_eur", "debt_eur", "free_cash_flow_eur", "valuation_multiple",
+    )
+    fundamental_coverage = sum(
+        1 for name in fundamental_fields
+        if metrics.get(name) is not None and _number(metrics.get(name), point, default=float("nan")) == _number(metrics.get(name), point, default=float("nan"))
+    ) / len(fundamental_fields)
+    has_news_observation = "news" in snapshot or (isinstance(research, dict) and "news" in research)
+    has_event_observation = "events" in snapshot or "next_events" in snapshot
+    has_market_context = bool(market_rows or sector_rows or "market_return_20d" in snapshot or "market_return_20d" in metrics)
     result = {
         "return_1d": _returns(closes, 1),
         "return_5d": _returns(closes, 5),
@@ -165,6 +180,12 @@ def build_features(snapshot: dict[str, Any], as_of: datetime | str) -> dict[str,
                                        (point - parse_time(event["published_at"])).total_seconds() <= 90 * 86400)),
         "filing_recency_days": filing_recency,
         "fundamental_freshness_days": fundamental_freshness,
+        "history_coverage": min(1.0, len(rows) / 60.0),
+        "volume_coverage": len(volumes) / max(1, len(rows)),
+        "fundamental_coverage": fundamental_coverage,
+        "news_coverage": float(has_news_observation),
+        "event_coverage": float(has_event_observation),
+        "market_context_coverage": float(has_market_context),
     }
     return {name: float(result.get(name, 0.0)) if math.isfinite(float(result.get(name, 0.0))) else 0.0 for name in FEATURE_NAMES}
 

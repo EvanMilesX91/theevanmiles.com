@@ -65,6 +65,9 @@ def test_walk_forward_inputs_never_randomly_mix_time_and_probability_metrics():
     assert 0 <= result["metrics"]["brier_score_5d"] <= 1
     assert result["metrics"]["friction"]["spread_bps"] > 0
     assert "baseline_brier_score_5d" in result["metrics"]
+    assert "calibration_gap_5d" in result["metrics"]
+    assert "feature_coverage" in result["metrics"]
+    assert "by_symbol" in result["metrics"]
     assert promotion_gate(result["metrics"])["eligible"] is False
 
 
@@ -82,3 +85,13 @@ def test_ml_can_only_narrow_an_existing_decision_and_never_bypass_risk_controls(
                             influence_enabled=True, fresh=True)["state"] == "SKIP"
     assert combine_decision(deterministic_state="BUY_AREA", opportunity=90, risk=30, prediction=prediction,
                             influence_enabled=False, fresh=True)["state"] == "BUY_AREA"
+
+
+def test_feature_coverage_is_explicit_when_inputs_are_missing():
+    from app.ml.features import build_features
+
+    features = build_features({"price": 100, "history_rows": []}, "2026-01-02T00:00:00+00:00")
+    assert features["history_coverage"] == 0
+    assert features["fundamental_coverage"] == 0
+    assert features["news_coverage"] == 0
+    assert features["event_coverage"] == 0

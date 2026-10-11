@@ -12,7 +12,7 @@ import argparse
 import os
 import tempfile
 import re
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 

@@ -265,21 +265,49 @@ class MLEngine:
         from .train import train
 
         rows = read_jsonl(str(path))
-        report = walk_forward(rows)
-        gate = promotion_gate(report["metrics"])
-        model = train(rows)
+        candidates = [
+            {"logistic_l2": 10.0, "learning_rate": 0.08},
+            {"logistic_l2": 1.0, "learning_rate": 0.04},
+            {"logistic_l2": 0.1, "learning_rate": 0.04},
+        ]
+        evaluated: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+        for train_kwargs in candidates:
+            report = walk_forward(rows, train_kwargs=train_kwargs)
+            gate = promotion_gate(report["metrics"])
+            evaluated.append((train_kwargs, report, gate))
+        def rank(item: tuple[dict[str, Any], dict[str, Any], dict[str, Any]]) -> tuple[int, float, float]:
+            _, report, gate = item
+            metrics = report["metrics"]
+            selected = gate.get("selected_mean_net_return_5d")
+            brier = metrics.get("brier_score_5d")
+            return (int(gate.get("eligible", False)), float(selected if selected is not None else -1e9),
+                    -float(brier if brier is not None else 1e9))
+        train_kwargs, report, gate = max(evaluated, key=rank)
+        model = train(rows, **train_kwargs)
         model_record = model.to_dict() | {"validation": report["metrics"], "promotion_gate": gate}
+        tree_challenger = None
+        try:
+            from .tree import available_backends, walk_forward_xgboost
+            if "xgboost" in available_backends():
+                tree_challenger = walk_forward_xgboost(rows)
+        except (ImportError, RuntimeError, ValueError):
+            # The production image intentionally has no heavy tree dependency.
+            tree_challenger = {"status": "unavailable"}
         try:
             registry = self.registry.register(model_record, activate=False)
         except ValueError:
             registry = self.registry.list()
             result = {"status": "candidate_exists", "candidate_version": model.version,
-                      "evaluation": report, "registry_models": len(registry.get("models", {})),
+                      "evaluation": report, "candidate_evaluations": [{"training": item[0], "gate": item[2], "metrics": item[1]["metrics"]} for item in evaluated],
+                      "tree_challenger": tree_challenger,
+                      "registry_models": len(registry.get("models", {})),
                       "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
             self.last_maintenance = result
             return result
         result = {"status": "candidate_ready", "candidate_version": model.version,
-                  "evaluation": report, "registry_models": len(registry.get("models", {})),
+                  "evaluation": report, "candidate_evaluations": [{"training": item[0], "gate": item[2], "metrics": item[1]["metrics"]} for item in evaluated],
+                  "tree_challenger": tree_challenger,
+                  "registry_models": len(registry.get("models", {})),
                   "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
         self.last_maintenance = result
         return result

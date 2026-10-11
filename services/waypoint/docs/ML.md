@@ -85,8 +85,15 @@ confidence intervals. The deterministic trade plan and risk controls remain
 authoritative.
 
 Training uses chronological walk-forward folds. It never randomly mixes future
-rows into training. Evaluation reports Brier score, reliability bins, regime
-breakdowns and mean net return after spread, slippage, FX cost and fees.
+rows into training, and each fold purges the forward-label window before
+validation begins. Evaluation reports Brier score, reliability bins, maximum
+calibration error, regime and symbol breakdowns, feature coverage, and mean net
+return after spread, slippage, FX cost and fees.
+
+Coverage inputs are explicit features: price-history depth, volume coverage,
+fundamental coverage, news availability, event availability and market-context
+availability. Missing data is visible to the model instead of being silently
+treated as neutral evidence.
 
 ### Historical news coverage
 
@@ -107,10 +114,11 @@ chronological folds, labels and transaction-cost assumptions as the baseline,
 then calibrates probabilities on each training fold. XGBoost is intentionally
 not installed in the always-on runtime image: its optional dependency is large
 and a challenger should not silently change production behavior. A challenger
-must beat the prevalence Brier baseline, produce enough selected cases, and
-show positive net return after costs before it can even be considered for the
-existing promotion gate. Until then the deterministic engine and the current
-registered baseline remain the only decision inputs.
+must beat the prevalence Brier baseline, produce enough selected cases, stay
+within the calibration-error limit, and show positive net return after costs
+before it can even be considered for the existing promotion gate. Until then
+the deterministic engine and the current registered baseline remain the only
+decision inputs.
 
 ## Explainability and monitoring
 
