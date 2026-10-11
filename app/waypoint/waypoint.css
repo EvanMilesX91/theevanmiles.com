@@ -3502,3 +3502,146 @@
 }
 .waypoint-app .state-badge.gray { background: #123e58 !important; color: #bfe8ff !important; border: 1px solid #4cb5f5 !important; }
 .waypoint-app .state-badge.gray .state-dot { background: #4cb5f5 !important; }
+
+.opportunity-board-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.opportunity-board-meta > span {
+  color: #a9c0ca;
+  font-size: 11px;
+}
+
+.opportunity-carousel-controls {
+  display: none;
+  gap: 5px;
+}
+
+.opportunity-carousel-controls .icon-button {
+  width: 30px;
+  height: 30px;
+  color: #c8d5db;
+  background: #102f43;
+  border-color: #2d566b;
+}
+
+@media (max-width: 600px), (max-width: 1000px) and (pointer: coarse) {
+  .waypoint-app .opportunity-carousel-controls {
+    display: flex;
+  }
+
+  .waypoint-app .opportunity-grid {
+    display: flex;
+    gap: 12px;
+    margin-right: -2px;
+    padding: 2px 2px 8px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .waypoint-app .opportunity-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .waypoint-app .opportunity-tile {
+    flex: 0 0 min(84vw, 360px);
+    scroll-snap-align: start;
+  }
+
+  /* Some mobile browsers report a desktop-width layout viewport. Pointer
+     capability lets us still apply the phone navigation treatment there. */
+  .waypoint-app .sidebar {
+    inset: auto 0 0;
+    width: 100%;
+    height: 64px;
+    flex-direction: row;
+    padding: 0;
+    z-index: 40;
+  }
+
+  .waypoint-app .brand,
+  .waypoint-app .sidebar-caption,
+  .waypoint-app .sidebar-bottom {
+    display: none;
+  }
+
+  .waypoint-app main {
+    margin: 0;
+    width: 100%;
+    padding-bottom: 64px;
+  }
+
+  .waypoint-app .sidebar nav {
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    gap: 2px;
+    padding: 0 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .waypoint-app .sidebar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .waypoint-app .sidebar nav button {
+    flex: 1 0 50px;
+    min-width: 50px;
+    max-width: 66px;
+    padding: 7px 3px;
+    color: #c8d5db;
+  }
+
+  .waypoint-app .sidebar nav button > span {
+    display: block;
+    max-width: 62px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .waypoint-app .sidebar nav button.active {
+    background: #f9b9f2;
+    color: #011627;
+  }
+
+  .waypoint-app .right-column {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .waypoint-app .watchlist-card {
+    grid-column: 1;
+  }
+
+  .waypoint-app .watchlist {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .waypoint-app .watch-item {
+    min-height: 57px;
+    padding: 11px 0;
+  }
+
+  .waypoint-app .watch-item .stock-mark {
+    display: grid;
+  }
+
+  .waypoint-app .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .waypoint-app .header-actions {
+    width: 100%;
+    padding-top: 0;
+    justify-content: space-between;
+  }
+}

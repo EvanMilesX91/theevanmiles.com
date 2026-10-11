@@ -11,6 +11,8 @@ import {
   BookOpen,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   HelpCircle,
   Clock3,
   Compass,
@@ -473,11 +475,18 @@ function OpportunityBoard({
   isFresh: (stock: Stock) => boolean;
   marketOpen: boolean;
 }) {
+  const carouselRef = useRef<HTMLDivElement>(null);
   const ordered = [...stocks].sort((a, b) => {
     const aPlan = a.plan && !["SKIP", "NO_SETUP"].includes(a.state) ? 1 : 0;
     const bPlan = b.plan && !["SKIP", "NO_SETUP"].includes(b.state) ? 1 : 0;
     return bPlan - aPlan || (b.opportunity ?? -1) - (a.opportunity ?? -1);
   });
+  const moveCarousel = (direction: -1 | 1) => {
+    carouselRef.current?.scrollBy({
+      left: direction * Math.max(280, carouselRef.current.clientWidth * 0.86),
+      behavior: "smooth",
+    });
+  };
   return (
     <section className="card opportunity-board" aria-label="All monitored opportunities">
       <div className="opportunity-board-heading">
@@ -485,9 +494,19 @@ function OpportunityBoard({
           <p className="eyebrow">LIVE WATCHLIST</p>
           <h2>Opportunities today</h2>
         </div>
-        <span>{ordered.length} monitored</span>
+        <div className="opportunity-board-meta">
+          <span>{ordered.length} monitored</span>
+          <div className="opportunity-carousel-controls" aria-label="Move through opportunities">
+            <button className="icon-button" type="button" aria-label="Previous opportunity" onClick={() => moveCarousel(-1)}>
+              <ChevronLeft size={16} />
+            </button>
+            <button className="icon-button" type="button" aria-label="Next opportunity" onClick={() => moveCarousel(1)}>
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
       </div>
-      <div className="opportunity-grid">
+      <div className="opportunity-grid" ref={carouselRef}>
         {ordered.map((stock) => {
           const safe = isFresh(stock);
           const actionable = !!stock.plan && !["SKIP", "NO_SETUP"].includes(stock.state);
