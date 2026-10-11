@@ -17,6 +17,11 @@ export function waypointBackendUrl(path: string): URL {
 
 export async function callWaypointBackend(path: string, init: RequestInit = {}): Promise<Response> {
   const url = waypointBackendUrl(path);
+  const timeoutMs = path === 'refresh' || path === 'events'
+    ? 55000
+    : path === 'auth/attempt'
+      ? 30000
+      : 15000;
   try {
     return await fetch(url, {
       ...init,
@@ -27,7 +32,7 @@ export async function callWaypointBackend(path: string, init: RequestInit = {}):
       },
       cache: 'no-store',
       redirect: 'error',
-      signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(path === 'refresh' || path === 'events' ? 55000 : 15000)]) : AbortSignal.timeout(path === 'refresh' || path === 'events' ? 55000 : 15000),
+      signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
     });
   } catch { throw new WaypointBackendError('Waypoint’s engine did not respond. The outcome could not be confirmed; check your journal before recording the same fill again.'); }
 }

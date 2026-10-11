@@ -14,7 +14,9 @@ async function authentication(method: string, password?: string) {
     cache: "no-store",
     headers: { "Content-Type": "application/json" },
     ...(password !== undefined ? { body: JSON.stringify({ password }) } : {}),
-    signal: AbortSignal.timeout(15000),
+    // Hosted Supabase-backed auth can take a few seconds for the rate-limit
+    // check and the success write. Mobile networks need a little more room.
+    signal: AbortSignal.timeout(45000),
   });
   const result = await response.json().catch(() => null);
   if (!response.ok) {
