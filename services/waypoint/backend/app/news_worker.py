@@ -34,6 +34,13 @@ class NewsCollector:
         ]
         return list(dict.fromkeys(configured + list(self.service.stocks)))
 
+    def _persist(self, rows: list[dict[str, Any]]) -> int:
+        """Run the blocking SQL write on a worker thread, never the event loop."""
+        with self.sessions() as db:
+            inserted = persist_candidates(db, rows)
+            db.commit()
+            return inserted
+
     async def collect_once(self, reason: str = "scheduled") -> dict[str, Any]:
         started = datetime.now(UTC)
         symbols = self.symbols()
@@ -72,9 +79,7 @@ class NewsCollector:
                 await alpha.aclose()
 
         try:
-            with self.sessions() as db:
-                inserted = persist_candidates(db, rows)
-                db.commit()
+            inserted = await asyncio.to_thread(self._persist, rows)
         except Exception:
             self.service.schedule_status.update(
                 news_last_error="News collection write failed; existing observations remain available.",
