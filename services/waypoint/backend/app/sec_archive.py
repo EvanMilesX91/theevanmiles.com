@@ -90,6 +90,10 @@ class SECArchiveCollector:
                     identity = await provider.resolve_company(symbol)
                     fundamentals = await provider.fundamentals(identity.cik)
                     filing_rows = await provider.filings(identity.cik)
+                    filing_rows = [
+                        item for item in filing_rows
+                        if item.form in {"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A", "20-F", "6-K"}
+                    ]
                     resolved += 1
                     filing_research[symbol] = {"filings": [item.model_dump(mode="json") for item in filing_rows]}
                     for fact in fundamentals.facts:
@@ -134,7 +138,12 @@ class SECArchiveCollector:
     async def run(self) -> None:
         while True:
             try:
-                await self.collect_once("startup" if not self.service.schedule_status.get("sec_archive_last_success") else "scheduled")
+                # Keep the first expensive archive pass out of the API event
+                # loop. Health checks and streaming must remain responsive while
+                # SEC requests and the bulk database transaction run.
+                await asyncio.sleep(15)
+                reason = "startup" if not self.service.schedule_status.get("sec_archive_last_success") else "scheduled"
+                await asyncio.to_thread(asyncio.run, self.collect_once(reason))
             except asyncio.CancelledError:
                 raise
             except Exception:
