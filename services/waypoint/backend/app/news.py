@@ -13,6 +13,7 @@ import re
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from sqlalchemy import select
@@ -78,8 +79,32 @@ def classify_title(title: str) -> dict[str, Any]:
 
 
 def fingerprint(*, provider: str, symbol: str, title: str, url: str, published_at: datetime) -> str:
-    basis = "|".join((provider.lower(), symbol.upper(), url.strip(), title.strip().lower(), published_at.isoformat()))
+    # Canonicalise URLs before hashing so trailing slashes, fragments and
+    # host casing cannot create a second observation for the same release.
+    parsed = urlsplit(url.strip())
+    canonical_url = urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/"), parsed.query, ""))
+    canonical_title = " ".join(title.strip().lower().split())
+    basis = "|".join((provider.lower(), symbol.upper(), canonical_url, canonical_title, published_at.isoformat()))
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()
+
+
+def _observation_keys(row: dict[str, Any] | NewsArticle) -> tuple[tuple[str, str, str], tuple[str, str, str, str]]:
+    """Return URL and title/date keys used to catch replayed research records.
+
+    The fingerprint remains the immutable database identity. These secondary
+    keys also catch older rows created before URL canonicalisation and issuer
+    releases represented once as an IR page and once as a PDF link.
+    """
+    provider = str(row["provider"] if isinstance(row, dict) else row.provider).lower()
+    symbol = str(row["symbol"] if isinstance(row, dict) else row.symbol).upper()
+    url = str(row["url"] if isinstance(row, dict) else row.url).strip()
+    parsed = urlsplit(url)
+    canonical_url = urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/"), parsed.query, ""))
+    title = str(row["title"] if isinstance(row, dict) else row.title)
+    normalized_title = " ".join(title.lower().split())
+    published = row["published_at"] if isinstance(row, dict) else row.published_at
+    published_key = _utc(published, datetime.now(UTC)).date().isoformat()
+    return (provider, symbol, canonical_url), (provider, symbol, normalized_title, published_key)
 
 
 def _candidate(*, provider: str, symbol: str, title: str, url: str,
@@ -237,18 +262,53 @@ async def collect_candidates(*, symbols: Iterable[str], market: Any, alpha: Any 
 
 
 def persist_candidates(db: Session, rows: Iterable[dict[str, Any]]) -> int:
-    """Insert only unseen observations; existing records are immutable."""
+    """Insert only unseen observations; existing records are immutable.
+
+    Deduplication is performed by fingerprint plus canonical URL and by
+    provider/symbol/title/publication-day. This prevents repeated Codex batches
+    from inserting the same issuer release when a source changes its URL
+    formatting or when both an IR page and its attached PDF are collected.
+    """
     pending = list(rows)
     if not pending:
         return 0
-    unique: dict[str, dict[str, Any]] = {row["fingerprint"]: row for row in pending}
+    unique: dict[str, dict[str, Any]] = {}
+    seen_urls: set[tuple[str, str, str]] = set()
+    seen_title_dates: set[tuple[str, str, str, str]] = set()
+    for row in pending:
+        if not row.get("fingerprint"):
+            continue
+        url_key, title_date_key = _observation_keys(row)
+        if row["fingerprint"] in unique or url_key in seen_urls or title_date_key in seen_title_dates:
+            continue
+        unique[row["fingerprint"]] = row
+        seen_urls.add(url_key)
+        seen_title_dates.add(title_date_key)
     pending = list(unique.values())
+    if not pending:
+        return 0
     fingerprints = list(unique)
     existing: set[str] = set()
     for offset in range(0, len(fingerprints), 500):
         chunk = fingerprints[offset:offset + 500]
         existing.update(db.scalars(select(NewsArticle.fingerprint).where(NewsArticle.fingerprint.in_(chunk))).all())
-    fresh = [row for row in pending if row["fingerprint"] not in existing]
+    # Secondary lookup catches rows written with the pre-canonicalisation
+    # fingerprint, and is bounded to the providers/symbols in this import.
+    providers = {str(row["provider"]) for row in pending}
+    symbols = {str(row["symbol"]).upper() for row in pending}
+    prior = db.scalars(select(NewsArticle).where(NewsArticle.provider.in_(providers), NewsArticle.symbol.in_(symbols))).all()
+    prior_urls: set[tuple[str, str, str]] = set()
+    prior_title_dates: set[tuple[str, str, str, str]] = set()
+    for row in prior:
+        url_key, title_date_key = _observation_keys(row)
+        prior_urls.add(url_key)
+        prior_title_dates.add(title_date_key)
+    fresh = [
+        row for row in pending
+        if row["fingerprint"] not in existing
+        and _observation_keys(row)[0] not in prior_urls
+        and _observation_keys(row)[1] not in prior_title_dates
+    ]
     if fresh:
         db.add_all(NewsArticle(**row) for row in fresh)
     return len(fresh)

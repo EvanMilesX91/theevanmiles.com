@@ -36,6 +36,30 @@ def test_news_persistence_is_immutable_and_deduplicated():
         assert article["verified"] is False
 
 
+def test_news_persistence_deduplicates_canonical_urls_and_title_dates():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(engine)
+    now = datetime(2026, 10, 10, tzinfo=UTC)
+    rows = [{
+        "fingerprint": "b" * 64, "symbol": "MSFT", "provider": "codex",
+        "title": "Microsoft Announces Results", "url": "https://IR.example.com/release/123/",
+        "published_at": now, "first_seen_at": now, "available_at": now,
+        "event_type": "earnings", "sentiment": 1.0, "importance": 1.0,
+        "is_major": True, "data": {},
+    }, {
+        "fingerprint": "c" * 64, "symbol": "MSFT", "provider": "codex",
+        "title": "  Microsoft   Announces Results ", "url": "https://ir.example.com/release/123#results",
+        "published_at": now, "first_seen_at": now, "available_at": now,
+        "event_type": "earnings", "sentiment": 1.0, "importance": 1.0,
+        "is_major": True, "data": {},
+    }]
+    with sessions() as db:
+        assert persist_candidates(db, rows) == 1
+        db.commit()
+        assert persist_candidates(db, [rows[1]]) == 0
+
+
 def test_codex_research_preserves_point_in_time_availability():
     retrieved = datetime(2026, 10, 10, 12, tzinfo=UTC)
     rows = candidates_from_codex([{

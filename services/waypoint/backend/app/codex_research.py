@@ -49,7 +49,7 @@ def import_records(path: Path) -> dict[str, int]:
     with SessionLocal() as db:
         inserted = persist_candidates(db, rows)
         db.commit()
-    return {"records": len(records), "valid": len(rows), "inserted": inserted}
+    return {"records": len(records), "valid": len(rows), "inserted": inserted, "skipped": len(rows) - inserted}
 
 
 def main() -> None:
