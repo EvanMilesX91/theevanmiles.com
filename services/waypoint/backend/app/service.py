@@ -512,6 +512,51 @@ class EngineService:
                                    connected=bool(self.stream_status.get("connected")) and symbol not in self.stream_status.get("stale_symbols", []),
                                    subscribed=symbol in self.stream_status.get("subscribed_symbols", []),
                                    hot=symbol in self.hot_symbols, stale_seconds=config.price_stale_seconds)
+                # The slow research pass can finish just before the stream
+                # supplies a current bid/ask. Re-run the deterministic view
+                # from the already persisted point-in-time evidence so live
+                # eligibility does not retain a stale "spread missing" gate.
+                # This performs no provider I/O and never relaxes any engine
+                # threshold; it only synchronizes the evidence snapshot.
+                if symbol not in owned and isinstance(stock.get("research"), dict):
+                    record = copy.deepcopy(stock["research"])
+                    metrics = record.setdefault("metrics", {})
+                    metric_sources = dict(record.get("metric_sources", {}))
+                    quote_price = view.get("price")
+                    bid = view.get("bid")
+                    ask = view.get("ask")
+                    if quote_price and bid is not None and ask is not None:
+                        metrics["spread_pct"] = max(0.0, float(ask) - float(bid)) / float(quote_price)
+                        metric_sources["spread_pct"] = f"alpaca-{symbol.lower()}-quote"
+                    analysis_fixture = {
+                        "symbol": symbol,
+                        "name": stock.get("name", symbol),
+                        "sector": stock.get("sector", "Industry unavailable"),
+                        "sector_group": record.get("sector_group", "other"),
+                        "metrics": metrics,
+                        "raw_metrics": record.get("raw_metrics", {}),
+                        "history": stock.get("history", []),
+                        "history_timestamps": record.get("history_timestamps", []),
+                        "price": stock.get("price"),
+                        "market_at": stock.get("freshness", {}).get("market_at"),
+                        "financial_as_of": record.get("financial_as_of"),
+                        "financial_period": record.get("financial_period"),
+                        "news_checked_at": record.get("news_checked_at"),
+                        "feed": stock.get("freshness", {}).get("feed"),
+                        "metric_sources": metric_sources,
+                        "sources": stock.get("sources", []),
+                        "events": record.get("next_events", []),
+                        "business_warning": stock.get("business_warning", False),
+                        "live": True,
+                    }
+                    refreshed = analyze_stock(analysis_fixture, settings.horizon, now)
+                    for key in (
+                        "company_type", "classification_confidence", "classification_version", "opportunity",
+                        "risk", "confidence", "confidence_label", "opportunity_components", "risk_components",
+                        "plan", "explanation", "freshness", "reasons", "risks", "next_events", "eligibility",
+                    ):
+                        stock[key] = refreshed[key]
+                    stock["research"] = record
                 stock["market"] = view
                 stock["watchlist_tier"] = "HOT" if symbol in self.hot_symbols else "WARM"
                 quote_current = not view["stale"] and not self.capacity_error
