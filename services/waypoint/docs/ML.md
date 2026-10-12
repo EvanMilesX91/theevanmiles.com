@@ -102,11 +102,20 @@ Training uses six expanding chronological walk-forward folds by default. It
 never randomly mixes future rows into training, and each fold has separate
 fit, calibration and validation periods with a purge before validation.
 Evaluation reports Brier score, weighted calibration error, reliability bins,
-symbol and regime macro scores, signal breadth, feature coverage, and mean net
-return after spread, slippage, FX cost and fees. A candidate must improve both
+symbol and regime macro scores, Brier decomposition, signal breadth, feature
+coverage, and mean net return after spread, slippage, FX cost and fees. Brier
+decomposition separates three things: reliability (probabilities matching
+outcomes), resolution (the model separating better and worse situations), and
+uncertainty (the base-rate floor that no model can remove). A candidate must improve both
 the overall and macro symbol/regime baselines before it can influence
 decisions. The promotion check uses a fixed 55% policy threshold; it does not
 pick the most profitable cutoff after inspecting the same validation returns.
+
+The optional `auto_probability_shrinkage` setting can select a conservative
+probability blend on each fold's calibration holdout. It is disabled by default:
+on the current merged history, fixed shrinkage is more stable out of sample. This
+is deliberate; a lower calibration error on the holdout is not enough to claim a
+better Brier score on unseen dates.
 
 Coverage inputs are explicit features: price-history depth, volume coverage,
 fundamental coverage, news availability, event availability and market-context

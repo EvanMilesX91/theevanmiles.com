@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.ml.calibration import brier_score, reliability_curve
+from app.ml.calibration import brier_decomposition, brier_score, choose_shrinkage, reliability_curve
 from app.ml.datasets import PointInTimeSnapshot, assert_no_lookahead, make_snapshot
 from app.ml.decision import combine_decision
 from app.ml.labels import make_labels
@@ -77,6 +77,19 @@ def test_calibration_and_similarity_are_explanatory_not_authoritative():
     model = train([_row(index) for index in range(20)], version="similarity-v1")
     result = similar_setups(model, _row(21, labels=False), [_row(index) for index in range(20)])
     assert result["count"] <= 10
+
+
+def test_brier_decomposition_and_holdout_shrinkage_are_explicit():
+    probabilities = [0.2, 0.3, 0.7, 0.8]
+    outcomes = [0, 0, 1, 1]
+    decomposition = brier_decomposition(probabilities, outcomes)
+    assert decomposition["count"] == 4
+    assert decomposition["reliability"] >= 0
+    assert decomposition["resolution"] >= 0
+    assert decomposition["reconstructed_brier"] == pytest.approx(brier_score(probabilities, outcomes))
+    shrinkage, holdout_brier = choose_shrinkage(probabilities, outcomes, {"a": 1.0, "b": 0.0}, 0.5)
+    assert 0.6 <= shrinkage <= 0.95
+    assert 0 <= holdout_brier <= 1
 
 
 def test_ml_can_only_narrow_an_existing_decision_and_never_bypass_risk_controls():

@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from .calibration import fit_platt
+from .calibration import choose_shrinkage, fit_platt
 from .datasets import PointInTimeSnapshot, dataset_version
 from .features import FEATURE_NAMES
 
@@ -157,6 +157,7 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
           # confidence out of sample. This is a blend toward the observed
           # base rate, not a claim that the model knows the exact odds.
           probability_shrinkage: float = 0.80,
+          auto_probability_shrinkage: bool = False,
           balance_groups: bool = True,
           feature_profile: str = "all") -> TrainedModel:
     labelled = [row for row in rows if row.labels]
@@ -182,6 +183,7 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
         indices = [item[0] for item in valid]
         x, y = matrix[indices], np.asarray([item[1] for item in valid], dtype=float)
         if target.startswith("probability_"):
+            selected_shrinkage = probability_shrinkage
             weights, bias = _logistic_fit(x, y, steps=logistic_steps, learning_rate=learning_rate, l2=logistic_l2,
                                           sample_weights=row_weights[indices])
             heads[target] = {"kind": "logistic", "weights": weights.tolist(), "bias": bias}
@@ -201,6 +203,11 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
                     params = fit_platt(holdout_raw, holdout_y)
                     prior = float(np.mean(holdout_y))
                     calibration_source = "chronological_holdout"
+                    if auto_probability_shrinkage:
+                        selected_shrinkage, calibration_brier = choose_shrinkage(
+                            holdout_raw, holdout_y, params, prior, requested=probability_shrinkage)
+                    else:
+                        calibration_brier = None
                 else:
                     params = None
             else:
@@ -209,9 +216,12 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
                 raw = 1 / (1 + np.exp(-np.clip(x @ weights + bias, -30, 30)))
                 params = fit_platt(raw.tolist(), y.astype(int).tolist())
                 prior = float(np.mean(y))
+                selected_shrinkage = probability_shrinkage
+                calibration_brier = None
             calibration[target] = params | {
                 "prior": prior,
-                "shrinkage": probability_shrinkage,
+                "shrinkage": selected_shrinkage,
+                "calibration_brier": calibration_brier,
                 "source": calibration_source,
             }
         else:
@@ -225,6 +235,7 @@ def train(rows: list[PointInTimeSnapshot], *, name: str = "waypoint-baseline", v
                         dataset_version=dataset_version(rows), trained_at=datetime.now().astimezone().isoformat(),
                         hyperparameters={"logistic_steps": logistic_steps, "learning_rate": learning_rate,
                                         "logistic_l2": logistic_l2, "probability_shrinkage": probability_shrinkage,
+                                        "auto_probability_shrinkage": auto_probability_shrinkage,
                                         "calibration_source": "chronological_holdout" if calibration_labelled else "in_sample_fallback",
                                         "ridge": ridge, "balance_groups": balance_groups,
                                         "feature_profile": feature_profile})

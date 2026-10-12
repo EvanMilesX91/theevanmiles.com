@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from .calibration import brier_score, reliability_curve
+from .calibration import brier_decomposition, brier_score, reliability_curve
 from .datasets import PointInTimeSnapshot
 from .predict import predict_with_model
 from .train import train
@@ -251,6 +251,7 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
     total_reliability = sum(item["count"] for item in reliability)
     expected_calibration_error = (sum(item["count"] * abs(item["mean_probability"] - item["observed_rate"])
                                    for item in reliability) / total_reliability) if total_reliability else None
+    decomposition = brier_decomposition(probabilities, outcomes)
     return {"method": "chronological_walk_forward", "folds": len(_folds(rows)), "fold_summary": fold_summary,
             "predictions": predictions,
             "training": train_kwargs,
@@ -263,6 +264,7 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
                         "friction": friction.__dict__, "reliability_5d": reliability,
                         "calibration_gap_5d": max(calibration_gaps, default=None),
                         "expected_calibration_error_5d": expected_calibration_error,
+                        "brier_decomposition_5d": decomposition,
                         "by_regime": regime_metrics, "by_symbol": by_symbol,
                         "probability_by_symbol": by_symbol_probability,
                         "probability_by_regime": by_regime_probability,
