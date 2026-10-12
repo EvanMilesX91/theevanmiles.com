@@ -139,6 +139,15 @@ class SECArchiveCollector:
         return status
 
     async def run(self) -> None:
+        # Do not launch a second full SEC companyfacts pass while the first
+        # live research refresh is still assembling the current dashboard.
+        # Waiting here preserves coverage while avoiding a startup request
+        # storm and leaves the API responsive during the expensive first pass.
+        while not (
+            self.service.schedule_status.get("last_success")
+            or self.service.schedule_status.get("last_error")
+        ):
+            await asyncio.sleep(5)
         while True:
             try:
                 # Keep the first expensive archive pass out of the API event

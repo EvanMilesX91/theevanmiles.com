@@ -105,6 +105,15 @@ class NewsCollector:
     async def run(self) -> None:
         # Run once after startup, then on a quiet hourly cadence. Collection is
         # deliberately independent from the pre-market/live price refresh.
+        # The first refresh is the source of the current runtime research
+        # snapshot. Wait for it before starting a second full-universe provider
+        # pass; otherwise startup would double the SEC/market requests and make
+        # the dashboard appear stuck while both jobs compete for the same feeds.
+        while not (
+            self.service.schedule_status.get("last_success")
+            or self.service.schedule_status.get("last_error")
+        ):
+            await asyncio.sleep(5)
         while True:
             try:
                 await self.collect_once("startup" if not self.service.schedule_status.get("news_last_success") else "scheduled")
