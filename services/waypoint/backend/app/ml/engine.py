@@ -165,7 +165,9 @@ class MLEngine:
             return None
         horizons: dict[str, Any] = {}
         broad_by_horizon: dict[int, dict[str, Any] | None] = {}
+        broad_matches_by_horizon: dict[int, list[Any]] = {}
         same_regime_by_horizon: dict[int, dict[str, Any] | None] = {}
+        group_matches_by_horizon: dict[int, dict[str, list[Any]]] = {}
         groups: dict[str, int] = {}
         for horizon_days in HORIZONS:
             broad = rank_analogues(point, history, horizon_days=horizon_days, group="broad",
@@ -174,13 +176,16 @@ class MLEngine:
                                          same_regime=True, top_n=config.historical_projection_top_n)
             projection = build_projection(point, broad, current_price=float(stock["price"]), horizon_days=horizon_days)
             regime_projection = build_projection(point, same_regime, current_price=float(stock["price"]), horizon_days=horizon_days)
+            broad_matches_by_horizon[horizon_days] = broad
             if projection:
                 horizons[str(horizon_days)] = projection
                 broad_by_horizon[horizon_days] = projection
                 same_regime_by_horizon[horizon_days] = regime_projection
             for group in ("same_stock", "peers"):
-                groups[group] = max(groups.get(group, 0), len(rank_analogues(point, history, horizon_days=horizon_days,
-                                                                                group=group, top_n=config.historical_projection_top_n)))
+                group_matches = rank_analogues(point, history, horizon_days=horizon_days, group=group,
+                                               top_n=config.historical_projection_top_n)
+                group_matches_by_horizon.setdefault(horizon_days, {})[group] = group_matches
+                groups[group] = max(groups.get(group, 0), len(group_matches))
             groups["broad"] = max(groups.get("broad", 0), len(broad))
         selected_horizon: int | None = 10 if "10" in horizons else (int(next(iter(horizons))) if horizons else None)
         if selected_horizon is None:
@@ -192,8 +197,10 @@ class MLEngine:
         selected["explanation"] = "We found historical situations that looked similar to this one and measured what happened afterward. These are historical projections, not guaranteed future prices."
         group_projections: dict[str, Any] = {}
         for group in ("same_stock", "peers", "broad"):
-            group_matches = rank_analogues(point, history, horizon_days=selected_horizon, group=group,
-                                            top_n=config.historical_projection_top_n)
+            if group == "broad":
+                group_matches = broad_matches_by_horizon.get(selected_horizon, [])
+            else:
+                group_matches = group_matches_by_horizon.get(selected_horizon, {}).get(group, [])
             group_projection = build_projection(point, group_matches, current_price=float(stock["price"]),
                                                  horizon_days=selected_horizon)
             if group_projection:
