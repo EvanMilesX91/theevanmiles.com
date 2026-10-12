@@ -8,6 +8,7 @@ serialized scheduler in Postgres; no credentials are stored in them.
 from __future__ import annotations
 
 import copy
+import json
 import math
 from collections.abc import MutableMapping
 from datetime import UTC, date, datetime, time, timedelta
@@ -16,6 +17,7 @@ from statistics import mean, median, pstdev
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .config import ROOT
 from .news import classify_title
 
 from .providers import (
@@ -35,6 +37,56 @@ UNSUPPORTED = {
     "concentration_pct": "Customer/product concentration requires disclosure review.",
     "estimate_uncertainty_pct": "No validated estimate-uncertainty mapping is connected.",
 }
+
+
+def _codex_earnings_calendar(now: datetime) -> list[dict[str, Any]]:
+    """Load manually reviewed current earnings dates from the mounted data file.
+
+    This is a live-evidence fallback for provider outages. Records carry an
+    explicit retrieval/availability timestamp and are never used to populate
+    historical ML snapshots retroactively.
+    """
+    path = ROOT / "data" / "codex_earnings.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(payload, list):
+        return []
+    output: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        symbol = str(item.get("symbol", "")).strip().upper()
+        try:
+            report_date = date.fromisoformat(str(item.get("report_date")))
+            available_at = datetime.fromisoformat(str(item.get("available_at")).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if not symbol or available_at.tzinfo is None or available_at > now or report_date < now.date():
+            continue
+        url = str(item.get("url", ""))
+        if not url.startswith("https://"):
+            continue
+        output.append({
+            "symbol": symbol,
+            "company": str(item.get("company") or symbol),
+            "report_date": report_date.isoformat(),
+            "fiscal_date_ending": item.get("fiscal_date_ending"),
+            "estimate": item.get("estimate"),
+            "currency": item.get("currency"),
+            "source": {
+                "provider": "Codex-reviewed investor-relations research",
+                "url": url,
+                "retrieved_at": str(item.get("retrieved_at") or item.get("available_at")),
+                "published_at": str(item.get("published_at") or item.get("available_at")),
+                "reporting_period": item.get("fiscal_date_ending"),
+                "raw_value": {"review_status": str(item.get("review_status", "reviewed"))},
+                "normalized_value": report_date.isoformat(),
+                "description": "Current earnings date reviewed from an official investor-relations source; not a historical point-in-time archive.",
+            },
+        })
+    return output
 
 
 def enrich_peer_valuations(records: dict[str, dict[str, Any]], now: datetime) -> None:
@@ -574,6 +626,35 @@ async def build_live_research(
         return [e.model_dump(mode="json") for e in await alpha.earnings_calendar()]
 
     calendar, calendar_health = await fetch("live:earnings", 24 * 3600, calendar_call, alpha is not None)
+    # A manually reviewed, current investor-relations date can keep earnings
+    # timing useful when Alpha Vantage's free allowance is exhausted. Merge it
+    # only for live research; the explicit source metadata prevents it from
+    # being mistaken for a historical training observation.
+    codex_calendar = _codex_earnings_calendar(now)
+    if codex_calendar:
+        provider_symbols = {
+            str(item.get("symbol", "")).replace("-", ".")
+            for item in (calendar or [])
+            if isinstance(item, dict)
+        }
+        by_symbol = {
+            str(item.get("symbol", "")).replace("-", "."): item
+            for item in (calendar or [])
+            if isinstance(item, dict)
+        }
+        for item in codex_calendar:
+            by_symbol.setdefault(item["symbol"].replace("-", "."), item)
+        calendar = list(by_symbol.values())
+        if calendar_health.get("status") != "current" or any(
+            item["symbol"].replace("-", ".") not in provider_symbols for item in codex_calendar
+        ):
+            calendar_health = {
+                "status": "current",
+                "code": "codex_reviewed_fallback",
+                "message": "Current earnings dates are supplied by the reviewed Codex investor-relations fallback.",
+                "checked_at": now.isoformat(),
+                "cached": False,
+            }
     output["provider_health"]["earnings"] = calendar_health
 
     output["provider_health"]["fx"] = {"status": "unavailable", "code": "not_configured",
