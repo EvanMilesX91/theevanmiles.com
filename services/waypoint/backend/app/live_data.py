@@ -1027,6 +1027,8 @@ async def build_live_research(
         # uncertainty percentage; one or two reports are not enough evidence.
         history_entry = cache.get(f"{AlphaVantageProvider.EARNINGS_HISTORY_KEY}:{symbol}")
         earnings_history = history_entry.get("data") if isinstance(history_entry, dict) else None
+        sec_history_entry = cache.get(f"sec:earnings_history:{symbol}")
+        sec_earnings_history = sec_history_entry.get("data") if isinstance(sec_history_entry, dict) else None
         if isinstance(earnings_history, list):
             surprises: list[float] = []
             estimate_inputs: list[str] = []
@@ -1066,6 +1068,20 @@ async def build_live_research(
                     "checked_at": history_entry.get("retrieved_at"),
                     "observations": len(surprises),
                 }
+        elif isinstance(sec_earnings_history, list) and sec_earnings_history:
+            # SEC reported EPS is useful verified historical evidence, but it
+            # does not contain the dated analyst estimates needed to calculate
+            # surprise uncertainty. Keep that distinction visible to the user.
+            record["coverage"]["earnings_history"] = {
+                "status": "partial",
+                "code": "reported_eps_only",
+                "checked_at": sec_history_entry.get("retrieved_at"),
+                "observations": len(sec_earnings_history),
+                "message": (
+                    "SEC reported EPS history is available; dated analyst estimates and "
+                    "estimate-uncertainty mapping are not available."
+                ),
+            }
         else:
             record["coverage"]["earnings_history"] = {
                 "status": "unavailable",

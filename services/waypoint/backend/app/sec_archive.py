@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import select
 
 from .config import config
+from .api_usage import cache_record
 from .models import FundamentalObservation
 from .news import candidates_from_filings, persist_candidates
 from .providers import SECProvider
@@ -85,6 +86,7 @@ class SECArchiveCollector:
         provider = SECProvider(cache={}, checkpoint=None, user_agent=config.sec_user_agent)
         rows: list[dict[str, Any]] = []
         filing_research: dict[str, dict[str, Any]] = {}
+        eps_history: dict[str, list[dict[str, Any]]] = {}
         resolved = 0
         failures = 0
         try:
@@ -117,11 +119,35 @@ class SECArchiveCollector:
                             "retrieved_at": fundamentals.retrieved_at,
                             "data": fact.model_dump(mode="json"),
                         })
+                        # SEC companyfacts gives us a defensible, point-in-time
+                        # history of reported EPS.  Keep it separate from the
+                        # Alpha Vantage estimate/surprise history: reported EPS
+                        # alone cannot measure analyst-estimate uncertainty.
+                        if fact.concept == "EarningsPerShareDiluted":
+                            eps_history.setdefault(symbol, []).append({
+                                "period_end": fact.period_end.isoformat(),
+                                "filed_on": fact.filed_on.isoformat(),
+                                "reported_eps": fact.value,
+                                "unit": fact.unit,
+                                "form": fact.form,
+                                "source": fact.source.model_dump(mode="json"),
+                            })
                 except Exception:
                     failures += 1
         finally:
             await provider.aclose()
         inserted = await asyncio.to_thread(self._persist, rows, filing_research, started)
+        # Persist a compact runtime cache for live research. This is deliberately
+        # reported-EPS-only and is never used to manufacture estimate surprises.
+        for symbol, history in eps_history.items():
+            history.sort(key=lambda item: (item.get("period_end", ""), item.get("filed_on", "")))
+            self.service.provider_cache[f"sec:earnings_history:{symbol}"] = cache_record(
+                history[-40:], "SEC EDGAR reported EPS", datetime.now(UTC),
+                source_timestamp=started.isoformat(), ttl=7 * 86400,
+                coverage="reported_eps_only",
+            )
+        if eps_history and self.checkpoint:
+            self.checkpoint()
         status = {
             "sec_archive_last_run": started.isoformat(),
             "sec_archive_last_success": datetime.now(UTC).isoformat(),
