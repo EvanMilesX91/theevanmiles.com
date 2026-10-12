@@ -229,9 +229,12 @@ class SECArchiveCollector:
                 await asyncio.to_thread(asyncio.run, self.collect_once(reason))
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as error:
                 self.service.schedule_status.update(
-                    sec_archive_last_error="SEC archive collection failed; existing observations remain available.",
+                    sec_archive_last_error=(
+                        "SEC archive collection failed; existing observations remain available "
+                        f"({type(error).__name__})."
+                    ),
                     sec_archive_last_error_at=datetime.now(UTC).isoformat(),
                 )
             await asyncio.sleep(self.interval_seconds)
