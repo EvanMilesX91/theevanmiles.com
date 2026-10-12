@@ -521,11 +521,21 @@ function OpportunityBoard({
           const opportunityWhy = "Opportunity combines the setup trend, momentum, volume, company evidence, catalysts, and data quality.";
           const riskWhy = "Risk combines volatility, downside distance, event risk, liquidity, and missing or uncertain evidence.";
           const worthWhy = "Worth considering blends Opportunity, inverse Risk, and Confidence. It is a guide, not a trade instruction.";
+          const missingReasons = stock.research?.missing_reasons ?? [];
+          const missingSummary = missingReasons.slice(0, 3).join(" ");
           const sizeWhy = stock.sizing.viable
             ? `This suggested amount follows your account size, configured risk limits, planned downside, fees, and minimum order rules. ${stock.sizing.reason}`
             : "No position size is currently viable under the account, fee, and risk limits.";
-          const buyWhy = stock.plan ? "This buy range is the deterministic entry area from the setup price structure, volatility, reward/risk, and risk controls." : "A buy range will appear after the required evidence is verified.";
-          const sellWhy = stock.plan ? "This sell range is the first profit area from the trade plan, constrained by historical outcomes and risk controls." : "A sell range will appear with a verified trade plan.";
+          const buyWhy = stock.plan
+            ? "This buy range is the deterministic entry area from the setup price structure, volatility, reward/risk, and risk controls."
+            : missingSummary
+              ? `No buy range yet. The engine is waiting for verified evidence: ${missingSummary}`
+              : "A buy range will appear after the required evidence is verified.";
+          const sellWhy = stock.plan
+            ? "This sell range is the first profit area from the trade plan, constrained by historical outcomes and risk controls."
+            : missingSummary
+              ? `No sell target yet. The engine is waiting for verified evidence: ${missingSummary}`
+              : "A sell range will appear with a verified trade plan.";
           return (
             <button
               key={stock.symbol}
