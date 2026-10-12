@@ -29,7 +29,7 @@ class NewsCollector:
     def symbols(self) -> list[str]:
         configured = [
             raw.strip().upper()
-            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols + "," + ",".join(self.service.dynamic_discovery)).split(",")
             if raw.strip()
         ]
         return list(dict.fromkeys(configured + list(self.service.stocks)))
@@ -62,6 +62,7 @@ class NewsCollector:
                     api_key=config.alpha_vantage_api_key,
                     cache=self.service.provider_cache,
                     daily_limit=config.alpha_vantage_daily_limit,
+                    history_reserve=config.alpha_vantage_history_reserve,
                     checkpoint=self.checkpoint,
                 )
             rows.extend(await collect_candidates(

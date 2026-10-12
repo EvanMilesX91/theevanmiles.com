@@ -42,6 +42,7 @@ class EngineService:
                                             "subscribed_symbols": [], "last_event_at": None}
         self.hot_symbols: list[str] = []
         self.warm_symbols: list[str] = []
+        self.dynamic_discovery: list[str] = []
         self.capacity_error: str | None = None
         self.schedule_status: dict[str, Any] = {}
         self.data_engine: Any = None
@@ -158,20 +159,27 @@ class EngineService:
             # interrupt live price/state updates.
             return
 
-    async def refresh_live(self, history: bool = False, db: Session | None = None) -> None:
+    async def refresh_live(self, history: bool = False, db: Session | None = None,
+                           selected_symbols: list[str] | None = None) -> None:
         from .live_data import build_live_research
         from .providers import AlpacaMarketDataProvider, AlphaVantageProvider, ProviderError, SECProvider
 
-        symbols = list(dict.fromkeys(
-            s.strip().upper()
-            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
-            if (s := raw.strip())
+        universe = list(dict.fromkeys(
+            [
+                s.strip().upper()
+                for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+                if (s := raw.strip())
+            ] + list(self.dynamic_discovery)
         ))
-        discovery_symbols = set(config.discovery_symbols.split(","))
+        symbols = list(dict.fromkeys(selected_symbols or universe))
+        unknown = [symbol for symbol in symbols if symbol not in universe]
+        if unknown:
+            raise ValueError(f"Research symbols are outside the configured universe: {', '.join(unknown)}")
+        discovery_symbols = set(config.discovery_symbols.split(",")) | set(self.dynamic_discovery)
         # A changed universe must not leave removed candidates visible from a
         # previously persisted runtime snapshot. Open positions are expected to
         # remain in LIVE_SYMBOLS or SCAN_SYMBOLS so their monitoring continues.
-        configured_symbols = set(symbols)
+        configured_symbols = set(universe)
         for stale in set(self.stocks) - configured_symbols:
             self.stocks.pop(stale, None)
             self.prices.pop(stale, None)
@@ -203,7 +211,9 @@ class EngineService:
                 try:
                     alpha = AlphaVantageProvider(
                         api_key=config.alpha_vantage_api_key, cache=self.provider_cache,
-                        daily_limit=config.alpha_vantage_daily_limit, checkpoint=self.usage_checkpoint
+                        daily_limit=config.alpha_vantage_daily_limit,
+                        history_reserve=config.alpha_vantage_history_reserve,
+                        checkpoint=self.usage_checkpoint
                     )
                 except ProviderError:
                     pass
@@ -211,8 +221,12 @@ class EngineService:
                     symbols, market=self.provider, sec=sec, alpha=alpha,
                     cache=self.provider_cache, now=now,
                 )
-                self.research = research["by_symbol"]
-                self.provider_health = research["provider_health"]
+                if selected_symbols:
+                    self.research.update(research["by_symbol"])
+                    self.provider_health.update(research["provider_health"])
+                else:
+                    self.research = research["by_symbol"]
+                    self.provider_health = research["provider_health"]
                 self.fx = {}  # V1 reserves Alpha Vantage solely for the daily earnings calendar.
             finally:
                 if sec:
@@ -399,10 +413,18 @@ class EngineService:
             if isinstance(error, dict):
                 providers[name]["last_error"] = error.get("code")
         providers["alpha_vantage"]["daily_limit"] = config.alpha_vantage_daily_limit
+        budget = self.provider_cache.get("alpha_vantage_budget", {})
+        today = datetime.now(UTC).date().isoformat()
+        used = budget.get("calls", 0) if isinstance(budget, dict) and budget.get("day") == today else 0
+        schedule = dict(self.schedule_status)
+        schedule["alpha_vantage_budget_remaining"] = max(0, config.alpha_vantage_daily_limit - used)
+        schedule["alpha_vantage_next_reset"] = datetime.combine(
+            datetime.now(UTC).date() + timedelta(days=1), datetime.min.time(), UTC
+        ).isoformat()
         return {"stream": {"connected_at": None, **self.stream_status, "feed": "Alpaca IEX"}, "providers": providers,
                 "hot_symbols": self.hot_symbols, "warm_symbols": self.warm_symbols,
                 "max_hot_symbols": config.max_hot_symbols, "capacity_error": self.capacity_error,
-                "price_stale_seconds": config.price_stale_seconds, "schedule": self.schedule_status}
+                "price_stale_seconds": config.price_stale_seconds, "schedule": schedule}
 
     def position_plans(self, db: Session) -> dict[str, Any]:
         plans: dict[str, Any] = {}
@@ -527,9 +549,25 @@ class EngineService:
                 if state in {"BUY_AREA", "TAKE_PROFIT", "RECONSIDER_EXIT"}:
                     state = "WATCH_CLOSELY" if symbol in owned else "WAIT"
                     explanation = "PRICE DATA STALE. Wait for fresh HOT-stream data; check Trading 212 manually."
+            opportunity = stock.get("opportunity")
+            risk = stock.get("risk")
+            confidence = stock.get("confidence") or 0
+            worth_score = round((opportunity + (100 - risk) + confidence) / 3) if opportunity is not None and risk is not None else None
+            missing_inputs = bool(stock.get("research", {}).get("missing_reasons"))
+            if (missing_inputs or stock.get("plan") is None) and config.app_mode == "live":
+                decision_label = "RESEARCH INCOMPLETE"
+            elif risk is not None and risk >= 85:
+                decision_label = "AVOID"
+            elif state in {"BUY_AREA", "TAKE_PROFIT"} and worth_score is not None and worth_score >= 67:
+                decision_label = "STRONG CANDIDATE"
+            elif worth_score is not None and worth_score >= 45:
+                decision_label = "WORTH REVIEWING"
+            else:
+                decision_label = "WATCH ONLY"
             stock["actionable"] = bool(config.app_mode == "live" and fresh and session["is_open"]
                                        and state in {"BUY_AREA", "TAKE_PROFIT", "RECONSIDER_EXIT"})
-            stock.update(state=state, explanation=explanation)
+            stock.update(state=state, explanation=explanation, worth_score=worth_score,
+                         decision_label=decision_label)
             stocks.append(stock)
         alerts = list(
             db.scalars(select(Alert).where(Alert.mode == config.app_mode).order_by(Alert.id.desc()).limit(15))

@@ -42,7 +42,7 @@ class SECArchiveCollector:
     def symbols(self) -> list[str]:
         configured = [
             raw.strip().upper()
-            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols + "," + ",".join(self.service.dynamic_discovery)).split(",")
             if raw.strip()
         ]
         return list(dict.fromkeys(configured + list(self.service.stocks)))

@@ -26,7 +26,7 @@ class EarningsEstimateCollector:
     def symbols(self) -> list[str]:
         configured = [
             raw.strip().upper()
-            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+            for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols + "," + ",".join(self.service.dynamic_discovery)).split(",")
             if raw.strip()
         ]
         return list(dict.fromkeys(configured + list(self.service.stocks)))
@@ -46,13 +46,21 @@ class EarningsEstimateCollector:
             api_key=config.alpha_vantage_api_key,
             cache=self.service.provider_cache,
             daily_limit=config.alpha_vantage_daily_limit,
+            history_reserve=config.alpha_vantage_history_reserve,
             checkpoint=self.checkpoint,
         )
         collected = 0
         skipped = 0
         stopped_for_budget = False
+        symbols = self.symbols()
+        cursor = self.service.provider_cache.get("alpha_vantage_earnings_cursor", 0)
         try:
-            for symbol in self.symbols():
+            cursor = int(cursor) % max(1, len(symbols))
+        except (TypeError, ValueError):
+            cursor = 0
+        ordered = symbols[cursor:] + symbols[:cursor]
+        try:
+            for symbol in ordered:
                 key = f"{AlphaVantageProvider.EARNINGS_HISTORY_KEY}:{symbol}"
                 entry = self.service.provider_cache.get(key)
                 if isinstance(entry, dict) and entry.get("data"):
@@ -67,11 +75,18 @@ class EarningsEstimateCollector:
                     await provider.earnings_history(symbol)
                     collected += 1
                 except ProviderError as error:
-                    if getattr(error, "code", "") in {"rate_limited", "provider_rejected", "budget_exhausted"}:
+                    if getattr(error, "code", "") in {"rate_limited", "provider_rejected", "budget_exhausted", "daily_limit"}:
                         stopped_for_budget = True
                         break
         finally:
             await provider.aclose()
+
+        if symbols:
+            # Advance through both cached and newly collected symbols so the
+            # next day starts where this pass stopped rather than repeating
+            # the first few names forever.
+            advanced = max(1, collected + skipped)
+            self.service.provider_cache["alpha_vantage_earnings_cursor"] = (cursor + advanced) % len(symbols)
 
         status = {
             "earnings_history_last_run": started.isoformat(),

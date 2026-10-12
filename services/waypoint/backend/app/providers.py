@@ -225,7 +225,7 @@ class _HttpProvider:
         if self._owns_client:
             await self._client.aclose()
 
-    async def _get(self, url: str, headers: dict, params: dict | None = None) -> dict:
+    async def _get(self, url: str, headers: dict, params: dict | None = None) -> Any:
         key = "http:" + hashlib.sha256((url + json.dumps(params or {}, sort_keys=True)).encode()).hexdigest()
         ttl = 7 * 86400 if "company_tickers" in url else 3600 if "/submissions/" in url else 0
         if ttl:
@@ -239,7 +239,7 @@ class _HttpProvider:
             return payload
         return await singleflight(self.cache, self.provider_name, key, load)
 
-    async def _get_uncached(self, url: str, headers: dict, params: dict | None = None) -> dict:
+    async def _get_uncached(self, url: str, headers: dict, params: dict | None = None) -> Any:
         endpoint = httpx.URL(url).path
         for attempt in range(3):
             try:
@@ -257,8 +257,8 @@ class _HttpProvider:
             if response is not None and response.status_code == 200:
                 try:
                     payload = response.json()
-                    if not isinstance(payload, dict):
-                        raise ValueError("not an object")
+                    if not isinstance(payload, (dict, list)):
+                        raise ValueError("not a JSON object or array")
                     return payload
                 except (ValueError, TypeError):
                     raise ProviderError("invalid_response", "Provider returned invalid data.") from None
@@ -347,6 +347,7 @@ class AlpacaMarketDataProvider(_HttpProvider):
     """IEX-only quotes and raw daily bars. Explicit SIP requires feed='sip'."""
 
     BASE_URL = "https://data.alpaca.markets"
+    TRADING_URL = "https://api.alpaca.markets"
 
     def __init__(
         self,
@@ -366,6 +367,33 @@ class AlpacaMarketDataProvider(_HttpProvider):
         super().__init__(client, min_interval=0.35, cache=cache, provider="alpaca", checkpoint=checkpoint)
         self._headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
         self.feed = feed
+
+    async def tradable_assets(self) -> list[dict[str, Any]]:
+        """Return a bounded, filtered US-equity discovery universe.
+
+        Asset metadata is used only to find candidates. It is never treated as
+        evidence that a company is investable; each candidate still needs the
+        normal price, filing, event and liquidity checks.
+        """
+        payload = await self._get(
+            f"{self.TRADING_URL}/v2/assets", self._headers,
+            {"status": "active", "asset_class": "us_equity"},
+        )
+        if not isinstance(payload, list):
+            raise ProviderError("invalid_response", "Alpaca returned an invalid asset list.")
+        allowed_exchanges = {"NYSE", "NASDAQ", "ARCA", "BATS"}
+        output: list[dict[str, Any]] = []
+        for row in payload:
+            if not isinstance(row, dict):
+                continue
+            symbol = str(row.get("symbol", "")).strip().upper()
+            if (
+                row.get("class") == "us_equity" and row.get("status") == "active"
+                and row.get("tradable") is True and row.get("exchange") in allowed_exchanges
+                and re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,9}", symbol)
+            ):
+                output.append({"symbol": symbol, "exchange": row.get("exchange"), "name": clean_text(str(row.get("name", symbol)), 120)})
+        return output
 
     async def latest_quotes(self, symbols: list[str]) -> dict[str, Quote]:
         requested = list(dict.fromkeys(_symbol(s) for s in symbols))
@@ -902,6 +930,7 @@ class AlphaVantageProvider(_HttpProvider):
         cache: MutableMapping[str, Any] | None = None,
         clock: Callable[[], datetime] | None = None,
         daily_limit: int = 25,
+        history_reserve: int = 0,
         checkpoint: Callable[[], None] | None = None,
     ):
         key = api_key or os.getenv("ALPHA_VANTAGE_API_KEY")
@@ -911,6 +940,7 @@ class AlphaVantageProvider(_HttpProvider):
         if not 1 <= daily_limit <= 25:
             raise ValueError("Free Alpha Vantage allowance must be between 1 and 25.")
         self.daily_limit = daily_limit
+        self.history_reserve = max(0, min(history_reserve, daily_limit - 1))
         self._api_key = key
         self.cache = cache if cache is not None else {}
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -928,6 +958,15 @@ class AlphaVantageProvider(_HttpProvider):
 
     async def _request(self, params: dict[str, str]) -> httpx.Response:
         endpoint = params["function"]
+        # NEWS_SENTIMENT is optional. Preserve a slice of the shared free-plan
+        # allowance for the historical earnings collector so it can make
+        # steady progress instead of being starved by current news refreshes.
+        if endpoint == "NEWS_SENTIMENT" and self.history_reserve:
+            budget = self.cache.get(self.BUDGET_KEY, {})
+            today = self._clock().astimezone(UTC).date().isoformat()
+            calls = budget.get("calls", 0) if isinstance(budget, dict) and budget.get("day") == today else 0
+            if isinstance(calls, int) and calls >= self.daily_limit - self.history_reserve:
+                raise ProviderError("budget_reserved", "Alpha Vantage allowance reserved for historical earnings.")
         try:
             await reserve_request(self.cache, "alpha_vantage", endpoint, interval=1,
                                   clock=self._clock, checkpoint=self.checkpoint,

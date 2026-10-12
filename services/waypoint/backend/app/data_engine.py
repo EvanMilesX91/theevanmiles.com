@@ -114,7 +114,7 @@ class DataEngine:
                 db, self.service.prices, settings.fx_usd_per_eur, self.service.mode)['positions']}
         symbols = {
             item.strip().upper()
-            for universe in (config.live_symbols, config.scan_symbols, config.discovery_symbols)
+            for universe in (config.live_symbols, config.scan_symbols, config.discovery_symbols, ",".join(self.service.dynamic_discovery))
             for item in universe.split(',')
             if item.strip()
         } | owned
@@ -192,26 +192,101 @@ class DataEngine:
             self.condition.notify_all()
         return self.latest
 
+    async def discover_candidates(self) -> None:
+        """Refresh a small rotating discovery lane from Alpaca asset metadata.
+
+        Asset metadata is deliberately only a candidate source. The normal
+        research batches still gate every candidate before it can influence a
+        plan, and the core watchlist is never replaced.
+        """
+        if not config.auto_discovery_enabled or not self.service.provider:
+            return
+        now = datetime.now(UTC)
+        cache = self.service.provider_cache
+        entry = cache.get("alpaca_discovery_assets")
+        assets: list[dict[str, Any]] = []
+        if isinstance(entry, dict):
+            try:
+                age = (now - datetime.fromisoformat(entry["retrieved_at"])).total_seconds()
+                if 0 <= age < 24 * 3600 and isinstance(entry.get("data"), list):
+                    assets = entry["data"]
+            except (KeyError, TypeError, ValueError):
+                assets = []
+        try:
+            if not assets:
+                assets = await self.service.provider.tradable_assets()
+                cache["alpaca_discovery_assets"] = {
+                    "retrieved_at": now.isoformat(), "data": assets[:10000],
+                }
+            configured = {
+                item.strip().upper()
+                for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+                if (item := raw.strip())
+            }
+            candidates = [str(row.get("symbol", "")).upper() for row in assets
+                          if isinstance(row, dict) and str(row.get("symbol", "")).upper() not in configured]
+            if not candidates:
+                return
+            cursor = cache.get("alpaca_discovery_cursor", 0)
+            try:
+                cursor = int(cursor) % len(candidates)
+            except (TypeError, ValueError):
+                cursor = 0
+            selected = [candidates[(cursor + index) % len(candidates)] for index in range(min(config.discovery_batch_size, len(candidates)))]
+            cache["alpaca_discovery_cursor"] = (cursor + len(selected)) % len(candidates)
+            self.service.dynamic_discovery = list(dict.fromkeys(selected))
+            self.service.schedule_status.update(
+                discovery_last_success=now.isoformat(),
+                discovery_candidates=len(selected),
+                discovery_symbols=self.service.dynamic_discovery,
+                discovery_last_error=None,
+            )
+        except Exception as error:
+            self.service.schedule_status.update(
+                discovery_last_error=f"Discovery scan unavailable; core watchlist continues ({type(error).__name__}).",
+                discovery_last_error_at=now.isoformat(),
+            )
+
     async def refresh(self, reason: str = 'manual') -> dict[str, Any]:
         if self.refresh_lock.locked():
             # Concurrent manual/scheduled refreshes join the current refresh.
             async with self.refresh_lock:
                 return await self.publish()
         async with self.refresh_lock:
-            self.service.schedule_status.update(running=True, reason=reason, last_error=None)
+            await self.discover_candidates()
+            all_symbols = list(dict.fromkeys(
+                item.strip().upper()
+                for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+                if (item := raw.strip())
+            ) + self.service.dynamic_discovery)
+            batch_size = max(1, min(config.research_batch_size, len(all_symbols)))
+            batches = [all_symbols[index:index + batch_size] for index in range(0, len(all_symbols), batch_size)]
+            self.service.schedule_status.update(
+                running=True, reason=reason, last_error=None,
+                research_started_at=datetime.now(UTC).isoformat(),
+                research_total=len(all_symbols), research_completed=0,
+                research_pass=f"0/{len(all_symbols)}" if all_symbols else "0/0",
+                research_last_symbol=None, research_errors=[],
+            )
             prepared = EngineService()
             prepared.provider_cache = self.service.provider_cache
             prepared.usage_checkpoint = self.usage_checkpoint
             prepared.stocks = copy.deepcopy(self.service.stocks)
             prepared.research = copy.deepcopy(self.service.research)
-            try:
-                # Crucial: no engine/ledger lock is held during any external I/O.
-                await prepared.refresh_live(history=True)
+            prepared.market_values = copy.deepcopy(self.service.market_values)
+
+            async def commit_batch(batch: list[str]) -> None:
+                """Publish one completed research batch without waiting for the universe."""
                 async with transaction(self.service, self.sessions) as db:
-                    self.service.research = prepared.research
+                    self.service.research.update({symbol: prepared.research[symbol] for symbol in batch
+                                                  if symbol in prepared.research})
                     self.service.provider_health.update(prepared.provider_health)
-                    self.service.fx = {}  # AV is earnings-only in this version.
-                    for symbol, stock in prepared.stocks.items():
+                    self.service.fx = {}
+                    refresh_now = datetime.now(UTC)
+                    for symbol in batch:
+                        stock = prepared.stocks.get(symbol)
+                        if not stock:
+                            continue
                         value = self.service.market_values.get(symbol, {})
                         if value.get('price'):
                             stock.update(price=value['price'], price_basis=value['price_basis'],
@@ -221,12 +296,7 @@ class DataEngine:
                         self.service.stocks[symbol] = stock
                         if stock['price'] > 0:
                             self.service.prices[symbol] = stock['price']
-                        # Capture the refreshed point-in-time snapshot and
-                        # shadow prediction alongside the deterministic
-                        # analysis. This never changes the state decision;
-                        # it only creates the later evidence record needed to
-                        # evaluate ML against what actually happened.
-                        refresh_now = datetime.now(UTC)
+                        # Capture point-in-time snapshots for shadow evaluation.
                         self.service.ml.capture(db, symbol=symbol, stock=stock, now=refresh_now)
                         prediction = self.service.ml.predict(stock, symbol=symbol, now=refresh_now, db=db)
                         if prediction is not None and self.service.ml.shadow_mode:
@@ -234,15 +304,38 @@ class DataEngine:
                         last = db.scalar(select(Analysis).where(Analysis.symbol == symbol, Analysis.mode == 'live')
                                          .order_by(Analysis.id.desc()).limit(1))
                         if not last or accounting.utc(last.created_at).date() < datetime.now(UTC).date():
-                            db.add(Analysis(symbol=symbol, mode='live', created_at=datetime.now(UTC),
+                            db.add(Analysis(symbol=symbol, mode='live', created_at=refresh_now,
                                             model_version=MODEL_VERSION, data=copy.deepcopy(stock)))
-                    self.service.last_slow_refresh = datetime.now(UTC)
+
+            try:
+                # Crucial: no engine/ledger lock is held during any external I/O.
+                for completed, batch in enumerate(batches, start=1):
+                    await prepared.refresh_live(history=True, selected_symbols=batch)
+                    await commit_batch(batch)
+                    completed_count = min(completed * batch_size, len(all_symbols))
+                    provider_errors = [
+                        f"{name}: {health.get('message') or health.get('code')}"
+                        for name, health in prepared.provider_health.items()
+                        if health.get('status') in {'unavailable', 'stale'} and (health.get('message') or health.get('code'))
+                    ]
                     self.service.schedule_status.update(
-                        running=False, last_success=datetime.now(UTC).isoformat(),
+                        research_completed=completed_count,
+                        research_pass=f"{completed_count}/{len(all_symbols)}",
+                        research_last_symbol=batch[-1] if batch else None,
+                        research_errors=provider_errors[:12],
                     )
+                    # Make each committed batch immediately visible to REST/SSE.
+                    self.service.last_slow_refresh = datetime.now(UTC)
+                    self.changed = True
+                    await self.publish()
+                self.service.last_slow_refresh = datetime.now(UTC)
+                self.service.schedule_status.update(
+                    running=False, last_success=datetime.now(UTC).isoformat(),
+                    research_completed=len(all_symbols), research_pass=f"{len(all_symbols)}/{len(all_symbols)}",
+                )
                 self.select_symbols()
             except Exception:
-                self.service.schedule_status.update(running=False, last_error='Research refresh failed; using cached data.')
+                self.service.schedule_status.update(running=False, last_error='Research refresh failed; completed batches remain available.')
                 raise
             finally:
                 if prepared.provider:

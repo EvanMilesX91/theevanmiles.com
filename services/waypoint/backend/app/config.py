@@ -34,6 +34,8 @@ class Config(BaseSettings):
     scan_symbols: str = ""
     # Smaller or less-followed candidates are kept in a separate exploration lane.
     discovery_symbols: str = ""
+    auto_discovery_enabled: bool = True
+    discovery_batch_size: int = Field(default=10, ge=1, le=50)
     scheduler_enabled: bool = True
     max_hot_symbols: int = Field(default=30, ge=1, le=30)
     price_stale_seconds: float = Field(default=30, ge=2, le=90)
@@ -41,7 +43,13 @@ class Config(BaseSettings):
     stream_publish_seconds: float = Field(default=0.5, ge=0.1, le=5)
     stream_checkpoint_seconds: float = Field(default=30, ge=10, le=300)
     warm_refresh_minutes: int = Field(default=15, ge=5, le=60)
+    # Slow research is committed in small batches so the dashboard can show
+    # useful progress and keep serving the last completed snapshot.
+    research_batch_size: int = Field(default=5, ge=1, le=25)
     alpha_vantage_daily_limit: int = Field(default=25, ge=1, le=25)
+    # Keep a portion of the free allowance for the rotating historical
+    # earnings archive; optional news must yield when the reserve is reached.
+    alpha_vantage_history_reserve: int = Field(default=10, ge=0, le=24)
     # GDELT is a broad discovery feed; it is stored as unverified evidence and
     # never treated as proof that an issuer made an announcement.
     # GDELT is discovery-only and cannot influence deterministic decisions;

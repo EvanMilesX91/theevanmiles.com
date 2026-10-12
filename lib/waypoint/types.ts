@@ -97,6 +97,8 @@ export type Stock = {
   risk: number | null;
   confidence: number;
   confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  worth_score?: number | null;
+  decision_label?: "STRONG CANDIDATE" | "WORTH REVIEWING" | "WATCH ONLY" | "RESEARCH INCOMPLETE" | "AVOID";
   opportunity_components: ComponentScore[];
   risk_components: ComponentScore[];
   plan: Plan | null;
@@ -291,6 +293,22 @@ export type DataStatus = {
   price_stale_seconds?: number;
   providers: Record<string, ProviderUsage>;
   schedule?: {
+    running?: boolean;
+    reason?: string | null;
+    last_success?: string | null;
+    last_error?: string | null;
+    research_started_at?: string | null;
+    research_total?: number;
+    research_completed?: number;
+    research_pass?: string | null;
+    research_last_symbol?: string | null;
+    research_errors?: string[];
+    alpha_vantage_next_reset?: string | null;
+    alpha_vantage_budget_remaining?: number | null;
+    discovery_last_success?: string | null;
+    discovery_candidates?: number;
+    discovery_symbols?: string[];
+    discovery_last_error?: string | null;
     news_last_run?: string | null;
     news_last_success?: string | null;
     news_last_reason?: string | null;

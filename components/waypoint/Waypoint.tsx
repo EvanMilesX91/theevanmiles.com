@@ -511,11 +511,11 @@ function OpportunityBoard({
           const safe = isFresh(stock);
           const actionable = !!stock.plan && !["SKIP", "NO_SETUP"].includes(stock.state);
           const inBuyRange = !!stock.plan && stock.price >= stock.plan.entry_low && stock.price <= stock.plan.entry_high;
-          const worthScore = stock.opportunity == null || stock.risk == null
+          const worthScore = stock.worth_score ?? (stock.opportunity == null || stock.risk == null
             ? null
-            : Math.round(Math.max(0, Math.min(100, stock.opportunity * 0.55 + (100 - stock.risk) * 0.3 + stock.confidence * 0.15)));
+            : Math.round(Math.max(0, Math.min(100, stock.opportunity * 0.55 + (100 - stock.risk) * 0.3 + stock.confidence * 0.15))));
           const worthTone = worthScore == null ? "" : worthScore >= 67 ? "good" : worthScore >= 45 ? "caution" : "weak";
-          const worthLabel = worthScore == null ? "Unavailable" : worthScore >= 67 ? "Strong" : worthScore >= 45 ? "Mixed" : "Weak";
+          const worthLabel = stock.decision_label ?? (worthScore == null ? "Unavailable" : worthScore >= 67 ? "Strong" : worthScore >= 45 ? "Mixed" : "Weak");
           const opportunityWhy = "Opportunity combines the setup trend, momentum, volume, company evidence, catalysts, and data quality.";
           const riskWhy = "Risk combines volatility, downside distance, event risk, liquidity, and missing or uncertain evidence.";
           const worthWhy = "Worth considering blends Opportunity, inverse Risk, and Confidence. It is a guide, not a trade instruction.";
@@ -1989,6 +1989,23 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                 <p>Prices are real observations. Before acting, compare the live quote and spread in Trading 212.</p>
                  <p>HOT: {data.data_status?.hot_symbols.join(", ") || "Waiting for stream"} · WARM: {data.data_status?.warm_symbols.join(", ") || "None"}</p>
                  {data.data_status?.stream.last_error && <p role="status">{data.data_status.stream.last_error}</p>}
+                 <div className="waypoint-research-status">
+                   <strong>RESEARCH PASS</strong>
+                   <p>
+                     {data.data_status?.schedule?.running
+                       ? `Running · ${data.data_status.schedule.research_pass ?? "starting"}`
+                       : data.data_status?.schedule?.research_pass
+                         ? `Last pass · ${data.data_status.schedule.research_pass}`
+                         : "Waiting for the first research pass"}
+                     {data.data_status?.schedule?.research_last_symbol && ` · Last completed: ${data.data_status.schedule.research_last_symbol}`}
+                   </p>
+                   <small>
+                     Last successful refresh: {dateTime(data.data_status?.schedule?.last_success)}
+                   </small>
+                   {(data.data_status?.schedule?.research_errors?.length ?? 0) > 0 && (
+                     <small role="status">Provider issues: {data.data_status?.schedule?.research_errors?.join(" · ")}</small>
+                   )}
+                 </div>
                  <div className="waypoint-news-status">
                    <strong>NEWS EVIDENCE COLLECTOR</strong>
                    <p>
@@ -2012,6 +2029,22 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                     </div>
                   ))}
                 </div>
+                 <div className="waypoint-budget-status">
+                   <strong>RESEARCH BUDGET</strong>
+                   <p>
+                     Alpha Vantage historical earnings are collected in rotating batches and cached.
+                     {typeof data.data_status?.schedule?.alpha_vantage_budget_remaining === "number"
+                       ? ` ${data.data_status.schedule.alpha_vantage_budget_remaining} calls remain today.`
+                       : " The next available budget is shown after the provider reports it."}
+                   </p>
+                   {data.data_status?.schedule?.alpha_vantage_next_reset && <small>Next reset: {dateTime(data.data_status.schedule.alpha_vantage_next_reset)}</small>}
+                 </div>
+                 <div className="waypoint-discovery-status">
+                   <strong>DISCOVERY UNIVERSE</strong>
+                   <p>{data.data_status?.schedule?.discovery_candidates ?? 0} rotating candidates are being checked alongside your core watchlist.</p>
+                   {data.data_status?.schedule?.discovery_symbols?.length ? <small>Current lane: {data.data_status.schedule.discovery_symbols.join(", ")}</small> : null}
+                   {data.data_status?.schedule?.discovery_last_error && <small role="status">{data.data_status.schedule.discovery_last_error}</small>}
+                 </div>
               </details>
             </section>
           )}
