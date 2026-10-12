@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
 from .config import config
@@ -96,7 +96,11 @@ class EarningsEstimateCollector:
             "earnings_history_skipped": skipped,
             "earnings_history_budget_limited": stopped_for_budget,
             "earnings_history_last_error": None,
+            "earnings_history_next_attempt": None,
         }
+        if stopped_for_budget:
+            next_reset = datetime.combine(started.date() + timedelta(days=1), time.min, UTC)
+            status["earnings_history_next_attempt"] = (next_reset + timedelta(seconds=10)).isoformat()
         self.service.schedule_status.update(**status)
         if self.service.data_engine:
             self.service.data_engine.changed = True
@@ -126,4 +130,12 @@ class EarningsEstimateCollector:
                     earnings_history_last_error="Historical earnings collection failed; existing observations remain available.",
                     earnings_history_last_error_at=datetime.now(UTC).isoformat(),
                 )
-            await asyncio.sleep(self.interval_seconds)
+            next_attempt = self.service.schedule_status.get("earnings_history_next_attempt")
+            if next_attempt:
+                try:
+                    delay = max(30, (datetime.fromisoformat(next_attempt) - datetime.now(UTC)).total_seconds())
+                except (TypeError, ValueError):
+                    delay = self.interval_seconds
+            else:
+                delay = self.interval_seconds
+            await asyncio.sleep(delay)

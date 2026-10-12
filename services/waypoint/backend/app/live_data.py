@@ -667,8 +667,14 @@ async def build_live_research(
                 item for item in record["filings"]
                 if item.get("form") in {"10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "6-K"}
             ]
+            # Quarterly filings often omit the customer-concentration note
+            # that is present in the latest annual report. Prefer the newest
+            # annual filing, then fall back to a quarterly filing for issuers
+            # that report concentration there. This keeps the evidence current
+            # without treating a missing quarterly note as proof of zero.
+            annual = [item for item in concentration_candidates if item.get("form") in {"10-K", "10-K/A", "20-F"}]
             concentration_filing = max(
-                concentration_candidates,
+                annual or concentration_candidates,
                 key=lambda item: (item.get("filed_on", ""), item.get("accession", "")),
                 default=None,
             )
@@ -682,8 +688,8 @@ async def build_live_research(
                 return await sec.customer_concentration(filing)
 
             concentration_key = (
-                f"live:concentration:{symbol}:{concentration_filing.get('accession')}"
-                if concentration_filing else f"live:concentration:{symbol}:none"
+                f"live:concentration:v2:{symbol}:{concentration_filing.get('accession')}"
+                if concentration_filing else f"live:concentration:v2:{symbol}:none"
             )
             if concentration_filing is None:
                 concentration = None
