@@ -400,6 +400,36 @@ def test_alpha_bulk_calendar_parses_and_cache_prevents_repeat_calls():
     assert "secret-alpha-key" not in str(cache)
 
 
+def test_alpha_earnings_history_parses_surprises_and_caches():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        assert request.url.params["function"] == "EARNINGS"
+        assert request.url.params["symbol"] == "ABC"
+        return httpx.Response(200, json={
+            "quarterlyEarnings": [
+                {
+                    "fiscalDateEnding": "2026-06-30",
+                    "reportedDate": "2026-07-30",
+                    "reportedEPS": "1.20",
+                    "estimatedEPS": "1.10",
+                    "surprisePercentage": "9.09",
+                    "reportTime": "post-market",
+                    "currency": "USD",
+                }
+            ]
+        })
+
+    cache = {}
+    first = run(alpha(handler, cache).earnings_history("ABC"))
+    second = run(alpha(handler, cache).earnings_history("ABC"))
+    assert first == second
+    assert first[0]["surprise_percentage"] == "9.09"
+    assert len(calls) == 1
+    assert "secret-alpha-key" not in str(cache)
+
+
 def test_alpha_budget_is_reserved_before_request_and_survives_http_200_rejection():
     cache = {}
 

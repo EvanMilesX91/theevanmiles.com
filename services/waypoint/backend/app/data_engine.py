@@ -36,6 +36,7 @@ class DataEngine:
         self.tasks: list[asyncio.Task[Any]] = []
         self.news_collector: Any = None
         self.sec_archive: Any = None
+        self.earnings_collector: Any = None
         self.stream: Any = None
         self.changed = True
         self.promoted: str | None = None
@@ -88,6 +89,9 @@ class DataEngine:
             from .sec_archive import SECArchiveCollector
             self.sec_archive = SECArchiveCollector(self.service, self.sessions, self.usage_checkpoint)
             self.tasks.append(asyncio.create_task(self.sec_archive.run()))
+            from .earnings_archive import EarningsEstimateCollector
+            self.earnings_collector = EarningsEstimateCollector(self.service, self.usage_checkpoint)
+            self.tasks.append(asyncio.create_task(self.earnings_collector.run()))
 
     async def stop(self) -> None:
         if self.stream:

@@ -284,6 +284,33 @@ class _HttpProvider:
         code = "rate_limited" if status == 429 else "unavailable"
         raise ProviderError(code, "Provider temporarily unavailable; existing data must be marked stale.")
 
+    async def _get_text(self, url: str, headers: dict) -> tuple[str, datetime]:
+        """Fetch a bounded text document while preserving provider accounting."""
+        endpoint = httpx.URL(url).path
+        try:
+            await reserve_request(self.cache, self.provider_name, endpoint,
+                                  interval=self._min_interval,
+                                  clock=lambda: datetime.now(timezone.utc),
+                                  checkpoint=self.checkpoint)
+        except RequestBlocked as error:
+            raise ProviderError(error.code, "Provider request budget is unavailable; using cached data.") from None
+        try:
+            response = await self._client.get(url, headers=headers)
+        except httpx.RequestError:
+            response = None
+        retrieved = datetime.now(timezone.utc)
+        record_result(self.cache, self.provider_name, endpoint, retrieved,
+                      error=None if response is not None and response.status_code == 200 else "request_failed",
+                      rate_limited=response is not None and response.status_code == 429)
+        if response is not None and response.status_code == 200:
+            return response.text, retrieved
+        status = response.status_code if response is not None else 0
+        if status in (401, 403):
+            raise ProviderError("access_denied", "Provider access denied; check credentials or feed access.")
+        if status == 429:
+            raise ProviderError("rate_limited", "Provider rate limit reached; try again later.")
+        raise ProviderError("unavailable", "Provider temporarily unavailable; existing data must be marked stale.")
+
 
 def _symbol(symbol: str) -> str:
     symbol = symbol.strip().upper()
@@ -738,6 +765,40 @@ class SECProvider(_HttpProvider):
         except (ValidationError, ValueError, TypeError):
             raise ProviderError("invalid_response", "SEC returned invalid filing metadata.") from None
 
+    async def customer_concentration(self, filing: Filing) -> dict[str, Any] | None:
+        """Extract only an explicit customer concentration percentage.
+
+        The result is intentionally conservative: a filing with no explicit
+        percentage returns ``None`` rather than treating absent disclosure as
+        zero concentration.  The source filing remains attached to the
+        derived metric by the caller.
+        """
+        text, retrieved = await self._get_text(filing.source.url, self._headers)
+        plain = re.sub(r"<[^>]+>", " ", html.unescape(text))
+        plain = " ".join(plain.split())
+        # Look for a percentage in the same short sentence/paragraph as
+        # customer/client concentration language.  This avoids claiming that
+        # an arbitrary percentage elsewhere in a filing is concentration.
+        matches: list[float] = []
+        for sentence in re.split(r"(?<=[.;])\s+", plain):
+            lowered = sentence.lower()
+            if "customer" not in lowered and "client" not in lowered:
+                continue
+            if not any(term in lowered for term in ("concentration", "revenue", "sales", "accounted for", "represented")):
+                continue
+            for raw in re.findall(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%", sentence):
+                value = float(raw)
+                if 0 < value <= 100:
+                    matches.append(value)
+        if not matches:
+            return None
+        return {
+            "maximum_pct": max(matches),
+            "filing_accession": filing.accession,
+            "filed_on": filing.filed_on.isoformat(),
+            "retrieved_at": retrieved.isoformat(),
+        }
+
     async def fundamentals(self, cik: str, as_of: date | None = None) -> Fundamentals:
         cik = _cik(cik)
         key = f"sec:facts:{cik}"
@@ -830,6 +891,7 @@ class AlphaVantageProvider(_HttpProvider):
     BASE_URL = "https://www.alphavantage.co/query"
     BUDGET_KEY = "alpha_vantage_budget"
     EARNINGS_KEY = "alpha_vantage_earnings"
+    EARNINGS_HISTORY_KEY = "alpha_vantage_earnings_history"
     NEWS_KEY = "alpha_vantage_news"
     FX_KEY = "alpha_vantage_fx_eur_usd"
 
@@ -904,6 +966,55 @@ class AlphaVantageProvider(_HttpProvider):
 
     async def earnings_calendar(self) -> list[EarningsEvent]:
         return await singleflight(self.cache, "alpha_vantage", self.EARNINGS_KEY, self._earnings_calendar)
+
+    async def earnings_history(self, symbol: str) -> list[dict[str, Any]]:
+        """Return reported/estimated quarterly EPS observations for one symbol.
+
+        Alpha Vantage documents this as the historical earnings endpoint; the
+        caller uses it for an uncertainty statistic, never as a price target.
+        Results are cached for 30 days because the history changes only when a
+        new report arrives and the free plan has a daily request budget.
+        """
+        symbol = _symbol(symbol)
+        key = f"{self.EARNINGS_HISTORY_KEY}:{symbol}"
+        cached = self._cached(key, 30 * 86400)
+        if cached is not None:
+            return list(cached)
+        response = await self._request({"function": "EARNINGS", "symbol": symbol})
+        retrieved = self._clock()
+        try:
+            payload = response.json()
+            rows = payload.get("quarterlyEarnings", [])
+            if not isinstance(rows, list):
+                raise ValueError("invalid quarterly earnings")
+            result: list[dict[str, Any]] = []
+            for row in rows[:40]:
+                if not isinstance(row, dict) or not row.get("fiscalDateEnding"):
+                    continue
+                result.append({
+                    "fiscal_date_ending": str(row.get("fiscalDateEnding")),
+                    "reported_date": str(row.get("reportedDate") or ""),
+                    "reported_eps": row.get("reportedEPS"),
+                    "estimated_eps": row.get("estimatedEPS"),
+                    "surprise_percentage": row.get("surprisePercentage"),
+                    "report_time": clean_text(str(row.get("reportTime") or ""), 20),
+                    "currency": clean_text(str(row.get("currency") or ""), 8) or None,
+                    "source": {
+                        "provider": "Alpha Vantage earnings history",
+                        "url": "https://www.alphavantage.co/documentation/#earnings",
+                        "retrieved_at": retrieved.isoformat(),
+                        "published_at": None,
+                        "reporting_period": str(row.get("fiscalDateEnding")),
+                        "raw_value": row,
+                        "normalized_value": None,
+                        "description": "Historical reported and estimated EPS observations; availability depends on the configured plan.",
+                    },
+                })
+        except (ValueError, TypeError, AttributeError):
+            raise ProviderError("invalid_response", "Alpha Vantage returned invalid earnings history.") from None
+        self.cache[key] = cache_record(result, "Alpha Vantage", retrieved,
+                                       source_timestamp=retrieved.isoformat(), ttl=30 * 86400)
+        return result
 
     async def news_sentiment(self, symbols: list[str], since: datetime,
                              until: datetime | None = None) -> list[NewsItem]:

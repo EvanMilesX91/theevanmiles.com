@@ -8,6 +8,7 @@ serialized scheduler in Postgres; no credentials are stored in them.
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import MutableMapping
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
@@ -73,6 +74,27 @@ def _derived_source(
 
 def _clip(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, float(value)))
+
+
+def _sector_group(sic: int) -> str:
+    """Map SEC SIC ranges into broad peer groups for valuation comparisons."""
+    if 6000 <= sic < 6800:
+        return "financial"
+    if sic == 2836:
+        return "biotechnology"
+    if 1000 <= sic < 1500:
+        return "commodity"
+    if 1300 <= sic < 1400:
+        return "commodity"
+    if 2000 <= sic < 4000:
+        return "cyclical"
+    if 4800 <= sic < 4900:
+        return "technology"
+    if 5000 <= sic < 6000:
+        return "consumer"
+    if 7000 <= sic < 9000:
+        return "services"
+    return "other"
 
 
 def normalize_fundamentals(
@@ -564,12 +586,8 @@ async def build_live_research(
                 sic_number = int(identity.sic or "0")
             except ValueError:
                 sic_number = 0
-            if 6000 <= sic_number < 6800:
-                record["sector_group"] = "financial"
-                record["metric_sources"]["sector_group"] = identity_id
-            elif sic_number == 2836:
-                record["sector_group"] = "biotechnology"
-                record["metric_sources"]["sector_group"] = identity_id
+            record["sector_group"] = _sector_group(sic_number)
+            record["metric_sources"]["sector_group"] = identity_id
 
             async def filings_call(identity=identity):
                 assert sec is not None
@@ -583,6 +601,54 @@ async def build_live_research(
             filings, health = await fetch(f"live:filings:{symbol}", 3600, filings_call, sec is not None)
             record["coverage"]["filings"] = health
             record["filings"] = filings or []
+
+            concentration_candidates = [
+                item for item in record["filings"]
+                if item.get("form") in {"10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "6-K"}
+            ]
+            concentration_filing = max(
+                concentration_candidates,
+                key=lambda item: (item.get("filed_on", ""), item.get("accession", "")),
+                default=None,
+            )
+
+            async def concentration_call(identity=identity, concentration_filing=concentration_filing):
+                assert sec is not None and concentration_filing is not None
+                filing = next(
+                    item for item in await sec.filings(identity.cik)
+                    if item.accession == concentration_filing["accession"]
+                )
+                return await sec.customer_concentration(filing)
+
+            concentration_key = (
+                f"live:concentration:{symbol}:{concentration_filing.get('accession')}"
+                if concentration_filing else f"live:concentration:{symbol}:none"
+            )
+            concentration, concentration_health = await fetch(
+                concentration_key,
+                7 * 86400,
+                concentration_call,
+                sec is not None and callable(getattr(sec, "customer_concentration", None)) and concentration_filing is not None,
+            )
+            record["coverage"]["concentration"] = concentration_health
+            if concentration and concentration.get("maximum_pct") is not None and concentration_filing:
+                filing_source = concentration_filing.get("source") or {}
+                filing_id = f"sec-{symbol.lower()}-filing-{concentration_filing['accession']}"
+                record["sources"].append({**filing_source, "id": filing_id})
+                concentration_id = f"derived-{symbol.lower()}-concentration"
+                concentration_value = _clip(float(concentration["maximum_pct"]))
+                record["metrics"]["concentration_pct"] = concentration_value
+                record["metric_sources"]["concentration_pct"] = concentration_id
+                record["sources"].append(_derived_source(
+                    source_id=concentration_id,
+                    now=now,
+                    value=concentration_value,
+                    inputs=[filing_id],
+                    description=(
+                        "Maximum explicit customer/client concentration percentage found in the latest "
+                        "reviewed SEC annual or quarterly filing; no disclosure is treated as unknown, not zero."
+                    ),
+                ))
 
             version_key = f"live:fundamentals-version:{symbol}"
             # The normalized payload is a derived research artifact, not just
@@ -787,6 +853,58 @@ async def build_live_research(
                 ),
             ))
         record["coverage"]["earnings"] = calendar_health
+
+        # Historical earnings estimates are collected by the bounded archive
+        # worker and retained in the shared provider cache.  Four or more
+        # observations are required before turning surprises into an
+        # uncertainty percentage; one or two reports are not enough evidence.
+        history_entry = cache.get(f"{AlphaVantageProvider.EARNINGS_HISTORY_KEY}:{symbol}")
+        earnings_history = history_entry.get("data") if isinstance(history_entry, dict) else None
+        if isinstance(earnings_history, list):
+            surprises: list[float] = []
+            estimate_inputs: list[str] = []
+            for row in earnings_history:
+                try:
+                    value = float(row.get("surprise_percentage"))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(value):
+                    continue
+                surprises.append(abs(value))
+                estimate_inputs.append(str(row.get("fiscal_date_ending") or row.get("reported_date") or "unknown"))
+            if len(surprises) >= 4:
+                uncertainty = _clip(sum(surprises) / len(surprises))
+                estimate_id = f"derived-{symbol.lower()}-estimate-uncertainty"
+                record["metrics"]["estimate_uncertainty_pct"] = uncertainty
+                record["metric_sources"]["estimate_uncertainty_pct"] = estimate_id
+                record["sources"].append(_derived_source(
+                    source_id=estimate_id,
+                    now=now,
+                    value=uncertainty,
+                    inputs=estimate_inputs,
+                    provider="Waypoint transparent derivation from Alpha Vantage earnings history",
+                    description=(
+                        "Mean absolute historical EPS surprise percentage across at least four reported quarters; "
+                        "used as a bounded estimate-uncertainty proxy, not as a forward forecast."
+                    ),
+                ))
+                record["coverage"]["earnings_history"] = {
+                    "status": "current",
+                    "checked_at": history_entry.get("retrieved_at"),
+                    "observations": len(surprises),
+                }
+            else:
+                record["coverage"]["earnings_history"] = {
+                    "status": "insufficient",
+                    "checked_at": history_entry.get("retrieved_at"),
+                    "observations": len(surprises),
+                }
+        else:
+            record["coverage"]["earnings_history"] = {
+                "status": "unavailable",
+                "code": "not_collected",
+                "message": "Historical earnings estimates have not been collected for this symbol.",
+            }
         matching = [
             e
             for e in (calendar or [])
@@ -821,7 +939,9 @@ async def build_live_research(
                 continue
             if health["status"] != "current":
                 record["missing_reasons"].append(f"{name.replace('_', ' ').capitalize()} data is {health['status']}.")
-        record["missing_reasons"] = list(dict.fromkeys(record["missing_reasons"] + list(UNSUPPORTED.values())))
+        record["missing_reasons"] = list(dict.fromkeys(record["missing_reasons"] + [
+            reason for key, reason in UNSUPPORTED.items() if record["metrics"].get(key) is None
+        ]))
         output["by_symbol"][symbol] = record
 
     # Complete comparable valuation references only when the current refresh
