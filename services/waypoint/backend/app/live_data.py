@@ -668,7 +668,7 @@ async def build_live_research(
             # v2 invalidates older caches that were sliced before filtering,
             # which could leave only recent Form 4 rows and no annual/quarterly
             # filing available for concentration review.
-            filings, health = await fetch(f"live:filings:v2:{symbol}", 3600, filings_call, sec is not None)
+            filings, health = await fetch(f"live:filings:v3:{symbol}", 3600, filings_call, sec is not None)
             record["coverage"]["filings"] = health
             record["filings"] = filings or []
 
