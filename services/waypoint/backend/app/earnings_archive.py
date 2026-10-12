@@ -52,6 +52,7 @@ class EarningsEstimateCollector:
         collected = 0
         skipped = 0
         stopped_for_budget = False
+        calendar_refreshed = False
         symbols = self.symbols()
         cursor = self.service.provider_cache.get("alpha_vantage_earnings_cursor", 0)
         try:
@@ -60,7 +61,18 @@ class EarningsEstimateCollector:
             cursor = 0
         ordered = symbols[cursor:] + symbols[:cursor]
         try:
+            # Spend the first available call on the shared earnings calendar.
+            # The live research pass reuses this cache, so timing evidence is
+            # available before the remaining allowance is spent on history.
+            try:
+                await provider.earnings_calendar()
+                calendar_refreshed = True
+            except ProviderError as error:
+                if getattr(error, "code", "") in {"rate_limited", "provider_rejected", "budget_exhausted", "daily_limit"}:
+                    stopped_for_budget = True
             for symbol in ordered:
+                if stopped_for_budget:
+                    break
                 key = f"{AlphaVantageProvider.EARNINGS_HISTORY_KEY}:{symbol}"
                 entry = self.service.provider_cache.get(key)
                 if isinstance(entry, dict) and entry.get("data"):
@@ -97,6 +109,7 @@ class EarningsEstimateCollector:
             "earnings_history_budget_limited": stopped_for_budget,
             "earnings_history_last_error": None,
             "earnings_history_next_attempt": None,
+            "earnings_calendar_refreshed": calendar_refreshed,
         }
         if stopped_for_budget:
             next_reset = datetime.combine(started.date() + timedelta(days=1), time.min, UTC)
