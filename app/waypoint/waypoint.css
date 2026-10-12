@@ -3537,8 +3537,8 @@
 .waypoint-app .projection-heading small,
 .waypoint-app .projection-note,
 .waypoint-app .ml-outlook-metrics span,
-.waypoint-app .projection-ranges span,
-.waypoint-app .projection-metrics span,
+.waypoint-app .projection-outlook .projection-ranges span,
+.waypoint-app .projection-outlook .projection-metrics span,
 .waypoint-app .ml-why,
 .waypoint-app .ml-why span,
 .waypoint-app .projection-details,
@@ -3548,8 +3548,8 @@
 .waypoint-app .ml-outlook-heading strong,
 .waypoint-app .ml-outlook-metrics strong,
 .waypoint-app .projection-heading strong,
-.waypoint-app .projection-ranges strong,
-.waypoint-app .projection-metrics strong,
+.waypoint-app .projection-outlook .projection-ranges strong,
+.waypoint-app .projection-outlook .projection-metrics strong,
 .waypoint-app .projection-details > div,
 .waypoint-app .ml-why p {
   color: #011627 !important;
@@ -3558,6 +3558,32 @@
 .waypoint-app .projection-cone,
 .waypoint-app .projection-details {
   border-color: #b9c9c5;
+}
+
+/* The full Projections page keeps its cards dark. The broad theme rules above
+   are intentionally scoped to the pale in-detail evidence card so they do
+   not turn the page's range values dark on navy. */
+.waypoint-app .research-banner h2 {
+  color: #011627 !important;
+}
+.waypoint-app .research-banner .eyebrow,
+.waypoint-app .research-banner p {
+  color: #6f8b73 !important;
+}
+.waypoint-app .projection-page-card {
+  color: #f4fbff;
+}
+.waypoint-app .projection-page-card .section-heading .eyebrow,
+.waypoint-app .projection-page-card .projection-ranges span,
+.waypoint-app .projection-page-card .projection-metrics span,
+.waypoint-app .projection-page-card .muted {
+  color: #a9c0ca !important;
+}
+.waypoint-app .projection-page-card .section-heading h3,
+.waypoint-app .projection-page-card .section-heading > strong,
+.waypoint-app .projection-page-card .projection-ranges strong,
+.waypoint-app .projection-page-card .projection-metrics strong {
+  color: #f4fbff !important;
 }
 .waypoint-app .state-badge.gray { background: #123e58 !important; color: #bfe8ff !important; border: 1px solid #4cb5f5 !important; }
 .waypoint-app .state-badge.gray .state-dot { background: #4cb5f5 !important; }
