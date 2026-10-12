@@ -808,28 +808,42 @@ class SECProvider(_HttpProvider):
         # customer/client concentration language.  This avoids claiming that
         # an arbitrary percentage elsewhere in a filing is concentration.
         matches: list[float] = []
-        for sentence in re.split(r"(?<=[.;])\s+", plain):
-            lowered = sentence.lower()
-            if "customer" not in lowered and "client" not in lowered:
-                continue
-            if not any(term in lowered for term in ("concentration", "revenue", "sales", "accounted for", "represented")):
-                continue
-            for raw in re.findall(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%", sentence):
+        relevant_terms = ("concentration", "revenue", "sales", "receivable", "accounted for", "represented")
+
+        def add_percentages(text_value: str) -> None:
+            for raw in re.findall(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%", text_value):
                 value = float(raw)
                 if 0 < value <= 100:
                     matches.append(value)
-            # Diversified issuers commonly disclose an upper bound instead
-            # of naming a customer: “no single customer accounted for more
-            # than 10%”. Treat that explicit bound as the measured maximum;
-            # never infer zero from silence.
-            for raw in re.findall(
-                r"(?:no|not)\s+(?:single|one)\s+(?:customer|client)[^.;]{0,180}?"
-                r"(?:more than|exceed(?:ed|s)?|greater than|at least)\s+(\d{1,3}(?:\.\d+)?)\s*%",
-                lowered,
-            ):
-                value = float(raw)
-                if 0 < value <= 100:
-                    matches.append(value)
+
+        # Tables and prose are flattened differently across SEC HTML filings.
+        # Inspect a bounded window around customer/client language so a table
+        # row such as “Government Customer 28%” is retained even without a
+        # sentence-ending period, while unrelated percentages far away are not.
+        for customer_match in re.finditer(r"\b(?:customer|client)s?\b", plain, flags=re.IGNORECASE):
+            start = max(0, customer_match.start() - 220)
+            end = min(len(plain), customer_match.end() + 300)
+            window = plain[start:end]
+            lowered = window.lower()
+            if any(term in lowered for term in relevant_terms):
+                add_percentages(window)
+
+        # Diversified issuers commonly disclose an upper bound instead of
+        # naming a customer. Support the common SEC phrasings, including
+        # “no customer accounted for at least 10%” and “no sales to an
+        # individual customer ... more than 10%”. Never infer zero from
+        # silence; an explicit bound is the evidence.
+        upper_bound_pattern = (
+            r"(?:no|not)\s+(?:sales\s+to\s+an?\s+)?"
+            r"(?:(?:single|one|individual)\s+)?(?:customer|client)"
+            r"[^.;]{0,220}?"
+            r"(?:more than|exceed(?:ed|s)?|greater than|at least)\s+"
+            r"(\d{1,3}(?:\.\d+)?)\s*%"
+        )
+        for raw in re.findall(upper_bound_pattern, plain.lower()):
+            value = float(raw)
+            if 0 < value <= 100:
+                matches.append(value)
         if not matches:
             return None
         return {
