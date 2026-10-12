@@ -211,6 +211,7 @@ class AlpacaStream:
         self._last_sequence: dict[tuple[str, str], int] = {}
         self._last_price_sequence: dict[str, int] = {}
         self._last_event_at: str | None = None
+        self._connected_at: str | None = None
         self._last_error: str | None = None
         self._connected = False
         self._state = "waiting"
@@ -252,6 +253,7 @@ class AlpacaStream:
             "bar_symbols": sorted(self._channel_symbols["bars"] & desired),
             "pending_symbols": sorted(desired - self._acknowledged),
             "stale_symbols": sorted(desired - fresh), "fresh_symbols": sorted(desired & fresh),
+            "connected_at": self._connected_at,
             "last_event_at": self._last_event_at, "last_error": self._last_error,
         }
 
@@ -372,6 +374,7 @@ class AlpacaStream:
         if not any(message.get("T") == "success" and message.get("msg") == "authenticated" for message in messages):
             raise StreamProtocolError("Alpaca did not confirm authentication.")
         self._connected, self._state, self._last_error = True, "connected", None
+        self._connected_at = self._clock().isoformat()
         await self._publish()
         await self._reconcile(socket)
         reader: asyncio.Task | None = None

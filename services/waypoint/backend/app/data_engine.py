@@ -17,7 +17,7 @@ from . import accounting
 from .calendar import market_status
 from .config import ROOT, config
 from .engine import MODEL_VERSION, trade_state
-from .models import Alert, Analysis, Setting
+from .models import Alert, Analysis, MarketObservation, Setting
 from .runtime import transaction
 from .service import EngineService
 from .watchlist import HotCandidate, select_hot
@@ -44,6 +44,9 @@ class DataEngine:
         self.event_states: dict[str, str] = {}
         self.last_persist = 0.0
         self.last_selection = 0.0
+        self.last_observation_flush = 0.0
+        self.pending_observations: dict[tuple[str, datetime], dict[str, Any]] = {}
+        self.session_symbols: set[str] = set()
 
     def usage_checkpoint(self) -> None:
         cache = self.service.provider_cache
@@ -65,6 +68,7 @@ class DataEngine:
             saved = db.get(Setting, USAGE_ID)
             if saved:
                 self.service.provider_cache.update(copy.deepcopy(saved.data))
+            self._load_market_session(db)
         self.service.data_engine = self
         self.service.usage_checkpoint = self.usage_checkpoint
         self.select_symbols()
@@ -101,6 +105,9 @@ class DataEngine:
         for task in self.tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        with self.sessions() as db:
+            self._flush_observations(db, force=True)
+            db.commit()
         self.service.stream_status.update(connected=False, status='stopped', subscribed_symbols=[])
         async with transaction(self.service, self.sessions):
             pass
@@ -159,6 +166,7 @@ class DataEngine:
     async def on_event(self, event: dict[str, Any]) -> None:
         if not self.service.accept_market_event(event):
             return
+        self._queue_observation(event)
         self.service.stream_status['last_event_at'] = event.get('timestamp')
         self.changed = True
         # Check every accepted price, not just the coalesced UI refresh: a brief
@@ -182,6 +190,79 @@ class DataEngine:
                     self.pending_alerts[(symbol, state)] = {'symbol': symbol, 'state': state, 'message': explanation,
                                                           'created_at': datetime.now(UTC)}
                 self.event_states[symbol] = state
+
+    def _load_market_session(self, db: Any) -> None:
+        """Restore today's audit counters without putting them in the runtime blob."""
+        today = datetime.now(UTC).date()
+        start = datetime.combine(today, datetime.min.time(), UTC)
+        rows = list(db.scalars(select(MarketObservation).where(
+            MarketObservation.mode == self.service.mode,
+            MarketObservation.observed_at >= start,
+        ).order_by(MarketObservation.observed_at)))
+        self.service.market_session = {
+            "observations_today": len(rows),
+            "symbols_today": len({row.symbol for row in rows}),
+            "first_observed_at": rows[0].observed_at.isoformat() if rows else None,
+            "last_observed_at": rows[-1].observed_at.isoformat() if rows else None,
+            "storage": "minute observations",
+        }
+        self.session_symbols = {row.symbol for row in rows}
+
+    def _queue_observation(self, event: dict[str, Any]) -> None:
+        """Coalesce the stream into one durable observation per symbol/minute."""
+        symbol = event.get("symbol")
+        timestamp = event.get("timestamp")
+        price = event.get("price")
+        if not symbol or not timestamp or price is None:
+            return
+        try:
+            observed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00")).astimezone(UTC)
+            price_value = float(price)
+        except (TypeError, ValueError):
+            return
+        bucket = observed.replace(second=0, microsecond=0)
+        self.pending_observations[(str(symbol), bucket)] = {
+            "symbol": str(symbol),
+            "observed_at": bucket,
+            "received_at": datetime.now(UTC),
+            "event_type": str(event.get("type", "quote")),
+            "price": price_value,
+            "bid": float(event["bid"]) if event.get("bid") is not None else None,
+            "ask": float(event["ask"]) if event.get("ask") is not None else None,
+            "volume": float(event["volume"]) if event.get("volume") is not None else None,
+            "data": {"price_basis": event.get("price_basis"), "timestamp": str(timestamp)},
+        }
+        if len(self.pending_observations) > 5000:
+            for key in sorted(self.pending_observations)[:1000]:
+                self.pending_observations.pop(key, None)
+
+    def _flush_observations(self, db: Any, *, force: bool = False) -> None:
+        if not self.pending_observations:
+            return
+        current_bucket = datetime.now(UTC).replace(second=0, microsecond=0)
+        ready = {
+            key: item for key, item in self.pending_observations.items()
+            if force or item["observed_at"] < current_bucket
+        }
+        if not ready:
+            return
+        rows = [MarketObservation(mode=self.service.mode, source="alpaca_iex", **item)
+                for item in ready.values()]
+        db.add_all(rows)
+        db.flush()
+        for key in ready:
+            self.pending_observations.pop(key, None)
+        today = datetime.now(UTC).date()
+        todays = [row for row in rows if row.observed_at.date() == today]
+        if todays:
+            current = self.service.market_session
+            current["observations_today"] = int(current.get("observations_today", 0)) + len(todays)
+            self.session_symbols.update(row.symbol for row in todays)
+            current["symbols_today"] = len(self.session_symbols)
+            current["first_observed_at"] = current.get("first_observed_at") or min(
+                row.observed_at for row in todays
+            ).isoformat()
+            current["last_observed_at"] = max(row.observed_at for row in todays).isoformat()
 
     async def publish(self) -> dict[str, Any]:
         async with self.service.lock:
@@ -387,6 +468,9 @@ class DataEngine:
                 self.changed = False
                 async with self.service.lock:
                     with self.sessions() as db:
+                        if now - self.last_observation_flush >= 15:
+                            self._flush_observations(db)
+                            self.last_observation_flush = now
                         await self.service.fast_tick(db)
                         for item in self.pending_alerts.values():
                             recent = db.scalar(select(Alert).where(Alert.symbol == item['symbol'], Alert.mode == 'live',

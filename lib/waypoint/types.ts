@@ -235,6 +235,12 @@ export type Dashboard = {
     positions: Position[];
   };
   stocks: Stock[];
+  research_queue?: {
+    total: number;
+    complete: number;
+    items: { symbol: string; lane: string; missing: string[] }[];
+    top_blockers: { reason: string; count: number }[];
+  };
   alerts: {
     id: string;
     symbol: string;
@@ -316,6 +322,13 @@ export type DataStatus = {
     news_inserted?: number;
     news_sources?: Record<string, number>;
     news_last_error?: string | null;
+  };
+  market_session?: {
+    observations_today: number;
+    symbols_today: number;
+    first_observed_at: string | null;
+    last_observed_at: string | null;
+    storage: string;
   };
 };
 export type TradeInput = {

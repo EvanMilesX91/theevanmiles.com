@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import math
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -50,6 +51,13 @@ class EngineService:
         self.last_equity_at = datetime(1970, 1, 1, tzinfo=UTC)
         self.ml = MLEngine()
         self.ml_maintenance_task: asyncio.Task[Any] | None = None
+        self.market_session: dict[str, Any] = {
+            "observations_today": 0,
+            "symbols_today": 0,
+            "first_observed_at": None,
+            "last_observed_at": None,
+            "storage": "minute observations",
+        }
 
     @property
     def mode(self) -> str:
@@ -443,7 +451,8 @@ class EngineService:
         schedule["alpha_vantage_next_reset"] = datetime.combine(
             datetime.now(UTC).date() + timedelta(days=1), datetime.min.time(), UTC
         ).isoformat()
-        return {"stream": {"connected_at": None, **self.stream_status, "feed": "Alpaca IEX"}, "providers": providers,
+        return {"stream": {"connected_at": None, **self.stream_status, "feed": "Alpaca IEX"},
+                "market_session": copy.deepcopy(self.market_session), "providers": providers,
                 "hot_symbols": self.hot_symbols, "warm_symbols": self.warm_symbols,
                 "max_hot_symbols": config.max_hot_symbols, "capacity_error": self.capacity_error,
                 "price_stale_seconds": config.price_stale_seconds, "schedule": schedule}
@@ -599,6 +608,19 @@ class EngineService:
         alerts = list(
             db.scalars(select(Alert).where(Alert.mode == config.app_mode).order_by(Alert.id.desc()).limit(15))
         )
+        queue_items = []
+        blockers: Counter[str] = Counter()
+        for stock in stocks:
+            missing = list(stock.get("research", {}).get("missing_reasons", []))
+            if not missing and stock.get("plan") is not None:
+                continue
+            for reason in missing:
+                blockers[reason] += 1
+            queue_items.append({
+                "symbol": stock["symbol"],
+                "lane": stock.get("research_lane", "core"),
+                "missing": missing[:6] or ["A complete deterministic trade plan has not been produced yet."],
+            })
         shadow = list(db.scalars(select(Shadow)))
         return {
             "mode": config.app_mode,
@@ -610,6 +632,12 @@ class EngineService:
             "ml": self.ml.dashboard(db),
             "portfolio": p,
             "stocks": stocks,
+            "research_queue": {
+                "total": len(queue_items),
+                "complete": len(stocks) - len(queue_items),
+                "items": queue_items,
+                "top_blockers": [{"reason": reason, "count": count} for reason, count in blockers.most_common(8)],
+            },
             "alerts": [
                 {
                     "id": a.id,

@@ -1997,9 +1997,17 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
             <section className="card waypoint-data-status" aria-label="Data status">
               <details>
                 <summary><strong>DATA STATUS</strong> · Alpaca {data.data_status?.stream.status ?? "unavailable"} · HOT {data.data_status?.hot_symbols.length ?? 0} / {data.data_status?.max_hot_symbols ?? 30}</summary>
-                <p><strong>LIVE PRICE FEED: ALPACA IEX</strong> · <strong>EXECUTION CHECK: TRADING 212</strong></p>
-                <p>Prices are real observations. Before acting, compare the live quote and spread in Trading 212.</p>
+                 <p><strong>LIVE PRICE FEED: ALPACA IEX</strong> · <strong>EXECUTION CHECK: TRADING 212</strong></p>
+                 <p>Prices are real observations. Before acting, compare the live quote and spread in Trading 212.</p>
                  <p>HOT: {data.data_status?.hot_symbols.join(", ") || "Waiting for stream"} · WARM: {data.data_status?.warm_symbols.join(", ") || "None"}</p>
+                 <div className="waypoint-session-status">
+                   <strong>MARKET SESSION LOG</strong>
+                   <p>
+                     {data.data_status?.market_session?.observations_today ?? 0} minute observations across {data.data_status?.market_session?.symbols_today ?? 0} symbols.
+                     {data.data_status?.market_session?.last_observed_at && ` Last saved ${dateTime(data.data_status.market_session.last_observed_at)}.`}
+                   </p>
+                   <small>Stored as an auditable stream history; raw quotes are coalesced to one observation per symbol per minute.</small>
+                 </div>
                  {data.data_status?.stream.last_error && <p role="status">{data.data_status.stream.last_error}</p>}
                  <div className="waypoint-research-status">
                    <strong>RESEARCH PASS</strong>
@@ -2056,6 +2064,13 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                    <p>{data.data_status?.schedule?.discovery_candidates ?? 0} rotating candidates are being checked alongside your core watchlist.</p>
                    {data.data_status?.schedule?.discovery_symbols?.length ? <small>Current lane: {data.data_status.schedule.discovery_symbols.join(", ")}</small> : null}
                    {data.data_status?.schedule?.discovery_last_error && <small role="status">{data.data_status.schedule.discovery_last_error}</small>}
+                 </div>
+                 <div className="waypoint-research-queue">
+                   <strong>RESEARCH QUEUE</strong>
+                   <p>{data.research_queue?.complete ?? 0} complete · {data.research_queue?.total ?? 0} waiting for evidence.</p>
+                   {data.research_queue?.top_blockers?.slice(0, 3).map((item) => (
+                     <small key={item.reason}>{item.count}× {item.reason}</small>
+                   ))}
                  </div>
               </details>
             </section>

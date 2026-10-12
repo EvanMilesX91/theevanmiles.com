@@ -47,6 +47,24 @@ class Analysis(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
 
 
+class MarketObservation(Base):
+    """Bounded minute-level observations captured from the live market stream."""
+
+    __tablename__ = "market_observations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(12), index=True)
+    mode: Mapped[str] = mapped_column(String(10), index=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    event_type: Mapped[str] = mapped_column(String(12))
+    price: Mapped[float] = mapped_column(Float)
+    bid: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ask: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(40), default="alpaca_iex")
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class Alert(Base):
     __tablename__ = "alerts"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -45,6 +45,7 @@ FIELDS = (
     "warm_symbols",
     "capacity_error",
     "schedule_status",
+    "market_session",
 )
 
 

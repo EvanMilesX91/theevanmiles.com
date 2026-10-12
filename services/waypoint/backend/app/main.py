@@ -4,7 +4,7 @@ import copy
 import json
 import secrets
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +23,7 @@ from .config import ROOT, config
 from .db import SessionLocal
 from .engine import MODEL_VERSION
 from .migrate import migrate
-from .models import Equity, Setting, Shadow
+from .models import Equity, MarketObservation, Setting, Shadow
 from .news import recent_articles
 from .runtime import acquire_database_lock, auth_attempt, run_scheduler, transaction
 from .schemas import DemoStep, QuoteCheck, Settings, SettingsPatch, TradeInput
@@ -83,6 +83,38 @@ async def news_feed(symbol: str | None = Query(default=None, pattern=r"^[A-Za-z]
         return {"articles": recent_articles(db, symbol=symbol.upper() if symbol else None, limit=limit)}
 
 
+@app.get("/api/market-session")
+async def market_session(
+    symbol: str | None = Query(default=None, pattern=r"^[A-Za-z][A-Za-z0-9.\-]{0,11}$"),
+    hours: int = Query(default=24, ge=1, le=168),
+    limit: int = Query(default=2000, ge=1, le=10000),
+) -> dict[str, Any]:
+    """Return the persisted minute-level live observations for audit/review."""
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
+    with SessionLocal() as db:
+        query = select(MarketObservation).where(
+            MarketObservation.mode == service.mode,
+            MarketObservation.observed_at >= cutoff,
+        )
+        if symbol:
+            query = query.where(MarketObservation.symbol == symbol.upper())
+        rows = list(db.scalars(query.order_by(MarketObservation.observed_at.desc()).limit(limit)))
+        return {"observations": [
+            {
+                "symbol": row.symbol,
+                "observed_at": row.observed_at.isoformat(),
+                "received_at": row.received_at.isoformat(),
+                "event_type": row.event_type,
+                "price": row.price,
+                "bid": row.bid,
+                "ask": row.ask,
+                "volume": row.volume,
+                "source": row.source,
+            }
+            for row in reversed(rows)
+        ]}
+
+
 @app.middleware("http")
 async def local_mutations(request: Request, call_next):  # type: ignore[no-untyped-def]
     def reject(status: int, detail: str) -> JSONResponse:
@@ -123,7 +155,18 @@ async def job_timeout(request: Request, error: TimeoutError) -> JSONResponse:
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "model_version": MODEL_VERSION}
+    return {
+        "status": "ok",
+        "model_version": MODEL_VERSION,
+        "engine": {
+            "mode": config.app_mode,
+            "stream": service.stream_status.get("status"),
+            "connected": bool(service.stream_status.get("connected")),
+            "last_event_at": service.stream_status.get("last_event_at"),
+            "stale_symbols": service.stream_status.get("stale_symbols", []),
+            "research_pass": service.schedule_status.get("research_pass"),
+        },
+    }
 
 
 @app.get("/api/dashboard")
