@@ -171,7 +171,10 @@ class SECArchiveCollector:
                             eps_history.setdefault(symbol, []).append({
                                 "period_end": fact.period_end.isoformat(),
                                 "filed_on": fact.filed_on.isoformat(),
-                                "reported_eps": fact.value,
+                                # SEC facts may be Decimal instances; cache JSON must be
+                                # serialisable and the value is already treated as text by
+                                # the durable FundamentalObservation model.
+                                "reported_eps": str(fact.value),
                                 "unit": fact.unit,
                                 "form": fact.form,
                                 "source": fact.source.model_dump(mode="json"),
