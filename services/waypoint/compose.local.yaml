@@ -1,0 +1,11 @@
+# Local-first Waypoint override.
+# The frontend and Cloudflare URL stay unchanged; only the engine database
+# moves from hosted Supabase Postgres to the mounted laptop SQLite file.
+services:
+  waypoint:
+    environment:
+      DATABASE_URL: sqlite:////app/data/waypoint.db
+      # The migration copy already contains the current schema. Alembic's
+      # hosted history table is intentionally absent from that copy, so do
+      # not try to replay the initial migration over existing tables.
+      AUTO_MIGRATE: "false"

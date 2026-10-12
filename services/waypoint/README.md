@@ -10,6 +10,16 @@ From `services/waypoint`, run `setup.ps1` once, then `start.ps1`. Open **http://
 
 The frontend uses the site's Next 15 / React 18 stack. There is no second standalone frontend to maintain. Python 3.13+, Node.js 22.13+ and npm are required. Local data is in `services/waypoint/data/waypoint.db`; secret environment files, logs, databases and dependencies are excluded from Git. SQLite and Supabase are separate databases: changing the connection string does not transfer records automatically.
 
+## Local-first Docker runtime
+
+The laptop-hosted engine now uses the migrated SQLite database by default when started with both compose files:
+
+```powershell
+docker compose -f compose.hosted.yaml -f compose.local.yaml up -d --build
+```
+
+`compose.local.yaml` changes only the engine's `DATABASE_URL`; the frontend, Cloudflare Tunnel, service token and provider keys stay the same. The public page can therefore continue using `https://www.theevanmiles.com/waypoint` while the engine reads and writes `data/waypoint.db` on this computer. Keep the laptop awake while the public engine is needed. `compose.hosted.yaml` remains available as the rollback configuration if the hosted database is needed again.
+
 ## Source layout
 
 - `app/waypoint`, `components/waypoint`: private page and scoped presentation.
@@ -34,7 +44,7 @@ The local Python process owns one Alpaca IEX WebSocket and publishes coalesced s
 
 Optional ML and historical projection evidence are documented in [ML.md](docs/ML.md). Both are disabled or fail-closed until labelled evidence exists, use point-in-time snapshots and chronological walk-forward evaluation, and cannot override deterministic risk controls.
 
-Supabase stores the engine state, provider cache and ledger in a private `waypoint` schema. Vercel continues to serve the private page and authenticated proxy. Its serverless functions cannot own the persistent market-data connection, so the streaming build stays local until an always-on host is configured. See [HOSTING.md](docs/HOSTING.md) for the boundary and later deployment steps.
+The local-first runtime stores engine state, provider cache and the ledger in SQLite on this computer, while Vercel continues to serve the private page and authenticated proxy. Its serverless functions cannot own the persistent market-data connection, so the streaming build stays local until an always-on host is configured. The previous hosted Supabase database remains available as a protected rollback copy; it is no longer used by the local compose override. See [HOSTING.md](docs/HOSTING.md) for the boundary and later deployment steps.
 
 ## Method and verification
 
