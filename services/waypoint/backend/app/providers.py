@@ -825,12 +825,27 @@ class SECProvider(_HttpProvider):
             end = min(len(plain), customer_match.end() + 300)
             window = plain[start:end]
             lowered = window.lower()
-            direct_customer_row = re.search(
-                r"\b(?:customer|client)s?\b[^.;]{0,120}?\d{1,3}(?:\.\d+)?\s*%",
+            direct_customer_values = re.findall(
+                r"\b(?:customer|client)s?\b[^.;]{0,180}?"
+                r"(\d{1,3}(?:\.\d+)?)\s*%",
                 lowered,
             )
-            if any(term in lowered for term in relevant_terms) or direct_customer_row:
-                add_percentages(window)
+            if direct_customer_values:
+                for raw in direct_customer_values:
+                    value = float(raw)
+                    if 0 < value <= 100:
+                        matches.append(value)
+            elif any(term in lowered for term in relevant_terms):
+                # Some table layouts place the customer label after the
+                # percentage. Keep this fallback bounded to the same window.
+                reverse_values = re.findall(
+                    r"(\d{1,3}(?:\.\d+)?)\s*%[^.;]{0,100}?\b(?:customer|client)s?\b",
+                    lowered,
+                )
+                for raw in reverse_values:
+                    value = float(raw)
+                    if 0 < value <= 100:
+                        matches.append(value)
 
         # Diversified issuers commonly disclose an upper bound instead of
         # naming a customer. Support the common SEC phrasings, including

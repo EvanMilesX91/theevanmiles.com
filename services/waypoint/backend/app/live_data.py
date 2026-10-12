@@ -697,8 +697,8 @@ async def build_live_research(
                 return await sec.customer_concentration(filing)
 
             concentration_key = (
-                f"live:concentration:v2:{symbol}:{concentration_filing.get('accession')}"
-                if concentration_filing else f"live:concentration:v2:{symbol}:none"
+                f"live:concentration:v3:{symbol}:{concentration_filing.get('accession')}"
+                if concentration_filing else f"live:concentration:v3:{symbol}:none"
             )
             if concentration_filing is None:
                 concentration = None
