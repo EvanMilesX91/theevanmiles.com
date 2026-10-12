@@ -84,12 +84,21 @@ class EngineService:
                 # database must not make the health endpoint wait on a full
                 # provider pass after every container restart.
                 if not self.stocks:
-                    await self.refresh_live(history=False, db=db)
+                    # Do not block the ASGI lifespan on the first live provider
+                    # pass.  A fresh install or a missing snapshot can require
+                    # many provider calls; DataEngine.slow_loop performs that
+                    # refresh after the API, health endpoint, and stream are
+                    # already available.
+                    self.provider_status = "Waiting for the first live research pass."
+                    self.schedule_status.setdefault("research_pass", "waiting")
                 self.stream_status = {"status": "waiting", "connected": False,
                                       "subscribed_symbols": [], "last_event_at": None}
-            if saved:
-                saved.data = capture_state(self)
-            else:
+            # A live restart already restored the persisted snapshot above.
+            # Rewriting that large JSON document during lifespan startup can
+            # hold the pooler transaction long enough to make health and login
+            # appear offline.  The streaming checkpoint persists subsequent
+            # changes; only create the row here when no snapshot exists.
+            if not saved:
                 db.add(Setting(id=RUNTIME_IDS[config.app_mode], data=capture_state(self)))
             db.commit()
 

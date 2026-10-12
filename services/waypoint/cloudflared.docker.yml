@@ -1,0 +1,8 @@
+tunnel: 11052118-3c11-494c-9ce1-2b8a9ab2dcc2
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: engine.theevanmiles.com
+    service: http://waypoint-waypoint-1:8000
+    originRequest:
+      httpHostHeader: engine.theevanmiles.com
+  - service: http_status:404

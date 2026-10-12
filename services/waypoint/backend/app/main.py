@@ -25,7 +25,7 @@ from .engine import MODEL_VERSION
 from .migrate import migrate
 from .models import Equity, Setting, Shadow
 from .news import recent_articles
-from .runtime import auth_attempt, run_scheduler, transaction
+from .runtime import acquire_database_lock, auth_attempt, run_scheduler, transaction
 from .schemas import DemoStep, QuoteCheck, Settings, SettingsPatch, TradeInput
 from .service import service
 
@@ -304,8 +304,14 @@ class AuthAttempt(BaseModel):
 
 @app.post("/api/auth/attempt")
 async def reserve_auth_attempt(data: AuthAttempt) -> dict[str, Any]:
-    async with transaction(service, SessionLocal) as db:
-        return auth_attempt(db, data.key, data.success)
+    # Login throttling does not need the large live runtime snapshot.  Keep it
+    # as a small atomic transaction so a multi-megabyte research state cannot
+    # make the public sign-in request wait or time out.
+    with SessionLocal() as db:
+        acquire_database_lock(db)
+        result = auth_attempt(db, data.key, data.success)
+        db.commit()
+        return result
 
 
 @app.get("/api/backtest")

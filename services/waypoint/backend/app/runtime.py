@@ -37,7 +37,6 @@ FIELDS = (
     "tick",
     "provider_status",
     "research",
-    "provider_cache",
     "provider_health",
     "fx",
     "market_values",
