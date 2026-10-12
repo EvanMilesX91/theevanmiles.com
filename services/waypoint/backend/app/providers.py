@@ -818,6 +818,18 @@ class SECProvider(_HttpProvider):
                 value = float(raw)
                 if 0 < value <= 100:
                     matches.append(value)
+            # Diversified issuers commonly disclose an upper bound instead
+            # of naming a customer: “no single customer accounted for more
+            # than 10%”. Treat that explicit bound as the measured maximum;
+            # never infer zero from silence.
+            for raw in re.findall(
+                r"(?:no|not)\s+(?:single|one)\s+(?:customer|client)[^.;]{0,180}?"
+                r"(?:more than|exceed(?:ed|s)?|greater than|at least)\s+(\d{1,3}(?:\.\d+)?)\s*%",
+                lowered,
+            ):
+                value = float(raw)
+                if 0 < value <= 100:
+                    matches.append(value)
         if not matches:
             return None
         return {

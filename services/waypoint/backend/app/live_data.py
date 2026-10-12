@@ -656,7 +656,10 @@ async def build_live_research(
                     if f.form in {"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A", "20-F", "6-K", "3", "4", "5", "3/A", "4/A", "5/A"}
                 ][:12]
 
-            filings, health = await fetch(f"live:filings:{symbol}", 3600, filings_call, sec is not None)
+            # v2 invalidates older caches that were sliced before filtering,
+            # which could leave only recent Form 4 rows and no annual/quarterly
+            # filing available for concentration review.
+            filings, health = await fetch(f"live:filings:v2:{symbol}", 3600, filings_call, sec is not None)
             record["coverage"]["filings"] = health
             record["filings"] = filings or []
 
@@ -997,9 +1000,18 @@ async def build_live_research(
                 continue
             if health["status"] != "current":
                 record["missing_reasons"].append(f"{name.replace('_', ' ').capitalize()} data is {health['status']}.")
-        record["missing_reasons"] = list(dict.fromkeys(record["missing_reasons"] + [
-            reason for key, reason in UNSUPPORTED.items() if record["metrics"].get(key) is None
-        ]))
+        # Normalized fundamentals start with conservative unsupported-input
+        # reasons. Remove those reasons once a later source (for example the
+        # historical earnings archive) supplies the corresponding metric, so
+        # the UI and eligibility gate describe the current record accurately.
+        supported_reasons = {
+            reason for key, reason in UNSUPPORTED.items()
+            if record["metrics"].get(key) is not None
+        }
+        record["missing_reasons"] = list(dict.fromkeys(
+            [reason for reason in record["missing_reasons"] if reason not in supported_reasons]
+            + [reason for key, reason in UNSUPPORTED.items() if record["metrics"].get(key) is None]
+        ))
         output["by_symbol"][symbol] = record
 
     # The normal refresh may be a two-symbol batch. Re-run this across the
