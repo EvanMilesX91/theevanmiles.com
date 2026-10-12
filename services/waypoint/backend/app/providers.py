@@ -15,7 +15,7 @@ import re
 import random
 import hashlib
 import json
-from datetime import date, datetime, timezone, timedelta
+from datetime import UTC, date, datetime, timezone, timedelta
 from decimal import Decimal
 from collections.abc import Callable, MutableMapping
 from typing import Any, Literal, Protocol

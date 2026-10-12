@@ -468,12 +468,14 @@ function OpportunityBoard({
   onSelect,
   isFresh,
   marketOpen,
+  researchRunning,
 }: {
   stocks: Stock[];
   selectedSymbol?: string;
   onSelect: (symbol: string) => void;
   isFresh: (stock: Stock) => boolean;
   marketOpen: boolean;
+  researchRunning: boolean;
 }) {
   const carouselRef = useRef<HTMLDivElement>(null);
   const ordered = [...stocks].sort((a, b) => {
@@ -544,7 +546,7 @@ function OpportunityBoard({
                 <span title={riskWhy}>Risk <b>{stock.risk ?? "—"}</b> <InfoTip text={riskWhy} /></span>
                 <span className={`worth-score ${worthTone}`} title={worthWhy}>Worth considering <b>{worthScore ?? "—"}</b> <em>{worthLabel}</em> <InfoTip text={worthWhy} /></span>
               </div>
-              <p className={actionable ? "opportunity-plan" : "opportunity-research"} title={buyWhy}>{actionable && stock.plan ? <>Buy {range(stock.plan.entry_low, stock.plan.entry_high)} <InfoTip text={buyWhy} /></> : <>Research in progress <InfoTip text={buyWhy} /></>}</p>
+              <p className={actionable ? "opportunity-plan" : "opportunity-research"} title={buyWhy}>{actionable && stock.plan ? <>Buy {range(stock.plan.entry_low, stock.plan.entry_high)} <InfoTip text={buyWhy} /></> : <>{researchRunning ? "Research in progress" : "Research incomplete"} <InfoTip text={buyWhy} /></>}</p>
               <p className="opportunity-size" title={sizeWhy}>Suggested amount: <strong>{stock.sizing.viable ? money(stock.sizing.amount_eur) : "—"}</strong> <InfoTip text={sizeWhy} /></p>
               {stock.plan ? <>
                 <p className="opportunity-sell" title={sellWhy}>Sell low: {range(stock.plan.first_profit_low, stock.plan.first_profit_high)} <InfoTip text="The lower sell range is the first profit area: a more cautious exit if the setup moves in your favour." /></p>
@@ -2196,6 +2198,7 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                         onSelect={(next) => { setSymbol(next); setShowWhy(false); }}
                         isFresh={stockSafe}
                         marketOpen={data.market.is_open}
+                        researchRunning={Boolean(data.data_status?.schedule?.running)}
                       />
                       {selected ? (
                         <article className="card setup-card">

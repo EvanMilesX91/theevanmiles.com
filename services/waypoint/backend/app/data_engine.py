@@ -253,12 +253,11 @@ class DataEngine:
             async with self.refresh_lock:
                 return await self.publish()
         async with self.refresh_lock:
-            await self.discover_candidates()
-            all_symbols = list(dict.fromkeys(
+            all_symbols = list(dict.fromkeys([
                 item.strip().upper()
                 for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
                 if (item := raw.strip())
-            ) + self.service.dynamic_discovery)
+            ] + self.service.dynamic_discovery))
             batch_size = max(1, min(config.research_batch_size, len(all_symbols)))
             batches = [all_symbols[index:index + batch_size] for index in range(0, len(all_symbols), batch_size)]
             self.service.schedule_status.update(
@@ -267,6 +266,27 @@ class DataEngine:
                 research_total=len(all_symbols), research_completed=0,
                 research_pass=f"0/{len(all_symbols)}" if all_symbols else "0/0",
                 research_last_symbol=None, research_errors=[],
+            )
+            # Discovery is optional.  Mark the core pass as started first so
+            # a slow or unavailable assets endpoint cannot leave the UI stuck
+            # on an old indeterminate "research" state.
+            try:
+                await asyncio.wait_for(self.discover_candidates(), timeout=15)
+            except Exception as error:
+                self.service.schedule_status.update(
+                    discovery_last_error=f"Discovery scan unavailable; core watchlist continues ({type(error).__name__}).",
+                    discovery_last_error_at=datetime.now(UTC).isoformat(),
+                )
+            all_symbols = list(dict.fromkeys([
+                item.strip().upper()
+                for raw in (config.live_symbols + "," + config.scan_symbols + "," + config.discovery_symbols).split(",")
+                if (item := raw.strip())
+            ] + self.service.dynamic_discovery))
+            batch_size = max(1, min(config.research_batch_size, len(all_symbols)))
+            batches = [all_symbols[index:index + batch_size] for index in range(0, len(all_symbols), batch_size)]
+            self.service.schedule_status.update(
+                research_total=len(all_symbols),
+                research_pass=f"0/{len(all_symbols)}" if all_symbols else "0/0",
             )
             prepared = EngineService()
             prepared.provider_cache = self.service.provider_cache

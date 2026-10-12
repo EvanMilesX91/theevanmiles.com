@@ -72,6 +72,15 @@ class EngineService:
             saved = db.get(Setting, RUNTIME_IDS[config.app_mode])
             if saved:
                 restore_state(self, saved.data)
+                # A process can be stopped while a research pass is in
+                # flight. Never present that old flag as an active pass after
+                # restart; the scheduler will start a fresh, visible pass.
+                if self.schedule_status.get("running"):
+                    self.schedule_status.update(
+                        running=False,
+                        reason="restart_recovery",
+                        last_error="The previous research pass was interrupted by a restart; awaiting the next pass.",
+                    )
             runtime = db.get(Setting, 2)
             if runtime and config.app_mode == "demo":
                 self.tick = runtime.data.get("tick", 0)
