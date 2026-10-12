@@ -63,7 +63,8 @@ def _available_at(fundamentals: Fundamentals, as_of: datetime) -> str | None:
 
 def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
                      target_pct: float, reconsider_pct: float,
-                     context: dict[str, Any] | None = None) -> PointInTimeSnapshot | None:
+                     context: dict[str, Any] | None = None,
+                     source_name: str = "alpaca_daily_bars") -> PointInTimeSnapshot | None:
     bar = bars[index]
     price = float(bar["close"])
     if price <= 0:
@@ -73,7 +74,7 @@ def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
     snapshot = {
         "price": price,
         "history_rows": history_rows,
-        "projection_metadata": {"source": "alpaca_daily_bars", "bar_timestamp": bar["timestamp"],
+        "projection_metadata": {"source": source_name, "bar_timestamp": bar["timestamp"],
                                 "target_pct": target_pct, "reconsider_pct": reconsider_pct},
     }
     if context:
@@ -87,7 +88,8 @@ def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
 async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, years: int = 5,
                         stride_days: int = 5, target_pct: float = 0.08,
                         reconsider_pct: float = 0.05,
-                        sec: SECProvider | None = None) -> list[PointInTimeSnapshot]:
+                        sec: SECProvider | None = None,
+                        source_name: str = "alpaca_daily_bars") -> list[PointInTimeSnapshot]:
     if not symbols:
         raise ValueError("At least one symbol is required")
     if years < 1 or stride_days < 1 or not 0 < target_pct < 1 or not 0 < reconsider_pct < 1:
@@ -135,6 +137,15 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
                 normalized = normalize_fundamentals(fundamentals, identity, bar_timestamp)
                 metrics = dict(normalized.get("metrics", {}))
                 raw_metrics = normalized.get("raw_metrics", {})
+                # The normalizer keeps raw balance-sheet/cash-flow values
+                # separate for the live evidence display. Historical feature
+                # extraction still needs those reported values when they were
+                # available at this snapshot, so copy only the explicitly
+                # supported fields across. No estimates or later revisions
+                # are introduced here.
+                for raw_name in ("cash_usd", "total_debt_usd", "free_cash_flow_usd"):
+                    if raw_name in raw_metrics and raw_name not in metrics:
+                        metrics[raw_name] = raw_metrics[raw_name]
                 # A historical, point-in-time P/E proxy is computable when the
                 # filing reported annual diluted EPS. It is intentionally left
                 # absent when EPS is zero or unavailable.
@@ -177,7 +188,8 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
                          if item.get("published_at") and
                          bar_timestamp - timedelta(days=7) <= datetime.fromisoformat(str(item["published_at"]).replace("Z", "+00:00")) <= bar_timestamp] + filing_news,
             }
-            row = _snapshot_record(symbol, bars, index, target_pct=target_pct, reconsider_pct=reconsider_pct, context=context)
+            row = _snapshot_record(symbol, bars, index, target_pct=target_pct, reconsider_pct=reconsider_pct,
+                                   context=context, source_name=source_name)
             if row is not None:
                 rows.append(row)
     return sorted(rows, key=lambda row: (row.as_of, row.symbol))

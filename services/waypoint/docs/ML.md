@@ -56,6 +56,19 @@ It fetches daily bars, creates one snapshot every configured stride, leaves a
 same operation is available to an authenticated operator as `POST /api/ml/ingest`.
 No current quote is used to backfill an earlier snapshot.
 
+Alpaca's free history may stop at its account/feed boundary. For an offline
+research-only extension, the explicit Yahoo chart importer can build a longer
+candidate file; it is never used for live quotes:
+
+```text
+python -m app.ml.yahoo_ingest --symbols AAPL,MSFT --years 10 --stride-days 5 --output data/ml_snapshots.yahoo.jsonl
+python -m app.ml.enrich data/ml_snapshots.yahoo.jsonl --archive-glob 'codex_research_*.jsonl'
+```
+
+Validate the longer file with `GET /api/ml/evaluate` or the Engine Performance
+page before making it the training source. The importer records its source in
+the snapshot metadata so the two feeds are not silently mixed.
+
 The live engine evaluates every symbol in `LIVE_SYMBOLS` plus the optional
 `SCAN_SYMBOLS` universe during startup, pre-market refresh and scheduled scans.
 It ranks the resulting deterministic setups, then uses the historical analogue
@@ -84,11 +97,14 @@ these are distributions of comparable past outcomes, not guaranteed prices or
 confidence intervals. The deterministic trade plan and risk controls remain
 authoritative.
 
-Training uses chronological walk-forward folds. It never randomly mixes future
-rows into training, and each fold purges the forward-label window before
-validation begins. Evaluation reports Brier score, reliability bins, maximum
-calibration error, regime and symbol breakdowns, feature coverage, and mean net
-return after spread, slippage, FX cost and fees.
+Training uses six expanding chronological walk-forward folds by default. It
+never randomly mixes future rows into training, and each fold has separate
+fit, calibration and validation periods with a purge before validation.
+Evaluation reports Brier score, weighted calibration error, reliability bins,
+symbol and regime macro scores, signal breadth, feature coverage, and mean net
+return after spread, slippage, FX cost and fees. A candidate must improve both
+the overall and macro symbol/regime baselines before it can influence
+decisions.
 
 Coverage inputs are explicit features: price-history depth, volume coverage,
 fundamental coverage, news availability, event availability and market-context
@@ -106,6 +122,19 @@ news endpoint is a bounded recent feed rather than a complete five-year archive,
 so missing coverage remains neutral and should reduce confidence. A complete
 point-in-time news backtest requires an archive with historical availability
 timestamps; the current feed is not enough to claim that result.
+
+For a local historical rebuild, the dated research archive can be merged after
+ingestion without changing any timestamp:
+
+```powershell
+python -m app.ml.enrich data/ml_snapshots.jsonl --archive-glob 'codex_research_*.jsonl'
+```
+
+The enrichment job only uses records whose `available_at` is before the
+snapshot. It marks the archive as partial, preserves source URLs in
+provenance, and never treats an absent article as proof that no news existed.
+The trainer also compares an `all` profile with a `price_volume` profile; the
+latter remains usable when fundamentals or news coverage are sparse.
 
 The live worker now keeps a separate SEC archive in
 `fundamental_observations`. It stores the raw fact, accession, reporting

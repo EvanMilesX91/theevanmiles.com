@@ -269,9 +269,10 @@ class MLEngine:
             # The previous 10.0/1.0 penalties almost zeroed the standardized
             # feature weights. Compare modest regularisation values instead;
             # the walk-forward gate decides whether any candidate is useful.
-            {"logistic_l2": 0.01, "learning_rate": 0.06, "probability_shrinkage": 0.80},
-            {"logistic_l2": 0.05, "learning_rate": 0.08, "probability_shrinkage": 0.80},
-            {"logistic_l2": 0.10, "learning_rate": 0.04, "probability_shrinkage": 0.80},
+            {"logistic_l2": 0.01, "learning_rate": 0.06, "probability_shrinkage": 0.80, "feature_profile": "all"},
+            {"logistic_l2": 0.05, "learning_rate": 0.08, "probability_shrinkage": 0.80, "feature_profile": "all"},
+            {"logistic_l2": 0.01, "learning_rate": 0.06, "probability_shrinkage": 0.80, "feature_profile": "price_volume"},
+            {"logistic_l2": 0.05, "learning_rate": 0.08, "probability_shrinkage": 0.80, "feature_profile": "price_volume"},
         ]
         evaluated: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
         for train_kwargs in candidates:
