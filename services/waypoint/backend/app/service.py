@@ -79,8 +79,12 @@ class EngineService:
             if config.app_mode == "demo":
                 await self.slow_refresh(db)
             else:
-                # Boot from saved observations; slow network work runs separately.
-                await self.refresh_live(history=False, db=db)
+                # Boot immediately from saved observations. A first-ever
+                # install still needs a seed snapshot, but an existing live
+                # database must not make the health endpoint wait on a full
+                # provider pass after every container restart.
+                if not self.stocks:
+                    await self.refresh_live(history=False, db=db)
                 self.stream_status = {"status": "waiting", "connected": False,
                                       "subscribed_symbols": [], "last_event_at": None}
             if saved:
