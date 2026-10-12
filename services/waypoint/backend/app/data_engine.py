@@ -54,7 +54,11 @@ class DataEngine:
         data = {
             key: copy.deepcopy(cache[key])
             for key in cache
-            if key in {'api_usage_v1', 'alpha_vantage_budget'} or key.startswith('sec:earnings_history:')
+            if (
+                key in {'api_usage_v1', 'alpha_vantage_budget', 'alpha_vantage_earnings_cursor'}
+                or key.startswith('sec:earnings_history:')
+                or key.startswith('alpha_vantage_earnings_history:')
+            )
         }
         # Own small transaction before HTTP; process termination/slow-job failure
         # cannot refund a consumed provider request reservation.
