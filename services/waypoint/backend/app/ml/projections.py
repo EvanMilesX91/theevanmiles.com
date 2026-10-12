@@ -188,7 +188,10 @@ def _history_ready(row: PointInTimeSnapshot, current_time: datetime) -> bool:
 
 
 def _has_forward_value(row: PointInTimeSnapshot, horizon_days: int) -> bool:
-    """Require a labelled endpoint for the selected holding horizon."""
+    """Require a complete path when one is stored, otherwise its endpoint."""
+    path = (row.labels or {}).get("forward_path")
+    if isinstance(path, list) and path:
+        return all(_path_value(row, day) is not None for day in range(1, horizon_days + 1))
     return _path_value(row, horizon_days) is not None
 
 
