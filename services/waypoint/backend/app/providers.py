@@ -825,16 +825,15 @@ class SECProvider(_HttpProvider):
             end = min(len(plain), customer_match.end() + 300)
             window = plain[start:end]
             lowered = window.lower()
-            direct_customer_values = re.findall(
-                r"\b(?:customer|client)s?\b[^.;]{0,180}?"
-                r"(\d{1,3}(?:\.\d+)?)\s*%",
-                lowered,
+            direct_customer_clauses = re.findall(
+                r"\b(?:customer|client)s?\b[^.;]{0,240}", lowered
             )
-            if direct_customer_values:
-                for raw in direct_customer_values:
-                    value = float(raw)
-                    if 0 < value <= 100:
-                        matches.append(value)
+            if direct_customer_clauses:
+                for clause in direct_customer_clauses:
+                    for raw in re.findall(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%", clause):
+                        value = float(raw)
+                        if 0 < value <= 100:
+                            matches.append(value)
             elif any(term in lowered for term in relevant_terms):
                 # Some table layouts place the customer label after the
                 # percentage. Keep this fallback bounded to the same window.
