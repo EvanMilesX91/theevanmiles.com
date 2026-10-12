@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..config import ROOT, config
 from ..models import Setting
-from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl
+from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl_tail
 from .predict import predict_with_model, similar_setups
 from .projections import HORIZONS, build_projection, disagreement, rank_analogues
 from .registry import ModelRegistry
@@ -28,31 +28,44 @@ class MLEngine:
         self.registry = ModelRegistry(path if path.is_absolute() else ROOT / path)
         self._model: TrainedModel | None = None
         self._model_version: str | None = None
+        self._active_record: dict[str, Any] | None = None
+        self._registry_mtime: float | None = None
         self.shadow_mode = config.ml_shadow_mode
         self.influence_enabled = config.ml_influence_enabled
         self.history: list[PointInTimeSnapshot] = []
+        self._model_history_key: tuple[int, str] | None = None
         self.projection_history: list[PointInTimeSnapshot] = []
         self._projection_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._history_cache: tuple[str, float, list[PointInTimeSnapshot]] | None = None
         self.last_maintenance: dict[str, Any] = {}
 
     def status(self) -> dict[str, Any]:
-        active = self.registry.active() if config.ml_enabled else None
+        active = self._load() if config.ml_enabled else None
+        active_record = self._active_record if active else None
         return {"enabled": config.ml_enabled, "shadow_mode": self.shadow_mode,
-                "influence_enabled": self.influence_enabled and bool(active),
-                "active_model": active.get("version") if active else None,
-                "model_family": active.get("model_family") if active else None,
+                "influence_enabled": self.influence_enabled and bool(active_record),
+                "active_model": active_record.get("version") if active_record else None,
+                "model_family": active_record.get("model_family") if active_record else None,
                 "registry_path": str(config.ml_registry_path),
-                "drift": active.get("drift", {"status": "unknown", "confidence_reduced": True}) if active else {"status": "no_model", "confidence_reduced": True}}
+                "drift": active_record.get("drift", {"status": "unknown", "confidence_reduced": True}) if active_record else {"status": "no_model", "confidence_reduced": True}}
 
     def _load(self) -> TrainedModel | None:
         if not config.ml_enabled:
             self._model = None
             self._model_version = None
+            self._active_record = None
             return None
+        try:
+            registry_mtime = self.registry.path.stat().st_mtime
+        except OSError:
+            registry_mtime = -1.0
+        if self._model is not None and self._registry_mtime == registry_mtime:
+            return self._model
         active = self.registry.active()
         if not active:
             self._model = None
+            self._active_record = None
+            self._registry_mtime = registry_mtime
             return None
         if self._model is None or self._model_version != active.get("version"):
             self._model = TrainedModel(name=active["name"], version=active["version"], model_family=active["model_family"],
@@ -61,6 +74,8 @@ class MLEngine:
                                        training_period=active["training_period"], dataset_version=active["dataset_version"],
                                        trained_at=active["trained_at"], hyperparameters=active.get("hyperparameters", {}))
             self._model_version = active["version"]
+        self._active_record = active
+        self._registry_mtime = registry_mtime
         return self._model
 
     def capture(self, db: Session, *, symbol: str, stock: dict[str, Any], now: datetime) -> None:
@@ -77,6 +92,7 @@ class MLEngine:
             row.data = data
         else:
             db.add(Setting(id=ML_SETTING_ID, data=data))
+        self._model_history_key = None
 
     def _load_history(self, db: Session) -> list[PointInTimeSnapshot]:
         rows: list[PointInTimeSnapshot] = []
@@ -90,7 +106,11 @@ class MLEngine:
             return self._history_cache[2]
         if path.exists():
             try:
-                rows.extend(read_jsonl(str(path)))
+                # The full archive is an offline training input.  Live
+                # projections use only the configured bounded recent sample;
+                # reading hundreds of megabytes during a dashboard request
+                # caused the first login page to time out.
+                rows.extend(read_jsonl_tail(str(path), config.historical_projection_runtime_rows))
             except (OSError, ValueError, KeyError, TypeError):
                 # A partially written offline dataset must not break the live dashboard.
                 rows = []
@@ -192,13 +212,25 @@ class MLEngine:
         if not model:
             return None
         point = make_snapshot(stock, symbol=symbol, as_of=now or datetime.now(UTC))
-        if db is not None:
+        if db is not None and self._model_history_key is None:
             row = db.get(Setting, ML_SETTING_ID)
             if row:
-                self.history = [PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
-                                                    labels=item.get("labels"), provenance=item.get("provenance", []),
-                                                    regime=item.get("regime", "unknown"), company_type=item.get("company_type", "unknown"),
-                                                    sector=item.get("sector", "unknown"), metadata=item.get("metadata", {})) for item in row.data.get("snapshots", [])]
+                items = row.data.get("snapshots", [])
+                last_as_of = str(items[-1].get("as_of", "")) if items else ""
+                cache_key = (len(items), last_as_of)
+                if self._model_history_key != cache_key:
+                    # Inference only needs a bounded recent comparison set.
+                    # Rebuilding thousands of snapshots for every stock made
+                    # the first live dashboard request exceed the browser
+                    # timeout; offline training still uses the full JSONL.
+                    items = items[-config.historical_projection_runtime_rows:]
+                    self.history = [PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
+                                                        labels=item.get("labels"), provenance=item.get("provenance", []),
+                                                        regime=item.get("regime", "unknown"), company_type=item.get("company_type", "unknown"),
+                                                        sector=item.get("sector", "unknown"), metadata=item.get("metadata", {})) for item in items]
+                    self._model_history_key = cache_key
+            else:
+                self._model_history_key = (0, "")
         result = predict_with_model(model, point)
         result["similar_setups"] = similar_setups(model, point, self.history)
         return result
@@ -233,11 +265,13 @@ class MLEngine:
         predictions = row.data.get("predictions", []) if row else []
         outcomes = row.data.get("outcomes", []) if row else []
         active = self._load()
+        # Drift only uses the recent tail; avoid materialising the full
+        # snapshot ledger during every dashboard request.
+        snapshot_items = (row.data.get("snapshots", []) if row else [])[-200:]
         snapshots = [PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
                                           labels=item.get("labels"), provenance=item.get("provenance", []), regime=item.get("regime", "unknown"),
                                           company_type=item.get("company_type", "unknown"), sector=item.get("sector", "unknown"),
-                                          metadata=item.get("metadata", {}))
-                     for item in (row.data.get("snapshots", []) if row else [])]
+                                          metadata=item.get("metadata", {})) for item in snapshot_items]
         drift = assess_drift(active, snapshots[-200:], outcomes=outcomes[-200:]) if active else self.status()["drift"]
         return {**self.status(), "drift": drift, "predictions": len(predictions), "shadow_predictions": sum(item.get("mode") == "shadow" for item in predictions),
                 "evaluated_outcomes": len(outcomes), "comparison": compare_deterministic_and_ml(outcomes),

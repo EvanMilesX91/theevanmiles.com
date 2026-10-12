@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable
@@ -95,6 +96,47 @@ def read_jsonl(path: str) -> list[PointInTimeSnapshot]:
                                       sector=item.get("sector", "unknown"), metadata=item.get("metadata", {}))
             assert_no_lookahead(row)
             rows.append(row)
+    return sorted(rows, key=lambda row: row.as_of)
+
+
+def read_jsonl_tail(path: str, limit: int) -> list[PointInTimeSnapshot]:
+    """Read only the newest JSONL rows without scanning the training archive.
+
+    The offline dataset can be hundreds of megabytes.  The live projection
+    engine intentionally uses a bounded recent sample, so loading the entire
+    archive during the first dashboard request only adds latency and can make
+    a serverless request time out.  JSONL records are appended chronologically
+    by the ingestion jobs, which makes a tail read the correct bounded view.
+    """
+    if limit <= 0:
+        return []
+    lines: deque[bytes] = deque(maxlen=limit)
+    with open(path, "rb") as handle:
+        handle.seek(0, 2)
+        position = handle.tell()
+        pending = b""
+        while position > 0 and len(lines) < limit:
+            size = min(1024 * 1024, position)
+            position -= size
+            handle.seek(position)
+            chunk = handle.read(size) + pending
+            parts = chunk.split(b"\n")
+            pending = parts.pop(0) if position > 0 else b""
+            for line in reversed(parts):
+                if line.strip():
+                    lines.appendleft(line)
+                    if len(lines) >= limit:
+                        break
+    rows: list[PointInTimeSnapshot] = []
+    for line in lines:
+        item = json.loads(line)
+        row = PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
+                                  labels=item.get("labels"), provenance=item.get("provenance", []),
+                                  regime=item.get("regime", "unknown"),
+                                  company_type=item.get("company_type", "unknown"),
+                                  sector=item.get("sector", "unknown"), metadata=item.get("metadata", {}))
+        assert_no_lookahead(row)
+        rows.append(row)
     return sorted(rows, key=lambda row: row.as_of)
 
 
