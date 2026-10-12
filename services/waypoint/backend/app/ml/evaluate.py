@@ -27,7 +27,8 @@ class Friction:
         return 2 * (self.spread_bps + self.slippage_bps + self.fx_cost_bps + self.fees_bps) / 10000
 
 
-def promotion_gate(metrics: dict[str, Any], *, minimum_selected: int = 100) -> dict[str, Any]:
+def promotion_gate(metrics: dict[str, Any], *, minimum_selected: int = 100,
+                   minimum_symbols: int = 5, minimum_regimes: int = 2) -> dict[str, Any]:
     """Decide whether a candidate has earned the right to influence decisions.
 
     The gate is intentionally conservative: a candidate must beat the
@@ -42,17 +43,24 @@ def promotion_gate(metrics: dict[str, Any], *, minimum_selected: int = 100) -> d
     selected_threshold, selected = max(viable, key=lambda pair: float(pair[1].get("mean_net_return_5d") or -1e9), default=("0.55", thresholds.get("0.55", {})))
     count = int(selected.get("count") or 0)
     selected_return = selected.get("mean_net_return_5d")
+    selected_symbols = int(selected.get("unique_symbols") or 0)
+    selected_regimes = int(selected.get("unique_regimes") or 0)
     calibration_gap = metrics.get("calibration_gap_5d")
     reasons: list[str] = []
     if baseline is None or brier is None or float(brier) >= float(baseline):
         reasons.append("probability calibration does not beat the prevalence baseline")
     if count < minimum_selected:
         reasons.append(f"fewer than {minimum_selected} selected out-of-sample cases")
+    if selected_symbols < minimum_symbols:
+        reasons.append(f"selected cases span fewer than {minimum_symbols} symbols")
+    if selected_regimes < minimum_regimes:
+        reasons.append(f"selected cases span fewer than {minimum_regimes} market regimes")
     if selected_return is None or float(selected_return) <= 0:
         reasons.append("selected signals are not positive after configured costs")
     if calibration_gap is not None and float(calibration_gap) > 0.10:
         reasons.append("probabilities remain materially miscalibrated")
     return {"eligible": not reasons, "reasons": reasons, "minimum_selected": minimum_selected,
+            "minimum_symbols": minimum_symbols, "minimum_regimes": minimum_regimes,
             "selected_threshold": float(selected_threshold), "selected_count": count, "selected_mean_net_return_5d": selected_return,
             "calibration_gap_5d": calibration_gap,
             "brier_score_5d": brier, "baseline_brier_score_5d": baseline}
@@ -145,6 +153,8 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
         signal_thresholds[str(threshold)] = {
             "count": len(selected),
             "selection_rate": len(selected) / len(predictions) if predictions else 0.0,
+            "unique_symbols": len({item.get("symbol") for item in selected}),
+            "unique_regimes": len({item.get("regime") for item in selected}),
             "win_rate": sum(float(item["actual"]["return_5d"]) > 0 for item in selected) / len(selected) if selected else None,
             "mean_net_return_5d": float(np.mean(selected_returns)) if selected_returns else None,
         }
