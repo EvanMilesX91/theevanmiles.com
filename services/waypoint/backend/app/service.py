@@ -518,7 +518,15 @@ class EngineService:
                 # eligibility does not retain a stale "spread missing" gate.
                 # This performs no provider I/O and never relaxes any engine
                 # threshold; it only synchronizes the evidence snapshot.
-                if symbol not in owned and isinstance(stock.get("research"), dict):
+                current_quote = bool(
+                    not view.get("stale") and view.get("price") and
+                    view.get("bid") is not None and view.get("ask") is not None
+                )
+                current_missing = set(stock.get("eligibility", {}).get("missing_inputs", []))
+                if (
+                    symbol not in owned and isinstance(stock.get("research"), dict)
+                    and current_quote and ({"spread_pct", "price"} & current_missing)
+                ):
                     record = copy.deepcopy(stock["research"])
                     metrics = record.setdefault("metrics", {})
                     metric_sources = dict(record.get("metric_sources", {}))
