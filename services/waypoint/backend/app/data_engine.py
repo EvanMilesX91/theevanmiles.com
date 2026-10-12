@@ -51,7 +51,11 @@ class DataEngine:
 
     def usage_checkpoint(self) -> None:
         cache = self.service.provider_cache
-        data = {key: copy.deepcopy(cache[key]) for key in ('api_usage_v1', 'alpha_vantage_budget') if key in cache}
+        data = {
+            key: copy.deepcopy(cache[key])
+            for key in cache
+            if key in {'api_usage_v1', 'alpha_vantage_budget'} or key.startswith('sec:earnings_history:')
+        }
         # Own small transaction before HTTP; process termination/slow-job failure
         # cannot refund a consumed provider request reservation.
         with self.sessions() as db:
