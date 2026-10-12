@@ -240,6 +240,13 @@ export type Dashboard = {
     complete: number;
     items: { symbol: string; lane: string; missing: string[] }[];
     top_blockers: { reason: string; count: number }[];
+    evidence_readiness?: {
+      label: string;
+      ready: number;
+      total: number;
+      status: "ready" | "partial" | "waiting";
+      next_step: string;
+    }[];
   };
   alerts: {
     id: string;

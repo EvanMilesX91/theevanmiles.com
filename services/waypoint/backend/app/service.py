@@ -685,6 +685,52 @@ class EngineService:
                 "lane": stock.get("research_lane", "core"),
                 "missing": missing[:6] or ["A complete deterministic trade plan has not been produced yet."],
             })
+        readiness_specs = [
+            (
+                "Company fundamentals",
+                ("debt", "capex", "concentration", "revenue"),
+                "SEC filing review for debt, capex, concentration, and comparable revenue.",
+            ),
+            (
+                "Peer valuation",
+                ("peer valuation", "peer_multiple"),
+                "A comparable valuation basis from at least two peer issuers.",
+            ),
+            (
+                "Earnings evidence",
+                ("estimate-uncertainty", "earnings history", "earnings timing"),
+                "Alpha Vantage earnings rows and a forthcoming calendar observation.",
+            ),
+            (
+                "Live execution data",
+                ("spread", "liquidity", "price", "history"),
+                "A current stream quote plus usable price and volume history.",
+            ),
+        ]
+        evidence_readiness = []
+        for label, terms, next_step in readiness_specs:
+            blocked_symbols = {
+                item["symbol"]
+                for item in queue_items
+                if any(term in reason.lower() for reason in item["missing"] for term in terms)
+            }
+            total = len(stocks)
+            blocked = len(blocked_symbols)
+            evidence_readiness.append({
+                "label": label,
+                "ready": max(0, total - blocked),
+                "total": total,
+                "status": "ready" if blocked == 0 else "partial" if blocked < total else "waiting",
+                "next_step": next_step,
+            })
+        projection_status = self.ml.projection_status(db)
+        evidence_readiness.append({
+            "label": "Historical projections",
+            "ready": len(stocks) if projection_status.get("status") == "ready" else 0,
+            "total": len(stocks),
+            "status": "ready" if projection_status.get("status") == "ready" else "waiting",
+            "next_step": "Use labelled historical cases; confidence remains reduced while drift is material.",
+        })
         shadow = list(db.scalars(select(Shadow)))
         return {
             "mode": config.app_mode,
@@ -701,6 +747,7 @@ class EngineService:
                 "complete": len(stocks) - len(queue_items),
                 "items": queue_items,
                 "top_blockers": [{"reason": reason, "count": count} for reason, count in blockers.most_common(8)],
+                "evidence_readiness": evidence_readiness,
             },
             "alerts": [
                 {

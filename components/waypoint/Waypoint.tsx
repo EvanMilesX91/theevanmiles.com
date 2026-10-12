@@ -2083,6 +2083,11 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                    {data.research_queue?.top_blockers?.slice(0, 3).map((item) => (
                      <small key={item.reason}>{item.count}× {item.reason}</small>
                    ))}
+                   {data.research_queue?.evidence_readiness?.map((item) => (
+                     <small key={item.label} title={item.next_step}>
+                       {item.label}: {item.ready}/{item.total} {item.status === "ready" ? "ready" : item.status === "partial" ? "in progress" : "waiting"}
+                     </small>
+                   ))}
                  </div>
               </details>
             </section>
