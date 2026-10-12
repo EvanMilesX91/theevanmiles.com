@@ -825,7 +825,11 @@ class SECProvider(_HttpProvider):
             end = min(len(plain), customer_match.end() + 300)
             window = plain[start:end]
             lowered = window.lower()
-            if any(term in lowered for term in relevant_terms):
+            direct_customer_row = re.search(
+                r"\b(?:customer|client)s?\b[^.;]{0,120}?\d{1,3}(?:\.\d+)?\s*%",
+                lowered,
+            )
+            if any(term in lowered for term in relevant_terms) or direct_customer_row:
                 add_percentages(window)
 
         # Diversified issuers commonly disclose an upper bound instead of
