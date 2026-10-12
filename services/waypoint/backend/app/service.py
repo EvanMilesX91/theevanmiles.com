@@ -588,18 +588,20 @@ class EngineService:
             prediction = self.ml.predict(stock, symbol=symbol, now=now, db=db)
             if prediction is not None:
                 stock["ml"] = prediction
-            # Projection matching can be CPU-heavy for a large discovery
-            # batch. Keep the API responsive while a staged research pass is
-            # running; the completed snapshot computes projections normally.
+            # Historical projections are read-only evidence and should remain
+            # visible while the staged research pass is running. Previously we
+            # suppressed them for the entire pass, which made a ready
+            # projection history look like it had disappeared. Keep a short
+            # service-level cache so polling does not repeatedly rebuild the
+            # analogue map; the ML engine also caches its per-symbol result.
             projection = None
-            if not self.schedule_status.get("running"):
-                cached_projection = self.projection_cache.get(symbol)
-                if cached_projection and (now - cached_projection[0]).total_seconds() < 300:
-                    projection = copy.deepcopy(cached_projection[1])
-                else:
-                    projection = self.ml.project(stock, symbol=symbol, now=now, db=db)
-                    if projection is not None:
-                        self.projection_cache[symbol] = (now, copy.deepcopy(projection))
+            cached_projection = self.projection_cache.get(symbol)
+            if cached_projection and (now - cached_projection[0]).total_seconds() < 300:
+                projection = copy.deepcopy(cached_projection[1])
+            else:
+                projection = self.ml.project(stock, symbol=symbol, now=now, db=db)
+                if projection is not None:
+                    self.projection_cache[symbol] = (now, copy.deepcopy(projection))
             if projection is not None:
                 stock["projection"] = projection
             state, explanation = trade_state(

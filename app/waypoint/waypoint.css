@@ -3522,6 +3522,43 @@
     white-space: nowrap;
   }
 }
+
+/* Evidence cards use a light research surface inside the dark dashboard.
+   Keep their text explicitly dark so the global dark-theme heading rules do
+   not wash out the model and projection readouts on mobile. */
+.waypoint-app .ml-outlook,
+.waypoint-app .projection-outlook {
+  color: #011627;
+  border-color: #b9c9c5;
+}
+.waypoint-app .ml-outlook .eyebrow,
+.waypoint-app .projection-outlook .eyebrow,
+.waypoint-app .ml-outlook-heading small,
+.waypoint-app .projection-heading small,
+.waypoint-app .projection-note,
+.waypoint-app .ml-outlook-metrics span,
+.waypoint-app .projection-ranges span,
+.waypoint-app .projection-metrics span,
+.waypoint-app .ml-why,
+.waypoint-app .ml-why span,
+.waypoint-app .projection-details,
+.waypoint-app .projection-details p {
+  color: #526a70 !important;
+}
+.waypoint-app .ml-outlook-heading strong,
+.waypoint-app .ml-outlook-metrics strong,
+.waypoint-app .projection-heading strong,
+.waypoint-app .projection-ranges strong,
+.waypoint-app .projection-metrics strong,
+.waypoint-app .projection-details > div,
+.waypoint-app .ml-why p {
+  color: #011627 !important;
+}
+.waypoint-app .ml-why,
+.waypoint-app .projection-cone,
+.waypoint-app .projection-details {
+  border-color: #b9c9c5;
+}
 .waypoint-app .state-badge.gray { background: #123e58 !important; color: #bfe8ff !important; border: 1px solid #4cb5f5 !important; }
 .waypoint-app .state-badge.gray .state-dot { background: #4cb5f5 !important; }
 
