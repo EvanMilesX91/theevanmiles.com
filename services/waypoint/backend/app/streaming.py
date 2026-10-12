@@ -236,6 +236,16 @@ class AlpacaStream:
         self._desired = desired
         self._changed.set()
 
+    def force_resubscribe(self) -> None:
+        """Request a clean channel acknowledgement without restarting the socket."""
+        if not self._connected:
+            return
+        self._acknowledged.clear()
+        self._channel_symbols = {channel: set() for channel in CHANNELS}
+        self._expected_ack = None
+        self._sent_at = None
+        self._changed.set()
+
     def snapshot(self) -> dict[str, Any]:
         now = self._clock()
         fresh = {

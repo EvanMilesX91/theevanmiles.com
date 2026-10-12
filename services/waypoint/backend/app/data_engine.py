@@ -45,6 +45,7 @@ class DataEngine:
         self.last_persist = 0.0
         self.last_selection = 0.0
         self.last_observation_flush = 0.0
+        self.last_stream_recovery = 0.0
         self.pending_observations: dict[tuple[str, datetime], dict[str, Any]] = {}
         self.session_symbols: set[str] = set()
 
@@ -464,6 +465,18 @@ class DataEngine:
             if now - self.last_selection >= 30:
                 self.select_symbols()
                 self.last_selection = now
+            if (
+                self.stream and self.service.stream_status.get("connected")
+                and self.service.stream_status.get("stale_symbols")
+                and now - self.last_stream_recovery >= 120
+            ):
+                self.stream.force_resubscribe()
+                self.service.stream_status["last_resubscribe_at"] = datetime.now(UTC).isoformat()
+                self.service.stream_status["stale_retry_count"] = int(
+                    self.service.stream_status.get("stale_retry_count", 0)
+                ) + 1
+                self.last_stream_recovery = now
+                self.changed = True
             if self.changed or now - last_heartbeat >= 1:
                 self.changed = False
                 async with self.service.lock:
