@@ -2058,6 +2058,17 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                        : " The next available budget is shown after the provider reports it."}
                    </p>
                    {data.data_status?.schedule?.alpha_vantage_next_reset && <small>Next reset: {dateTime(data.data_status.schedule.alpha_vantage_next_reset)}</small>}
+                   {data.data_status?.schedule?.earnings_history_next_attempt && (
+                     <small>
+                       Historical earnings retry: {dateTime(data.data_status.schedule.earnings_history_next_attempt)}
+                       {data.data_status.schedule.earnings_history_budget_limited ? " (daily allowance reached; automatic retry)" : ""}
+                     </small>
+                   )}
+                   {typeof data.data_status?.schedule?.earnings_history_collected === "number" && (
+                     <small>
+                       Last earnings batch: {data.data_status.schedule.earnings_history_collected} fetched · {data.data_status.schedule.earnings_history_skipped ?? 0} already cached
+                     </small>
+                   )}
                  </div>
                  <div className="waypoint-discovery-status">
                    <strong>DISCOVERY UNIVERSE</strong>

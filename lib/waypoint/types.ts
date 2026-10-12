@@ -311,6 +311,11 @@ export type DataStatus = {
     research_errors?: string[];
     alpha_vantage_next_reset?: string | null;
     alpha_vantage_budget_remaining?: number | null;
+    earnings_history_next_attempt?: string | null;
+    earnings_history_budget_limited?: boolean;
+    earnings_history_collected?: number;
+    earnings_history_skipped?: number;
+    earnings_calendar_refreshed?: boolean;
     discovery_last_success?: string | null;
     discovery_candidates?: number;
     discovery_symbols?: string[];
