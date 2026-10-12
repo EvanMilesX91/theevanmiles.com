@@ -127,9 +127,17 @@ class MLEngine:
         unique = {(item.symbol, item.as_of): item for item in rows}
         ordered = sorted(unique.values(), key=lambda item: item.as_of)
         if len(ordered) > config.historical_projection_runtime_rows:
-            # Keep the most recent point-in-time cases for responsive live
-            # projections; the complete JSONL remains the training source.
-            ordered = ordered[-config.historical_projection_runtime_rows:]
+            # Prefer labelled historical cases for projections.  The runtime
+            # ledger also contains newer unlabelled live snapshots; taking a
+            # naive date tail would discard every usable analogue whenever the
+            # live ledger is longer than the offline sample.
+            labelled = [item for item in ordered if item.labels]
+            unlabelled = [item for item in ordered if not item.labels]
+            limit = config.historical_projection_runtime_rows
+            if len(labelled) >= limit:
+                ordered = labelled[-limit:]
+            else:
+                ordered = labelled + unlabelled[-(limit - len(labelled)):]
         self._history_cache = (str(path), modified, ordered)
         return ordered
 
