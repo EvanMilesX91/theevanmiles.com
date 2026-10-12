@@ -650,11 +650,20 @@ async def build_live_research(
             async def filings_call(identity=identity):
                 assert sec is not None
                 rows = await sec.filings(identity.cik)
-                return [
+                filtered = [
                     f.model_dump(mode="json")
                     for f in rows
                     if f.form in {"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A", "20-F", "6-K", "3", "4", "5", "3/A", "4/A", "5/A"}
-                ][:12]
+                ]
+                # Recent insider filings can outnumber quarterly/annual
+                # reports. Keep the filings that carry customer, debt and
+                # earnings evidence before filling the remainder with recent
+                # event filings; otherwise the concentration reviewer may
+                # never see the latest 10-K.
+                primary_forms = {"10-K", "10-K/A", "10-Q", "10-Q/A", "20-F"}
+                primary = [item for item in filtered if item.get("form") in primary_forms]
+                supplemental = [item for item in filtered if item.get("form") not in primary_forms]
+                return (primary + supplemental)[:24]
 
             # v2 invalidates older caches that were sliced before filtering,
             # which could leave only recent Form 4 rows and no annual/quarterly
