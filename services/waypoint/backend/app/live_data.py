@@ -685,12 +685,22 @@ async def build_live_research(
                 f"live:concentration:{symbol}:{concentration_filing.get('accession')}"
                 if concentration_filing else f"live:concentration:{symbol}:none"
             )
-            concentration, concentration_health = await fetch(
-                concentration_key,
-                7 * 86400,
-                concentration_call,
-                sec is not None and callable(getattr(sec, "customer_concentration", None)) and concentration_filing is not None,
-            )
+            if concentration_filing is None:
+                concentration = None
+                concentration_health = {
+                    "status": "unavailable",
+                    "code": "no_annual_filing",
+                    "message": "No annual or quarterly SEC filing is available in the current filing window.",
+                    "checked_at": None,
+                    "attempted_at": now.isoformat(),
+                }
+            else:
+                concentration, concentration_health = await fetch(
+                    concentration_key,
+                    7 * 86400,
+                    concentration_call,
+                    sec is not None and callable(getattr(sec, "customer_concentration", None)),
+                )
             record["coverage"]["concentration"] = concentration_health
             if concentration and concentration.get("maximum_pct") is not None and concentration_filing:
                 filing_source = concentration_filing.get("source") or {}

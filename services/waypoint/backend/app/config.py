@@ -49,7 +49,9 @@ class Config(BaseSettings):
     alpha_vantage_daily_limit: int = Field(default=25, ge=1, le=25)
     # Keep a portion of the free allowance for the rotating historical
     # earnings archive; optional news must yield when the reserve is reached.
-    alpha_vantage_history_reserve: int = Field(default=10, ge=0, le=24)
+    # Keep enough free-plan calls for one earnings calendar request plus a
+    # rotating set of historical earnings observations each day.
+    alpha_vantage_history_reserve: int = Field(default=11, ge=1, le=24)
     # GDELT is a broad discovery feed; it is stored as unverified evidence and
     # never treated as proof that an issuer made an announcement.
     # GDELT is discovery-only and cannot influence deterministic decisions;
