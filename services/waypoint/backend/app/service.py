@@ -50,6 +50,10 @@ class EngineService:
         self.usage_checkpoint: Any = None
         self.last_equity_at = datetime(1970, 1, 1, tzinfo=UTC)
         self.ml = MLEngine()
+        # Historical projection matching is intentionally cached separately
+        # from live prices. Recomputing all cones on every dashboard poll can
+        # starve health checks and mobile clients without changing the evidence.
+        self.projection_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
         self.ml_maintenance_task: asyncio.Task[Any] | None = None
         self.market_session: dict[str, Any] = {
             "observations_today": 0,
@@ -194,6 +198,7 @@ class EngineService:
         from .live_data import build_live_research
         from .providers import AlpacaMarketDataProvider, AlphaVantageProvider, ProviderError, SECProvider
 
+        self.projection_cache.clear()
         universe = list(dict.fromkeys(
             [
                 s.strip().upper()
@@ -586,9 +591,15 @@ class EngineService:
             # Projection matching can be CPU-heavy for a large discovery
             # batch. Keep the API responsive while a staged research pass is
             # running; the completed snapshot computes projections normally.
-            projection = None if self.schedule_status.get("running") else self.ml.project(
-                stock, symbol=symbol, now=now, db=db
-            )
+            projection = None
+            if not self.schedule_status.get("running"):
+                cached_projection = self.projection_cache.get(symbol)
+                if cached_projection and (now - cached_projection[0]).total_seconds() < 300:
+                    projection = copy.deepcopy(cached_projection[1])
+                else:
+                    projection = self.ml.project(stock, symbol=symbol, now=now, db=db)
+                    if projection is not None:
+                        self.projection_cache[symbol] = (now, copy.deepcopy(projection))
             if projection is not None:
                 stock["projection"] = projection
             state, explanation = trade_state(
