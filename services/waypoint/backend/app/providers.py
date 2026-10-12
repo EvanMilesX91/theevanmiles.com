@@ -775,7 +775,8 @@ class SECProvider(_HttpProvider):
                 "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet",
                 "OperatingIncomeLoss", "NetIncomeLoss", "NetCashProvidedByUsedInOperatingActivities",
                 "PaymentsToAcquirePropertyPlantAndEquipment", "CashAndCashEquivalentsAtCarryingValue",
-                "Assets", "DebtCurrentAndNoncurrent", "CommonStockSharesOutstanding",
+                "Assets", "DebtCurrentAndNoncurrent", "LongTermDebtNoncurrent", "LongTermDebtCurrent",
+                "ShortTermBorrowings", "ShortTermDebt", "CommonStockSharesOutstanding",
                 "WeightedAverageNumberOfDilutedSharesOutstanding", "EarningsPerShareDiluted",
             }
             for concept, value in parsed.facts.get("us-gaap", {}).items():

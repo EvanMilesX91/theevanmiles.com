@@ -332,6 +332,7 @@ class EngineService:
                 "sector": record.get("sector", "Industry unavailable"),
                 "sector_group": record.get("sector_group", "other"),
                 "metrics": analysis_record.get("metrics", {}),
+                "raw_metrics": analysis_record.get("raw_metrics", {}),
                 "history": history_values,
                 "history_timestamps": record.get("history_timestamps", prior.get("history_timestamps", [])),
                 "price": price,

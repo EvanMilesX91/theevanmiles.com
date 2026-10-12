@@ -245,11 +245,18 @@ def analyze_stock(fixture: dict, horizon: str = "weeks", now: datetime | None = 
         "dollar_volume",
         "spread_pct",
     ]
-    required += (
-        ["capital_buffer_pct", "credit_loss_pct"]
-        if kind == "Financial"
-        else ["cash_runway_months", "debt_to_assets_pct"]
-    )
+    if kind == "Financial":
+        required += ["capital_buffer_pct", "credit_loss_pct"]
+    else:
+        # Runway is meaningful for an issuer consuming cash. For a company
+        # with verified non-negative free cash flow, requiring a made-up
+        # runway number would lower confidence for the wrong reason. The
+        # debt-to-assets observation remains required for every non-bank.
+        raw_metrics = fixture.get("raw_metrics", {})
+        free_cash_flow = _number(raw_metrics.get("free_cash_flow_usd"))
+        if free_cash_flow is None or free_cash_flow < 0:
+            required.append("cash_runway_months")
+        required.append("debt_to_assets_pct")
     missing = [key for key in required if metrics.get(key) is None]
     # Invalid units/ratios are unavailable, never interpreted as reassuring zeroes.
     nonnegative = {

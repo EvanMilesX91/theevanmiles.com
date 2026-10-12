@@ -11,9 +11,11 @@ import copy
 from collections.abc import MutableMapping
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
-from statistics import mean
+from statistics import mean, median, pstdev
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from .news import classify_title
 
 from .providers import (
     AlpacaMarketDataProvider,
@@ -30,10 +32,7 @@ NORMALIZATION_VERSION = "sec-observed-1.0.0"
 UNSUPPORTED = {
     "peer_multiple": "A comparable, reviewed peer valuation reference is unavailable.",
     "concentration_pct": "Customer/product concentration requires disclosure review.",
-    "catalyst_strength": "News headlines do not establish a scored favorable catalyst.",
     "estimate_uncertainty_pct": "No validated estimate-uncertainty mapping is connected.",
-    "binary_event": "A news search cannot establish the absence of binary events.",
-    "revenue_stability": "A reviewed stability model is not configured.",
 }
 REVENUE_TAGS = ("RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet")
 
@@ -42,6 +41,38 @@ def _source(source, identity: str) -> dict:
     value = source.model_dump(mode="json") if hasattr(source, "model_dump") else dict(source)
     value["id"] = identity
     return value
+
+
+def _derived_source(
+    *,
+    source_id: str,
+    now: datetime,
+    value: Any,
+    description: str,
+    inputs: list[str],
+    provider: str = "Waypoint transparent derivation",
+) -> dict[str, Any]:
+    """Create a traceable source for a deterministic, non-provider metric.
+
+    Derived observations are kept visibly separate from SEC/Alpaca facts.  A
+    source can therefore explain why a field is present without pretending
+    that a heuristic is a reported company fact.
+    """
+    return {
+        "id": source_id,
+        "provider": provider,
+        "url": None,
+        "published_at": None,
+        "retrieved_at": now.isoformat(),
+        "reporting_period": None,
+        "raw_value": {"inputs": inputs},
+        "normalized_value": value,
+        "description": description,
+    }
+
+
+def _clip(value: float, low: float = 0.0, high: float = 100.0) -> float:
+    return max(low, min(high, float(value)))
 
 
 def normalize_fundamentals(
@@ -97,6 +128,13 @@ def normalize_fundamentals(
             if rows:
                 return rows[0]
         return None
+
+    def latest_instant(tags: tuple[str, ...], end: date, unit: str = "USD") -> FundamentalFact | None:
+        rows = [
+            item for item in rows_for(tags, unit)
+            if item.period_start is None and item.period_end <= end
+        ]
+        return max(rows, key=lambda item: item.period_end, default=None)
 
     def add(name: str, value: Decimal | float, inputs: list[FundamentalFact], formula: str, raw: bool = False):
         number = float(value)
@@ -170,6 +208,51 @@ def normalize_fundamentals(
         )
     else:
         result["missing_reasons"].append("A matching prior-year revenue duration is unavailable.")
+
+    # Revenue stability is a descriptive measure of how consistently the
+    # issuer has grown across independently reported, comparable periods. It
+    # is only emitted when at least three point-in-time year-over-year
+    # observations exist; one or two periods are not enough to call a business
+    # stable. Each fact was already filtered by filed_on above, so no future
+    # revision can enter this feature.
+    growth_observations: list[tuple[float, str]] = []
+    seen_periods: set[tuple[date, date]] = set()
+    for current in revenues:
+        if current.period_start is None or current.value <= 0:
+            continue
+        duration = (current.period_end - current.period_start).days + 1
+        prior_rows = [
+            item for item in revenues
+            if item is not current
+            and item.period_start is not None
+            and 350 <= (current.period_end - item.period_end).days <= 380
+            and abs((item.period_end - item.period_start).days + 1 - duration) <= 7
+            and item.value > 0
+        ]
+        if not prior_rows:
+            continue
+        prior = min(prior_rows, key=lambda item: abs((current.period_end - item.period_end).days - 365))
+        period_key = (current.period_start, current.period_end)
+        if period_key in seen_periods:
+            continue
+        seen_periods.add(period_key)
+        growth_observations.append((float((current.value / prior.value - 1) * 100), current.accession))
+    if len(growth_observations) >= 3:
+        growth_values = [value for value, _ in growth_observations]
+        stability = _clip(100 - pstdev(growth_values) * 2.0)
+        source_id = f"sec-{identity.symbol.lower()}-revenue-stability"
+        result["metrics"]["revenue_stability"] = stability
+        result["metric_sources"]["revenue_stability"] = source_id
+        result["sources"].append(_derived_source(
+            source_id=source_id,
+            now=now,
+            value=stability,
+            inputs=[accession for _, accession in growth_observations],
+            description=(
+                "Standard deviation of at least three filed, comparable year-over-year revenue-growth "
+                "observations mapped to a 0–100 stability score (100 − 2 × population standard deviation)."
+            ),
+        ))
     income = exact(("NetIncomeLoss",), start, end)
     operating_income = exact(("OperatingIncomeLoss",), start, end)
     if operating_income:
@@ -249,16 +332,46 @@ def normalize_fundamentals(
                 "Cash / average monthly negative FCF over the actual reporting duration; not a forecast.",
             )
         elif fcf is not None:
-            result["missing_reasons"].append(
-                "Positive FCF: cash runway is not applicable; no artificial month count is assigned."
-            )
+            # A profitable cash-generative issuer does not have a finite
+            # "runway" to measure. Keep that field absent rather than
+            # inventing a large number; the deterministic engine treats a
+            # verified non-negative FCF observation as the corresponding
+            # business-safety evidence.
+            pass
     if assets and assets.value > 0:
         add("assets_usd", assets.value, [assets], "Reported total assets.", True)
         # Only an explicit complete total debt concept; partial long-term figures
         # or liabilities never stand in for total interest-bearing debt.
-        debt = exact(("DebtCurrentAndNoncurrent",), None, end)
+        debt = latest_instant(("DebtCurrentAndNoncurrent",), end)
+        debt_inputs: list[FundamentalFact] = [debt] if debt else []
+        if debt is None:
+            # Some issuers do not publish the aggregate us-gaap concept. A
+            # current/non-current sum is accepted only when both parts are
+            # explicit balance-sheet facts, avoiding a partial liabilities
+            # proxy or double counting.
+            noncurrent = latest_instant(("LongTermDebtNoncurrent",), end)
+            current = latest_instant(("LongTermDebtCurrent", "ShortTermBorrowings", "ShortTermDebt"), end)
+            if noncurrent and current:
+                debt = FundamentalFact(
+                    concept="DebtCurrentAndNoncurrent",
+                    value=noncurrent.value + current.value,
+                    unit="USD",
+                    period_start=None,
+                    period_end=max(noncurrent.period_end, current.period_end),
+                    filed_on=max(noncurrent.filed_on, current.filed_on),
+                    accession=f"{noncurrent.accession}+{current.accession}",
+                    form=noncurrent.form,
+                    source=noncurrent.source,
+                )
+                debt_inputs = [noncurrent, current]
         if debt and debt.value >= 0:
-            add("total_debt_usd", debt.value, [debt], "Reported complete interest-bearing debt.", True)
+            add(
+                "total_debt_usd",
+                debt.value,
+                debt_inputs,
+                "Reported complete interest-bearing debt, or explicit current plus non-current debt components.",
+                True,
+            )
             add(
                 "debt_to_assets_pct",
                 debt.value / assets.value * 100,
@@ -305,9 +418,19 @@ def normalize_fundamentals(
             "Actual annual diluted EPS; not trailing-twelve-month EPS.",
             True,
         )
-    result["missing_reasons"].append(
-        "Comparable TTM valuation, bank metrics and specialist event coverage remain unavailable."
-    )
+    share_rows = [
+        item for item in rows_for(("CommonStockSharesOutstanding",), "shares")
+        if item.period_start is None and item.period_end <= end and item.value > 0
+    ]
+    shares = max(share_rows, key=lambda item: item.period_end, default=None)
+    if shares and shares.value > 0:
+        add(
+            "shares_outstanding",
+            shares.value,
+            [shares],
+            "Reported common shares outstanding at the latest available balance-sheet date.",
+            True,
+        )
     return result
 
 
@@ -515,6 +638,52 @@ async def build_live_research(
                 record["metrics"]["dollar_volume"] = volume
                 record["metric_sources"]["dollar_volume"] = volume_id
 
+            # A reported positive annual diluted EPS plus the last completed
+            # close gives a transparent, point-in-time earnings multiple. It
+            # is deliberately labelled as an annual-EPS multiple rather than
+            # pretending to be a forecast TTM valuation.
+            eps = record["raw_metrics"].get("annual_diluted_eps_usd")
+            shares = record["raw_metrics"].get("shares_outstanding")
+            revenue = record["raw_metrics"].get("revenue_usd")
+            valuation_basis = "earnings"
+            value = None
+            valuation_inputs: list[str] = []
+            if eps is not None and float(eps) > 0 and record.get("previous_close"):
+                value = float(record["previous_close"]) / float(eps)
+                valuation_inputs = [record["metric_sources"].get("annual_diluted_eps_usd", "")]
+            elif shares is not None and float(shares) > 0 and revenue is not None and float(revenue) > 0 and record.get("previous_close"):
+                # Early-stage issuers often have no positive EPS. A price to
+                # reported-revenue multiple keeps them comparable without
+                # turning a loss into a fake earnings multiple.
+                value = float(record["previous_close"]) * float(shares) / float(revenue)
+                valuation_basis = "revenue"
+                valuation_inputs = [
+                    record["metric_sources"].get("shares_outstanding", ""),
+                    record["metric_sources"].get("revenue_usd", ""),
+                ]
+            if value is not None:
+                valuation_id = f"derived-{symbol.lower()}-annual-valuation"
+                history_id = record["metric_sources"].get("history", f"alpaca-{symbol.lower()}-history")
+                record["metrics"]["valuation_multiple"] = value
+                record["metric_sources"]["valuation_multiple"] = valuation_id
+                valuation_inputs.append(history_id)
+                record["sources"].append(_derived_source(
+                    source_id=valuation_id,
+                    now=now,
+                    value=value,
+                    inputs=[item for item in valuation_inputs if item],
+                    description=(
+                        (
+                            "Completed prior-session close divided by the latest reported positive annual diluted EPS; "
+                            "a descriptive annual earnings multiple, not a forecast or TTM estimate."
+                        ) if valuation_basis == "earnings" else (
+                            "Completed prior-session market capitalisation divided by the latest reported revenue; "
+                            "a descriptive price-to-revenue multiple for an issuer without positive annual EPS."
+                        )
+                    ),
+                ))
+                record["valuation_basis"] = valuation_basis
+
         news = [item for item in (news_batch or []) if symbol in item.get("symbols", [])]
         record["coverage"]["news"] = news_health
         record["news_checked_at"] = news_health.get("checked_at")
@@ -529,6 +698,51 @@ async def build_live_research(
                     "source_id": source_id,
                 }
             )
+        if news_health["status"] == "current" and (record["news"] or record["filings"]):
+            classified = [classify_title(item["title"]) for item in record["news"]]
+            filing_descriptions = [
+                classify_title(f"{item.get('form', '')} {item.get('description', '')}")
+                for item in record["filings"][:12]
+            ]
+            event_observations = classified + filing_descriptions
+            weighted_sentiment = sum(item["sentiment"] * item["importance"] for item in classified)
+            catalyst_score = _clip(50 + weighted_sentiment * 18)
+            catalyst_id = f"derived-{symbol.lower()}-catalyst"
+            record["metrics"]["catalyst_strength"] = catalyst_score
+            record["metric_sources"]["catalyst_strength"] = catalyst_id
+            record["sources"].append(_derived_source(
+                source_id=catalyst_id,
+                now=now,
+                value=catalyst_score,
+                inputs=[
+                    *[item["source_id"] for item in record["news"]],
+                    *[item.get("source", {}).get("id", "") for item in record["filings"]],
+                ],
+                description=(
+                    "Neutral 50/100 baseline adjusted by the sentiment and importance of current verified "
+                    "headlines; when no headline is available, current SEC filing metadata keeps the score neutral. "
+                    "This describes observed evidence; it is not a prediction."
+                ),
+            ))
+            binary_types = {"offering", "merger", "regulatory", "legal", "leadership"}
+            binary = any(item["event_type"] in binary_types for item in event_observations)
+            binary_id = f"derived-{symbol.lower()}-binary-event"
+            record["metrics"]["binary_event"] = 1.0 if binary else 0.0
+            record["metric_sources"]["binary_event"] = binary_id
+            record["sources"].append(_derived_source(
+                source_id=binary_id,
+                now=now,
+                value=1.0 if binary else 0.0,
+                inputs=[
+                    *[item["source_id"] for item in record["news"]],
+                    *[item.get("source", {}).get("id", "") for item in record["filings"]],
+                ],
+                description=(
+                    "Deterministic screen of the current verified headlines for offering, merger, regulatory, "
+                    "legal or leadership language and SEC filing descriptions; a zero means no matching event "
+                    "was observed in the current provider window, not that no undiscovered event exists."
+                ),
+            ))
         record["coverage"]["earnings"] = calendar_health
         matching = [
             e
@@ -562,4 +776,57 @@ async def build_live_research(
                 record["missing_reasons"].append(f"{name.capitalize()} data is {health['status']}.")
         record["missing_reasons"] = list(dict.fromkeys(record["missing_reasons"] + list(UNSUPPORTED.values())))
         output["by_symbol"][symbol] = record
+
+    # Complete comparable valuation references only when the current refresh
+    # contains at least two other issuers in the same sourced sector group.
+    # This prevents a single company being used as its own peer and keeps the
+    # comparison tied to the same point-in-time observation set.
+    valuation_groups: dict[tuple[str, str], list[tuple[str, float]]] = {}
+    for symbol, record in output["by_symbol"].items():
+        value = record.get("metrics", {}).get("valuation_multiple")
+        group = (
+            str(record.get("sector_group") or "other"),
+            str(record.get("valuation_basis") or "earnings"),
+        )
+        if value is not None and float(value) > 0:
+            valuation_groups.setdefault(group, []).append((symbol, float(value)))
+    for symbol, record in output["by_symbol"].items():
+        if record.get("metrics", {}).get("peer_multiple") is not None:
+            continue
+        group = (
+            str(record.get("sector_group") or "other"),
+            str(record.get("valuation_basis") or "earnings"),
+        )
+        peers = [value for peer_symbol, value in valuation_groups.get(group, []) if peer_symbol != symbol]
+        if len(peers) < 2:
+            continue
+        peer_value = median(peers)
+        peer_id = f"derived-{symbol.lower()}-peer-multiple"
+        valuation_id = record.get("metric_sources", {}).get("valuation_multiple", "")
+        peer_inputs = [
+            item for item in [
+                valuation_id,
+                *[
+                    f"derived-{peer.lower()}-annual-valuation"
+                    for peer, _ in valuation_groups[group]
+                    if peer != symbol
+                ],
+            ] if item
+        ]
+        record.setdefault("metrics", {})["peer_multiple"] = peer_value
+        record.setdefault("metric_sources", {})["peer_multiple"] = peer_id
+        record["missing_reasons"] = [
+            reason for reason in record.get("missing_reasons", [])
+            if reason != UNSUPPORTED["peer_multiple"]
+        ]
+        record.setdefault("sources", []).append(_derived_source(
+            source_id=peer_id,
+            now=now,
+            value=peer_value,
+            inputs=peer_inputs,
+            description=(
+                "Median annual earnings multiple of at least two other issuers in the same sourced sector "
+                "group from this refresh; descriptive peer reference, not a forward estimate."
+            ),
+        ))
     return output

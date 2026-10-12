@@ -89,6 +89,14 @@ def test_unsourced_values_are_not_treated_as_facts(fixture):
     assert "revenue_growth_pct" in stock["eligibility"]["missing_inputs"]
 
 
+def test_positive_free_cash_flow_does_not_require_an_artificial_runway(fixture):
+    fixture["metrics"]["cash_runway_months"] = None
+    fixture["raw_metrics"] = {"free_cash_flow_usd": 125_000_000}
+    stock = analyze_stock(fixture, now=NOW)
+    assert stock["plan"] is not None
+    assert "cash_runway_months" not in stock["eligibility"]["missing_inputs"]
+
+
 @pytest.mark.parametrize(
     "field,age",
     [

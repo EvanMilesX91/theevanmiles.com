@@ -98,6 +98,19 @@ def test_normalization_uses_exact_reported_periods_and_references_every_metric()
     json.dumps(result, allow_nan=False)
 
 
+def test_revenue_stability_requires_three_point_in_time_growth_observations():
+    rows = [
+        fact("Revenues", 130, "2025-01-01", "2025-12-31", "2026-02-15", accession="annual-2025"),
+        fact("Revenues", 120, "2024-01-01", "2024-12-31", "2025-02-15", accession="annual-2024"),
+        fact("Revenues", 110, "2023-01-01", "2023-12-31", "2024-02-15", accession="annual-2023"),
+        fact("Revenues", 100, "2022-01-01", "2022-12-31", "2023-02-15", accession="annual-2022"),
+    ]
+    result = normalize_fundamentals(facts(rows), identity(), NOW)
+    assert 0 < result["metrics"]["revenue_stability"] <= 100
+    source_id = result["metric_sources"]["revenue_stability"]
+    assert any(item["id"] == source_id for item in result["sources"])
+
+
 def test_normalization_does_not_mix_overlapping_ytd_or_currency_units():
     data = facts(
         [
@@ -124,6 +137,20 @@ def test_missing_capex_and_missing_short_term_debt_do_not_become_zeroes():
     result = normalize_fundamentals(data, identity(), NOW)
     assert "fcf_margin_pct" not in result["metrics"]
     assert "debt_to_assets_pct" not in result["metrics"]
+
+
+def test_explicit_current_and_noncurrent_debt_can_form_complete_total():
+    data = facts(
+        [
+            fact("Revenues", 200),
+            fact("Assets", 400, None),
+            fact("LongTermDebtNoncurrent", 100, None),
+            fact("LongTermDebtCurrent", 20, None),
+        ]
+    )
+    result = normalize_fundamentals(data, identity(), NOW)
+    assert result["raw_metrics"]["total_debt_usd"] == 120
+    assert result["metrics"]["debt_to_assets_pct"] == 30
 
 
 def test_cash_runway_only_uses_matched_observed_negative_cash_flow():
