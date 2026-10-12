@@ -35,6 +35,64 @@ UNSUPPORTED = {
     "concentration_pct": "Customer/product concentration requires disclosure review.",
     "estimate_uncertainty_pct": "No validated estimate-uncertainty mapping is connected.",
 }
+
+
+def enrich_peer_valuations(records: dict[str, dict[str, Any]], now: datetime) -> None:
+    """Attach cross-batch peer valuation observations to a full research set.
+
+    Live research is fetched in small batches so the dashboard stays responsive.
+    Peer valuation needs the complete current universe, so it is applied once
+    more after all batches have been assembled.  The derived observation is
+    descriptive only and is never treated as a forecast.
+    """
+    valuation_groups: dict[tuple[str, str], list[tuple[str, float]]] = {}
+    for symbol, record in records.items():
+        value = record.get("metrics", {}).get("valuation_multiple")
+        group = (
+            str(record.get("sector_group") or "other"),
+            str(record.get("valuation_basis") or "earnings"),
+        )
+        if value is not None and float(value) > 0:
+            valuation_groups.setdefault(group, []).append((symbol, float(value)))
+    for symbol, record in records.items():
+        if record.get("metrics", {}).get("peer_multiple") is not None:
+            continue
+        group = (
+            str(record.get("sector_group") or "other"),
+            str(record.get("valuation_basis") or "earnings"),
+        )
+        peers = [value for peer_symbol, value in valuation_groups.get(group, []) if peer_symbol != symbol]
+        if len(peers) < 2:
+            continue
+        peer_value = median(peers)
+        peer_id = f"derived-{symbol.lower()}-peer-multiple"
+        valuation_id = record.get("metric_sources", {}).get("valuation_multiple", "")
+        peer_inputs = [
+            item for item in [
+                valuation_id,
+                *[
+                    f"derived-{peer.lower()}-annual-valuation"
+                    for peer, _ in valuation_groups[group]
+                    if peer != symbol
+                ],
+            ] if item
+        ]
+        record.setdefault("metrics", {})["peer_multiple"] = peer_value
+        record.setdefault("metric_sources", {})["peer_multiple"] = peer_id
+        record["missing_reasons"] = [
+            reason for reason in record.get("missing_reasons", [])
+            if reason != UNSUPPORTED["peer_multiple"]
+        ]
+        record.setdefault("sources", []).append(_derived_source(
+            source_id=peer_id,
+            now=now,
+            value=peer_value,
+            inputs=peer_inputs,
+            description=(
+                "Median annual valuation multiple of at least two other issuers in the same sourced sector "
+                "group from this refresh; descriptive peer reference, not a forward estimate."
+            ),
+        ))
 REVENUE_TAGS = ("RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet")
 
 
@@ -944,56 +1002,7 @@ async def build_live_research(
         ]))
         output["by_symbol"][symbol] = record
 
-    # Complete comparable valuation references only when the current refresh
-    # contains at least two other issuers in the same sourced sector group.
-    # This prevents a single company being used as its own peer and keeps the
-    # comparison tied to the same point-in-time observation set.
-    valuation_groups: dict[tuple[str, str], list[tuple[str, float]]] = {}
-    for symbol, record in output["by_symbol"].items():
-        value = record.get("metrics", {}).get("valuation_multiple")
-        group = (
-            str(record.get("sector_group") or "other"),
-            str(record.get("valuation_basis") or "earnings"),
-        )
-        if value is not None and float(value) > 0:
-            valuation_groups.setdefault(group, []).append((symbol, float(value)))
-    for symbol, record in output["by_symbol"].items():
-        if record.get("metrics", {}).get("peer_multiple") is not None:
-            continue
-        group = (
-            str(record.get("sector_group") or "other"),
-            str(record.get("valuation_basis") or "earnings"),
-        )
-        peers = [value for peer_symbol, value in valuation_groups.get(group, []) if peer_symbol != symbol]
-        if len(peers) < 2:
-            continue
-        peer_value = median(peers)
-        peer_id = f"derived-{symbol.lower()}-peer-multiple"
-        valuation_id = record.get("metric_sources", {}).get("valuation_multiple", "")
-        peer_inputs = [
-            item for item in [
-                valuation_id,
-                *[
-                    f"derived-{peer.lower()}-annual-valuation"
-                    for peer, _ in valuation_groups[group]
-                    if peer != symbol
-                ],
-            ] if item
-        ]
-        record.setdefault("metrics", {})["peer_multiple"] = peer_value
-        record.setdefault("metric_sources", {})["peer_multiple"] = peer_id
-        record["missing_reasons"] = [
-            reason for reason in record.get("missing_reasons", [])
-            if reason != UNSUPPORTED["peer_multiple"]
-        ]
-        record.setdefault("sources", []).append(_derived_source(
-            source_id=peer_id,
-            now=now,
-            value=peer_value,
-            inputs=peer_inputs,
-            description=(
-                "Median annual earnings multiple of at least two other issuers in the same sourced sector "
-                "group from this refresh; descriptive peer reference, not a forward estimate."
-            ),
-        ))
+    # The normal refresh may be a two-symbol batch. Re-run this across the
+    # complete set so eligible same-sector peers are not lost at batch edges.
+    enrich_peer_valuations(output["by_symbol"], now)
     return output

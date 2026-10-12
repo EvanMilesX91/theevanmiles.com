@@ -348,6 +348,17 @@ class DataEngine:
                     self.service.last_slow_refresh = datetime.now(UTC)
                     self.changed = True
                     await self.publish()
+                # Peer valuation needs the complete current universe. The
+                # staged provider pass above intentionally works in tiny
+                # batches, so enrich the combined records once and rebuild
+                # the deterministic views without another provider request.
+                from .live_data import enrich_peer_valuations
+
+                enrich_peer_valuations(prepared.research, datetime.now(UTC))
+                await prepared.refresh_live(history=False, selected_symbols=all_symbols)
+                await commit_batch(all_symbols)
+                self.changed = True
+                await self.publish()
                 self.service.last_slow_refresh = datetime.now(UTC)
                 self.service.schedule_status.update(
                     running=False, last_success=datetime.now(UTC).isoformat(),
