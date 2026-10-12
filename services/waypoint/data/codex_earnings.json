@@ -1,0 +1,42 @@
+[
+  {
+    "symbol": "AAPL",
+    "company": "Apple Inc.",
+    "report_date": "2026-11-02",
+    "published_at": "2026-10-11T00:00:00Z",
+    "available_at": "2026-10-11T00:00:00Z",
+    "retrieved_at": "2026-10-12T16:00:00Z",
+    "url": "https://www.apple.com/investor/earnings-call/",
+    "review_status": "reviewed"
+  },
+  {
+    "symbol": "MSFT",
+    "company": "Microsoft Corporation",
+    "report_date": "2026-10-28",
+    "published_at": "2026-10-07T00:00:00Z",
+    "available_at": "2026-10-07T00:00:00Z",
+    "retrieved_at": "2026-10-12T16:00:00Z",
+    "url": "https://news.microsoft.com/source/2026/10/07/microsoft-announces-quarterly-earnings-release-date-69/",
+    "review_status": "reviewed"
+  },
+  {
+    "symbol": "AMD",
+    "company": "Advanced Micro Devices, Inc.",
+    "report_date": "2026-11-03",
+    "published_at": "2026-10-06T00:00:00Z",
+    "available_at": "2026-10-06T00:00:00Z",
+    "retrieved_at": "2026-10-12T16:00:00Z",
+    "url": "https://ir.amd.com/news-events/ir-calendar",
+    "review_status": "reviewed"
+  },
+  {
+    "symbol": "TSLA",
+    "company": "Tesla, Inc.",
+    "report_date": "2026-10-21",
+    "published_at": "2026-10-02T00:00:00Z",
+    "available_at": "2026-10-02T00:00:00Z",
+    "retrieved_at": "2026-10-12T16:00:00Z",
+    "url": "https://ir.tesla.com/press-release/tesla-third-quarter-2026-production-deliveries-and-deployments",
+    "review_status": "reviewed"
+  }
+]
