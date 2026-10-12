@@ -45,7 +45,7 @@ class Config(BaseSettings):
     warm_refresh_minutes: int = Field(default=15, ge=5, le=60)
     # Slow research is committed in small batches so the dashboard can show
     # useful progress and keep serving the last completed snapshot.
-    research_batch_size: int = Field(default=5, ge=1, le=25)
+    research_batch_size: int = Field(default=2, ge=1, le=25)
     alpha_vantage_daily_limit: int = Field(default=25, ge=1, le=25)
     # Keep a portion of the free allowance for the rotating historical
     # earnings archive; optional news must yield when the reserve is reached.
