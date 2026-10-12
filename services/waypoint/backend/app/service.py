@@ -499,7 +499,12 @@ class EngineService:
             prediction = self.ml.predict(stock, symbol=symbol, now=now, db=db)
             if prediction is not None:
                 stock["ml"] = prediction
-            projection = self.ml.project(stock, symbol=symbol, now=now, db=db)
+            # Projection matching can be CPU-heavy for a large discovery
+            # batch. Keep the API responsive while a staged research pass is
+            # running; the completed snapshot computes projections normally.
+            projection = None if self.schedule_status.get("running") else self.ml.project(
+                stock, symbol=symbol, now=now, db=db
+            )
             if projection is not None:
                 stock["projection"] = projection
             state, explanation = trade_state(
