@@ -33,8 +33,16 @@ def reliability_curve(probabilities: Iterable[float], outcomes: Iterable[int], b
     return result
 
 
-def fit_platt(probabilities: list[float], outcomes: list[int], steps: int = 300, learning_rate: float = 0.05) -> dict[str, float]:
-    """Fit a tiny logistic calibration layer without adding a heavy dependency."""
+def fit_platt(probabilities: list[float], outcomes: list[int], steps: int = 300, learning_rate: float = 0.05,
+              regularization: float = 0.05) -> dict[str, float]:
+    """Fit a conservative logistic calibration layer.
+
+    A calibration set can be much smaller than the training set. A completely
+    unregularised Platt fit can therefore drive its slope to infinity after a
+    few lucky observations and emit false 0%/100% certainty. The small prior
+    toward the identity transform keeps probabilities useful while retaining
+    the ability to correct a real bias.
+    """
     if not probabilities:
         return {"a": 1.0, "b": 0.0}
     import math
@@ -47,8 +55,13 @@ def fit_platt(probabilities: list[float], outcomes: list[int], steps: int = 300,
             predicted = 1 / (1 + math.exp(-score))
             grad_a += (predicted - outcome) * logit
             grad_b += predicted - outcome
-        a -= learning_rate * grad_a / len(probabilities)
-        b -= learning_rate * grad_b / len(probabilities)
+        grad_a = grad_a / len(probabilities) + regularization * (a - 1.0)
+        grad_b = grad_b / len(probabilities) + regularization * b
+        a -= learning_rate * grad_a
+        b -= learning_rate * grad_b
+        # Avoid unstable calibration tails on small, non-stationary folds.
+        a = max(0.05, min(3.0, a))
+        b = max(-3.0, min(3.0, b))
     return {"a": a, "b": b}
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -79,13 +80,43 @@ def _folds(rows: list[PointInTimeSnapshot], minimum_train: int = 8, purge_days: 
     return folds
 
 
+def _calibration_split(rows: list[PointInTimeSnapshot], *, fraction: float = 0.20,
+                       purge_days: int = 5) -> tuple[list[PointInTimeSnapshot], list[PointInTimeSnapshot]]:
+    """Split a training fold into fit and later calibration observations.
+
+    Platt calibration is itself a learned model. Fitting it on the same rows
+    as the classifier makes the reported probabilities look better than they
+    perform in the future. The final slice is therefore held out in time,
+    with a small purge gap because labels contain forward returns.
+    """
+    ordered = sorted(rows, key=lambda row: row.as_of)
+    if len(ordered) < 40:
+        return ordered, []
+    calibration_count = max(30, int(len(ordered) * fraction))
+    cut = max(8, len(ordered) - calibration_count)
+    calibration_rows = ordered[cut:]
+    try:
+        calibration_start = datetime.fromisoformat(calibration_rows[0].as_of.replace("Z", "+00:00"))
+        boundary = calibration_start - timedelta(days=purge_days)
+        fit_rows = [row for row in ordered[:cut]
+                    if datetime.fromisoformat(row.as_of.replace("Z", "+00:00")) < boundary]
+    except (TypeError, ValueError):
+        fit_rows = ordered[:cut]
+    if len(fit_rows) < 8:
+        fit_rows = ordered[:cut]
+    return fit_rows, calibration_rows
+
+
 def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None = None,
                  train_kwargs: dict[str, Any] | None = None) -> dict[str, Any]:
     friction = friction or Friction()
     train_kwargs = train_kwargs or {}
     predictions: list[dict[str, Any]] = []
     for training_rows, validation_rows in _folds(rows):
-        model = train(training_rows, **train_kwargs)
+        fit_rows, calibration_rows = _calibration_split(training_rows)
+        model_kwargs = dict(train_kwargs)
+        model_kwargs.setdefault("calibration_rows", calibration_rows)
+        model = train(fit_rows, **model_kwargs)
         predictions.extend([{**predict_with_model(model, row), "actual": row.labels, "regime": row.regime, "symbol": row.symbol, "as_of": row.as_of}
                             for row in validation_rows if row.labels])
     probabilities, outcomes = [], []
@@ -101,7 +132,11 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
     baseline_probability = float(np.mean(outcomes)) if outcomes else None
     baseline_brier = ((baseline_probability - 1) ** 2 * sum(outcomes) + baseline_probability ** 2 * (len(outcomes) - sum(outcomes))) / len(outcomes) if outcomes and baseline_probability is not None else None
     signal_thresholds: dict[str, dict[str, Any]] = {}
-    for threshold in (0.55, 0.60, 0.65):
+    # Keep the original decision thresholds, but expose a wider diagnostic
+    # grid. A small selected sample often means the threshold is simply too
+    # extreme; the promotion gate still requires a sufficiently large,
+    # positive, out-of-sample sample before ML can influence decisions.
+    for threshold in (0.50, 0.52, 0.55, 0.58, 0.60, 0.65):
         selected = [item for item in predictions
                     if item.get("probability_positive_5d") is not None
                     and float(item["probability_positive_5d"]) >= threshold
@@ -112,6 +147,21 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
             "selection_rate": len(selected) / len(predictions) if predictions else 0.0,
             "win_rate": sum(float(item["actual"]["return_5d"]) > 0 for item in selected) / len(selected) if selected else None,
             "mean_net_return_5d": float(np.mean(selected_returns)) if selected_returns else None,
+        }
+    ranked_buckets: dict[str, dict[str, Any]] = {}
+    ranked = [item for item in predictions if item.get("probability_positive_5d") is not None
+              and item.get("actual", {}).get("return_5d") is not None]
+    ranked.sort(key=lambda item: float(item["probability_positive_5d"]), reverse=True)
+    for fraction in (0.01, 0.05, 0.10, 0.20):
+        count = max(1, int(len(ranked) * fraction)) if ranked else 0
+        selected = ranked[:count]
+        returns = [float(item["actual"]["return_5d"]) - friction.round_trip for item in selected]
+        ranked_buckets[str(fraction)] = {
+            "count": count,
+            "selection_rate": count / len(ranked) if ranked else 0.0,
+            "threshold_probability": float(selected[-1]["probability_positive_5d"]) if selected else None,
+            "win_rate": float(np.mean([float(item["actual"]["return_5d"]) > 0 for item in selected])) if selected else None,
+            "mean_net_return_5d": float(np.mean(returns)) if returns else None,
         }
     regime_metrics = {regime: {"count": len(values), "mean_net_return_5d": float(np.mean([
         float(item.get("actual", {}).get("return_5d", 0)) - friction.round_trip for item in values
@@ -124,7 +174,14 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
         ])) if values else None,
                              "win_rate": float(np.mean([float(item["actual"]["return_5d"]) > 0 for item in values])) if values else None}
     reliability = [item.__dict__ for item in reliability_curve(probabilities, outcomes)]
-    calibration_gaps = [abs(item["mean_probability"] - item["observed_rate"]) for item in reliability if item["count"]]
+    # Ignore tiny bins when reporting the worst gap, while also exposing a
+    # weighted error over every prediction. This prevents one or two examples
+    # from making the dashboard look worse than the full calibration picture.
+    calibration_gaps = [abs(item["mean_probability"] - item["observed_rate"])
+                        for item in reliability if item["count"] >= 50]
+    total_reliability = sum(item["count"] for item in reliability)
+    expected_calibration_error = (sum(item["count"] * abs(item["mean_probability"] - item["observed_rate"])
+                                   for item in reliability) / total_reliability) if total_reliability else None
     return {"method": "chronological_walk_forward", "folds": len(_folds(rows)), "predictions": predictions,
             "training": train_kwargs,
             "metrics": {"brier_score_5d": brier_score(probabilities, outcomes),
@@ -132,8 +189,10 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
                         "baseline_probability_5d": baseline_probability,
                         "baseline_brier_score_5d": baseline_brier,
                         "signal_thresholds_5d": signal_thresholds,
+                        "ranked_signal_buckets_5d": ranked_buckets,
                         "friction": friction.__dict__, "reliability_5d": reliability,
                         "calibration_gap_5d": max(calibration_gaps, default=None),
+                        "expected_calibration_error_5d": expected_calibration_error,
                         "by_regime": regime_metrics, "by_symbol": by_symbol,
                         "feature_coverage": _coverage(rows)}}
 

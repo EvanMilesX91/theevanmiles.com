@@ -14,7 +14,7 @@ import numpy as np
 
 from .calibration import brier_score, calibrate, fit_platt
 from .datasets import PointInTimeSnapshot
-from .evaluate import Friction, _folds
+from .evaluate import Friction, _calibration_split, _folds
 from .train import _label, _matrix
 
 
@@ -46,7 +46,9 @@ def walk_forward_xgboost(rows: list[PointInTimeSnapshot], *, friction: Friction 
     folds = _folds(rows)
     predictions: list[dict[str, Any]] = []
     for training_rows, validation_rows in folds:
-        train_rows = [row for row in training_rows if _label(row, "probability_positive_5d") is not None]
+        fit_rows, calibration_rows = _calibration_split(training_rows)
+        train_rows = [row for row in fit_rows if _label(row, "probability_positive_5d") is not None]
+        cal_rows = [row for row in calibration_rows if _label(row, "probability_positive_5d") is not None]
         valid_rows = [row for row in validation_rows if _label(row, "probability_positive_5d") is not None]
         if len(train_rows) < 20 or not valid_rows:
             continue
@@ -58,10 +60,19 @@ def walk_forward_xgboost(rows: list[PointInTimeSnapshot], *, friction: Friction 
             "colsample_bytree": 0.8, "lambda": 10.0, "alpha": 0.1, "nthread": 1,
             "seed": 7,
         }, xgb.DMatrix(x_train, label=y_train), num_boost_round=240)
-        train_raw = model.predict(xgb.DMatrix(x_train))
-        calibration = fit_platt(train_raw.tolist(), y_train.tolist()) | {
-            "prior": float(np.mean(y_train)), "shrinkage": 0.75,
-        }
+        # Calibrate on the later slice, never on the same rows used to grow
+        # the trees. This keeps the challenger comparable with the baseline.
+        if len(cal_rows) >= 30 and len({int(_label(row, "probability_positive_5d")) for row in cal_rows}) > 1:
+            cal_raw = model.predict(xgb.DMatrix(_matrix(cal_rows)))
+            cal_y = [_label(row, "probability_positive_5d") for row in cal_rows]
+            calibration = fit_platt(cal_raw.tolist(), [int(value) for value in cal_y]) | {
+                "prior": float(np.mean(cal_y)), "shrinkage": 0.80,
+            }
+        else:
+            train_raw = model.predict(xgb.DMatrix(x_train))
+            calibration = fit_platt(train_raw.tolist(), y_train.tolist()) | {
+                "prior": float(np.mean(y_train)), "shrinkage": 0.80,
+            }
         for row in valid_rows:
             raw = float(model.predict(xgb.DMatrix(_matrix([row])))[0])
             predictions.append({
@@ -75,7 +86,7 @@ def walk_forward_xgboost(rows: list[PointInTimeSnapshot], *, friction: Friction 
     baseline = float(np.mean(outcomes)) if outcomes else None
     baseline_brier = ((baseline - 1) ** 2 * sum(outcomes) + baseline ** 2 * (len(outcomes) - sum(outcomes))) / len(outcomes) if outcomes and baseline is not None else None
     thresholds: dict[str, dict[str, Any]] = {}
-    for threshold in (0.55, 0.60, 0.65):
+    for threshold in (0.50, 0.52, 0.55, 0.58, 0.60, 0.65):
         selected = [item for item in predictions if item["probability_positive_5d"] >= threshold]
         returns = [float(item["actual"]["return_5d"]) - friction.round_trip for item in selected]
         thresholds[str(threshold)] = {

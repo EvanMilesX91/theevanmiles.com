@@ -266,9 +266,12 @@ class MLEngine:
 
         rows = read_jsonl(str(path))
         candidates = [
-            {"logistic_l2": 10.0, "learning_rate": 0.08},
-            {"logistic_l2": 1.0, "learning_rate": 0.04},
-            {"logistic_l2": 0.1, "learning_rate": 0.04},
+            # The previous 10.0/1.0 penalties almost zeroed the standardized
+            # feature weights. Compare modest regularisation values instead;
+            # the walk-forward gate decides whether any candidate is useful.
+            {"logistic_l2": 0.01, "learning_rate": 0.06, "probability_shrinkage": 0.80},
+            {"logistic_l2": 0.05, "learning_rate": 0.08, "probability_shrinkage": 0.80},
+            {"logistic_l2": 0.10, "learning_rate": 0.04, "probability_shrinkage": 0.80},
         ]
         evaluated: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
         for train_kwargs in candidates:
