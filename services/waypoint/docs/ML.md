@@ -105,7 +105,8 @@ Evaluation reports Brier score, weighted calibration error, reliability bins,
 symbol and regime macro scores, signal breadth, feature coverage, and mean net
 return after spread, slippage, FX cost and fees. A candidate must improve both
 the overall and macro symbol/regime baselines before it can influence
-decisions.
+decisions. The promotion check uses a fixed 55% policy threshold; it does not
+pick the most profitable cutoff after inspecting the same validation returns.
 
 Coverage inputs are explicit features: price-history depth, volume coverage,
 fundamental coverage, news availability, event availability and market-context
