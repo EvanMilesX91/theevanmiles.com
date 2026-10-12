@@ -374,8 +374,16 @@ class DataEngine:
 
     async def slow_loop(self) -> None:
         initial = True
+        startup_due = True
         done: set[str] = set()
         while True:
+            if initial:
+                # Let health checks, the dashboard, and the stream become
+                # available from the saved snapshot before the first expensive
+                # research pass starts.
+                initial = False
+                await asyncio.sleep(15)
+                continue
             now = datetime.now(UTC)
             local = now.astimezone(ZoneInfo('Europe/Dublin'))
             ny = now.astimezone(ZoneInfo('America/New_York'))
@@ -383,8 +391,9 @@ class DataEngine:
             status = market_status(now)
             seconds_to_open = (datetime.fromisoformat(status['next_open']) - now).total_seconds()
             reason = None
-            if initial:
+            if startup_due:
                 reason = 'startup'
+                startup_due = False
             elif local.weekday() < 5 and local.hour >= config.morning_refresh_hour and f'{day}:morning' not in done:
                 reason = 'morning'
             elif 0 < seconds_to_open <= 30 * 60 and f'{day}:premarket' not in done:
