@@ -585,7 +585,13 @@ async def build_live_research(
             record["filings"] = filings or []
 
             version_key = f"live:fundamentals-version:{symbol}"
-            version = sorted((item["accession"] for item in record["filings"] if item["form"] in {"10-K", "10-Q", "10-K/A", "10-Q/A", "8-K", "8-K/A"}))
+            # The normalized payload is a derived research artifact, not just
+            # a copy of the filing. Invalidate it when the normalizer changes
+            # even if the issuer has not filed a new document; otherwise an
+            # older missing-reason set or metric mapping can keep suppressing
+            # a company after the calculation has been improved.
+            filing_version = sorted((item["accession"] for item in record["filings"] if item["form"] in {"10-K", "10-Q", "10-K/A", "10-Q/A", "8-K", "8-K/A"}))
+            version = {"normalization": NORMALIZATION_VERSION, "filings": filing_version}
             if health["status"] == "current" and cache.get(version_key) != version:
                 cache.pop(f"live:fundamentals:{symbol}", None)
                 cache[version_key] = version
