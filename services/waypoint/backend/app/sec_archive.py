@@ -68,6 +68,47 @@ class SECArchiveCollector:
             db.commit()
             return inserted
 
+    def _load_reported_eps_cache(self, symbols: list[str], now: datetime) -> int:
+        """Rebuild the compact EPS cache from the durable SEC archive.
+
+        The archive table is authoritative for already collected facts. Loading
+        this small projection before a new network pass means a transient SEC
+        failure cannot hide historical reported EPS that is already stored.
+        """
+        if not symbols:
+            return 0
+        with self.sessions() as db:
+            rows = list(db.scalars(select(FundamentalObservation).where(
+                FundamentalObservation.symbol.in_(symbols),
+                FundamentalObservation.concept == "EarningsPerShareDiluted",
+            )))
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            grouped.setdefault(row.symbol, []).append({
+                "period_end": row.period_end.isoformat(),
+                "filed_on": row.filed_on.isoformat(),
+                "reported_eps": row.value,
+                "unit": row.unit,
+                "form": row.form,
+                "source": {
+                    "provider": "SEC EDGAR companyfacts archive",
+                    "url": row.source_url,
+                    "retrieved_at": row.retrieved_at.isoformat(),
+                    "reporting_period": row.period_end.isoformat(),
+                    "raw_value": {"concept": row.concept, "filed_on": row.filed_on.isoformat()},
+                    "normalized_value": row.value,
+                    "description": "Reported diluted EPS stored from a point-in-time SEC companyfacts observation.",
+                },
+            })
+        for symbol, history in grouped.items():
+            history.sort(key=lambda item: (item.get("period_end", ""), item.get("filed_on", "")))
+            self.service.provider_cache[f"sec:earnings_history:{symbol}"] = cache_record(
+                history[-40:], "SEC EDGAR reported EPS", now,
+                source_timestamp=now.isoformat(), ttl=7 * 86400,
+                coverage="reported_eps_only",
+            )
+        return sum(1 for history in grouped.values() if history)
+
     async def collect_once(self, reason: str = "scheduled") -> dict[str, Any]:
         started = datetime.now(UTC)
         if not config.sec_user_agent or "@" not in config.sec_user_agent:
@@ -79,6 +120,9 @@ class SECArchiveCollector:
             self.service.schedule_status.update(**status)
             return status
         symbols = self.symbols()
+        cached_eps_symbols = self._load_reported_eps_cache(symbols, started)
+        if cached_eps_symbols and self.checkpoint:
+            self.checkpoint()
         # Raw companyfacts are large and belong in the archive table, not in
         # the runtime snapshot persisted by the engine. Keep this cache local
         # to the archive pass so it cannot bloat settings or hold the engine
@@ -158,6 +202,7 @@ class SECArchiveCollector:
             "sec_archive_facts": len(rows),
             "sec_archive_inserted": inserted,
             "sec_archive_last_error": None,
+            "sec_archive_eps_cache_symbols": max(cached_eps_symbols, len(eps_history)),
         }
         self.service.schedule_status.update(**status)
         if self.service.data_engine:
