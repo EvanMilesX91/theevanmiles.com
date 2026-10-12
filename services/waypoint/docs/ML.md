@@ -42,7 +42,11 @@ labels, never for features.
 Labels include 1/5/10/20-day returns, maximum upside and drawdown for 5/10/20
 days, and the 20-day barrier outcome `TARGET_FIRST`, `RECONSIDER_FIRST`, or
 `NEITHER`. If both barriers are touched in one OHLC bar, the outcome is treated
-as `NEITHER` because the intrabar order is unknowable.
+as `NEITHER` because the intrabar order is unknowable. Direction labels are
+cost-aware: a 5-day move is `POSITIVE` only after the configured round-trip
+spread, slippage and FX cost plus a small neutral band; tiny moves are
+`NEUTRAL` and are excluded from probability scoring. Raw and net returns remain
+available for expected-value and transaction-cost reporting.
 
 To build the first real dataset, run the job from the backend virtualenv after
 Alpaca is connected:
@@ -121,6 +125,14 @@ Coverage inputs are explicit features: price-history depth, volume coverage,
 fundamental coverage, news availability, event availability and market-context
 availability. Missing data is visible to the model instead of being silently
 treated as neutral evidence.
+
+The dataset builder can add same-day comparative features without look-ahead:
+sector-relative momentum, cross-sectional return/volume/volatility ranks,
+valuation percentile, same-regime momentum, and smoothed historical positive
+rates for the symbol, sector and regime. Historical rates use only earlier
+labelled dates. The evaluator also reports a hierarchical-prior challenger as a
+diagnostic between the global prevalence baseline and a feature model; it is not
+automatically promoted.
 
 ### Historical news coverage
 

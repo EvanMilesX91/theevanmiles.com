@@ -29,6 +29,11 @@ PRICE_VOLUME_FEATURES = (
     "market_return_20d", "sector_return_20d", "market_volatility_20d", "rate_environment",
     "regime_bull", "regime_bear", "regime_high_vol", "regime_risk_on", "history_coverage",
     "volume_coverage", "market_context_coverage",
+    "sector_relative_return_20d", "peer_return_20d", "same_regime_return_20d",
+    "return_5d_rank", "return_20d_rank", "relative_volume_rank", "volatility_rank",
+    "valuation_percentile", "same_regime_momentum_rank", "cross_section_coverage",
+    "symbol_historical_positive_rate_5d", "sector_historical_positive_rate_5d",
+    "regime_historical_positive_rate_5d",
 )
 FEATURE_PROFILES = {"all": FEATURE_NAMES, "price_volume": PRICE_VOLUME_FEATURES}
 
@@ -48,14 +53,23 @@ def _label(row: PointInTimeSnapshot, target: str) -> float | None:
     if not row.labels:
         return None
     if target == "probability_positive_5d":
+        direction = row.labels.get("direction_5d")
+        if direction is not None:
+            return {"POSITIVE": 1.0, "NEGATIVE": 0.0}.get(str(direction).upper())
         value = row.labels.get("return_5d")
-        return float(value >= 0) if value is not None else None
+        return float(value > 0.007) if value is not None else None
     if target == "probability_positive_10d":
+        direction = row.labels.get("direction_10d")
+        if direction is not None:
+            return {"POSITIVE": 1.0, "NEGATIVE": 0.0}.get(str(direction).upper())
         value = row.labels.get("return_10d")
-        return float(value >= 0) if value is not None else None
+        return float(value > 0.007) if value is not None else None
     if target == "probability_positive_20d":
+        direction = row.labels.get("direction_20d")
+        if direction is not None:
+            return {"POSITIVE": 1.0, "NEGATIVE": 0.0}.get(str(direction).upper())
         value = row.labels.get("return_20d")
-        return float(value >= 0) if value is not None else None
+        return float(value > 0.007) if value is not None else None
     if target.startswith("probability_"):
         outcome = row.labels.get("barrier_outcome_20d")
         return float(outcome == target.removeprefix("probability_").replace("_", "_").upper()) if outcome else None

@@ -32,7 +32,8 @@ class PointInTimeSnapshot:
 
 def make_snapshot(snapshot: dict[str, Any], *, symbol: str, as_of: datetime | str,
                   bars: list[dict[str, Any]] | None = None, target: float | None = None,
-                  reconsider: float | None = None) -> PointInTimeSnapshot:
+                  reconsider: float | None = None, round_trip_cost: float = 0.007,
+                  neutral_band: float = 0.002) -> PointInTimeSnapshot:
     point = parse_time(as_of)
     if point is None:
         raise ValueError("as_of must be timezone-aware")
@@ -40,7 +41,8 @@ def make_snapshot(snapshot: dict[str, Any], *, symbol: str, as_of: datetime | st
     labels = None
     if bars is not None and target is not None and reconsider is not None:
         labels = make_labels(as_of=point, entry_price=float(snapshot.get("price", 0)), bars=bars,
-                             target=target, reconsider=reconsider)
+                             target=target, reconsider=reconsider,
+                             round_trip_cost=round_trip_cost, neutral_band=neutral_band)
     market_return = features["market_return_20d"]
     volatility = features["market_volatility_20d"]
     regime = "bull" if market_return > 0.05 else "bear" if market_return < -0.05 else "high_vol" if volatility > 0.25 else "range"
@@ -108,5 +110,7 @@ def build_labeled_dataset(records: Iterable[dict[str, Any]]) -> list[PointInTime
         snapshot = record["snapshot"]
         rows.append(make_snapshot(snapshot, symbol=str(record["symbol"]), as_of=record["as_of"],
                                   bars=list(record.get("future_bars", [])), target=float(record["target"]),
-                                  reconsider=float(record["reconsider"])))
+                                  reconsider=float(record["reconsider"]),
+                                  round_trip_cost=float(record.get("round_trip_cost", 0.007)),
+                                  neutral_band=float(record.get("neutral_band", 0.002))))
     return rows

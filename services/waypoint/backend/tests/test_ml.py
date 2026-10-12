@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.ml.calibration import brier_decomposition, brier_score, choose_shrinkage, reliability_curve
+from app.ml.cross_section import add_cross_sectional_features
 from app.ml.datasets import PointInTimeSnapshot, assert_no_lookahead, make_snapshot
 from app.ml.decision import combine_decision
 from app.ml.labels import make_labels
@@ -71,6 +72,15 @@ def test_walk_forward_inputs_never_randomly_mix_time_and_probability_metrics():
     assert promotion_gate(result["metrics"])["eligible"] is False
 
 
+def test_hierarchical_prior_is_chronological_and_reports_macro_metrics():
+    from app.ml.evaluate import walk_forward_hierarchical_prior
+
+    result = walk_forward_hierarchical_prior([_row(index) for index in range(24)], shrinkage=0.5)
+    assert result["method"] == "chronological_hierarchical_prior"
+    assert "macro_symbol_brier_score_5d" in result["metrics"]
+    assert "macro_regime_brier_score_5d" in result["metrics"]
+
+
 def test_calibration_and_similarity_are_explanatory_not_authoritative():
     assert brier_score([0.7, 0.2], [1, 0]) == pytest.approx(0.065)
     assert len(reliability_curve([0.7, 0.2], [1, 0])) == 10
@@ -108,3 +118,23 @@ def test_feature_coverage_is_explicit_when_inputs_are_missing():
     assert features["fundamental_coverage"] == 0
     assert features["news_coverage"] == 0
     assert features["event_coverage"] == 0
+
+
+def test_labels_make_costs_and_neutral_moves_explicit():
+    from app.ml.labels import make_labels
+
+    as_of = datetime(2024, 1, 1, tzinfo=UTC)
+    bars = _bars(as_of, 25)
+    labels = make_labels(as_of=as_of, entry_price=100, bars=bars, target=108, reconsider=95,
+                         round_trip_cost=0.007, neutral_band=0.002)
+    assert labels["round_trip_cost"] == pytest.approx(0.007)
+    assert labels["direction_5d"] in {"POSITIVE", "NEGATIVE", "NEUTRAL"}
+    assert "net_return_5d" in labels
+
+
+def test_cross_sectional_features_use_same_day_rows_only():
+    first = _row(10)
+    second = _row(11)
+    enriched = add_cross_sectional_features([first, second])
+    assert all("return_20d_rank" in row.features for row in enriched)
+    assert all(row.features["cross_section_coverage"] > 0 for row in enriched)

@@ -63,6 +63,7 @@ def _available_at(fundamentals: Fundamentals, as_of: datetime) -> str | None:
 
 def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
                      target_pct: float, reconsider_pct: float,
+                     round_trip_cost: float = 0.007, neutral_band: float = 0.002,
                      context: dict[str, Any] | None = None,
                      source_name: str = "alpaca_daily_bars") -> PointInTimeSnapshot | None:
     bar = bars[index]
@@ -82,47 +83,69 @@ def _snapshot_record(symbol: str, bars: list[dict[str, Any]], index: int, *,
     # A fixed, versioned barrier definition makes labels comparable across runs.
     return make_snapshot(snapshot, symbol=symbol, as_of=as_of, bars=bars,
                          target=price * (1 + target_pct),
-                         reconsider=price * (1 - reconsider_pct))
+                         reconsider=price * (1 - reconsider_pct),
+                         round_trip_cost=round_trip_cost, neutral_band=neutral_band)
 
 
 async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, years: int = 5,
                         stride_days: int = 5, target_pct: float = 0.08,
                         reconsider_pct: float = 0.05,
+                        round_trip_cost: float = 0.007, neutral_band: float = 0.002,
                         sec: SECProvider | None = None,
-                        source_name: str = "alpaca_daily_bars") -> list[PointInTimeSnapshot]:
+                        source_name: str = "alpaca_daily_bars", max_concurrency: int = 6) -> list[PointInTimeSnapshot]:
     if not symbols:
         raise ValueError("At least one symbol is required")
     if years < 1 or stride_days < 1 or not 0 < target_pct < 1 or not 0 < reconsider_pct < 1:
         raise ValueError("Invalid ingestion settings")
     end = datetime.now(UTC)
     start = end - timedelta(days=365 * years + 90)
+    semaphore = asyncio.Semaphore(max(1, min(12, int(max_concurrency))))
+
+    async def bounded(coro):
+        async with semaphore:
+            return await coro
+
     rows: list[PointInTimeSnapshot] = []
     proxy_symbols = {"SPY", "QQQ"} | {SECTOR_PROXY.get(symbol, "SPY") for symbol in symbols}
     proxy_bars: dict[str, list[dict[str, Any]]] = {}
-    for proxy in sorted(proxy_symbols):
+    async def load_proxy(proxy: str) -> tuple[str, list[dict[str, Any]]]:
         try:
-            proxy_bars[proxy] = [_bar_dict(item) for item in await provider.historical_bars(proxy, start, end, timeframe="1Day")]
+            bars = await bounded(provider.historical_bars(proxy, start, end, timeframe="1Day"))
+            return proxy, [_bar_dict(item) for item in bars]
         except (ProviderError, ValueError):
-            proxy_bars[proxy] = []
+            return proxy, []
+    for proxy, bars in await asyncio.gather(*(load_proxy(proxy) for proxy in sorted(proxy_symbols))):
+        proxy_bars[proxy] = bars
     fundamental_cache: dict[str, tuple[CompanyIdentity, Fundamentals] | None] = {}
     news_cache: dict[str, list[dict[str, Any]]] = {}
     news_provider = getattr(provider, "news", None)
     if callable(news_provider):
-        for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()):
+        async def load_news(symbol: str) -> tuple[str, list[dict[str, Any]]]:
             try:
-                news_cache[symbol] = [_news_context(item) for item in await news_provider([symbol], start)]
+                items = await bounded(news_provider([symbol], start))
+                return symbol, [_news_context(item) for item in items]
             except (ProviderError, ValueError):
-                news_cache[symbol] = []
+                return symbol, []
+        for symbol, items in await asyncio.gather(*(load_news(symbol) for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()))):
+            news_cache[symbol] = items
     if sec is not None:
-        for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()):
+        async def load_fundamentals(symbol: str) -> tuple[str, tuple[CompanyIdentity, Fundamentals] | None]:
             try:
                 identity = await sec.resolve_company(symbol)
-                fundamental_cache[symbol] = (identity, await sec.fundamentals(identity.cik))
+                return symbol, (identity, await sec.fundamentals(identity.cik))
             except (ProviderError, ValueError):
-                fundamental_cache[symbol] = None
+                return symbol, None
+        for symbol, facts in await asyncio.gather(*(load_fundamentals(symbol) for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()))):
+            fundamental_cache[symbol] = facts
+    async def load_symbol_bars(symbol: str) -> tuple[str, list[dict[str, Any]]]:
+        try:
+            bars = await bounded(provider.historical_bars(symbol, start, end, timeframe="1Day"))
+            return symbol, sorted([_bar_dict(item) for item in bars], key=lambda item: str(item.get("timestamp", "")))
+        except (ProviderError, ValueError):
+            return symbol, []
+    symbol_bars = dict(await asyncio.gather(*(load_symbol_bars(symbol) for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()))))
     for symbol in dict.fromkeys(item.strip().upper() for item in symbols if item.strip()):
-        bars = [_bar_dict(item) for item in await provider.historical_bars(symbol, start, end, timeframe="1Day")]
-        bars.sort(key=lambda item: str(item.get("timestamp", "")))
+        bars = symbol_bars.get(symbol, [])
         # Leave enough future observations for the 60-day path and avoid a
         # train/test leak from incomplete labels at the end of the range.
         last_usable = max(0, len(bars) - 61)
@@ -189,6 +212,7 @@ async def build_dataset(provider: MarketDataProvider, symbols: list[str], *, yea
                          bar_timestamp - timedelta(days=7) <= datetime.fromisoformat(str(item["published_at"]).replace("Z", "+00:00")) <= bar_timestamp] + filing_news,
             }
             row = _snapshot_record(symbol, bars, index, target_pct=target_pct, reconsider_pct=reconsider_pct,
+                                   round_trip_cost=round_trip_cost, neutral_band=neutral_band,
                                    context=context, source_name=source_name)
             if row is not None:
                 rows.append(row)
@@ -230,7 +254,9 @@ async def _cli(args: argparse.Namespace) -> None:
             path = ROOT / path
         result = await ingest_to_path(provider, args.symbols.split(","), path,
                                       years=args.years, stride_days=args.stride_days,
-                                      target_pct=args.target_pct, reconsider_pct=args.reconsider_pct, sec=sec)
+                                      target_pct=args.target_pct, reconsider_pct=args.reconsider_pct,
+                                      round_trip_cost=args.round_trip_cost, neutral_band=args.neutral_band, sec=sec,
+                                      max_concurrency=args.max_concurrency)
         print(result)
     finally:
         if sec:
@@ -245,6 +271,9 @@ if __name__ == "__main__":
     parser.add_argument("--stride-days", type=int, default=5)
     parser.add_argument("--target-pct", type=float, default=0.08)
     parser.add_argument("--reconsider-pct", type=float, default=0.05)
+    parser.add_argument("--round-trip-cost", type=float, default=0.007)
+    parser.add_argument("--neutral-band", type=float, default=0.002)
+    parser.add_argument("--max-concurrency", type=int, default=6)
     arguments = parser.parse_args()
     if not arguments.symbols:
         from ..config import config

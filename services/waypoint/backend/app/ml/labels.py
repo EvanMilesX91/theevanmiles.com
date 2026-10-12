@@ -61,15 +61,32 @@ def make_labels(
     bars: list[dict[str, Any]],
     target: float,
     reconsider: float,
+    round_trip_cost: float = 0.007,
+    neutral_band: float = 0.002,
 ) -> dict[str, Any]:
     point = parse_time(as_of)
     if point is None or point.tzinfo is None or entry_price <= 0:
         raise ValueError("A timezone-aware as_of and positive entry price are required")
-    result: dict[str, Any] = {"entry_price": entry_price, "target": target, "reconsider": reconsider}
+    if round_trip_cost < 0 or neutral_band < 0:
+        raise ValueError("round_trip_cost and neutral_band must be non-negative")
+    result: dict[str, Any] = {"entry_price": entry_price, "target": target, "reconsider": reconsider,
+                              "round_trip_cost": float(round_trip_cost), "neutral_band": float(neutral_band)}
     for days in (1, 5, 10, 20):
         window = _trading_bars_after(bars, point, days)
         close = _number(window[-1].get("close")) if window else None
         result[f"return_{days}d"] = close / entry_price - 1 if close is not None else None
+        if close is not None:
+            net_return = close / entry_price - 1 - round_trip_cost
+            result[f"net_return_{days}d"] = net_return
+            if net_return > neutral_band:
+                result[f"direction_{days}d"] = "POSITIVE"
+            elif net_return < -neutral_band:
+                result[f"direction_{days}d"] = "NEGATIVE"
+            else:
+                result[f"direction_{days}d"] = "NEUTRAL"
+        else:
+            result[f"net_return_{days}d"] = None
+            result[f"direction_{days}d"] = None
         if window:
             highs = [_number(item.get("high")) for item in window]
             lows = [_number(item.get("low")) for item in window]

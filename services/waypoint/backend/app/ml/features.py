@@ -20,6 +20,13 @@ FEATURE_NAMES = (
     "news_importance_7d", "market_return_20d", "sector_return_20d", "market_volatility_20d",
     "rate_environment", "regime_bull", "regime_bear", "regime_high_vol", "regime_risk_on",
     "filing_count_90d", "filing_recency_days", "fundamental_freshness_days",
+    # Cross-sectional comparisons are computed after snapshots are assembled
+    # for a date. They use only rows with the same as-of calendar day.
+    "sector_relative_return_20d", "peer_return_20d", "same_regime_return_20d",
+    "return_5d_rank", "return_20d_rank", "relative_volume_rank", "volatility_rank",
+    "valuation_percentile", "same_regime_momentum_rank", "cross_section_coverage",
+    "symbol_historical_positive_rate_5d", "sector_historical_positive_rate_5d",
+    "regime_historical_positive_rate_5d",
     # Explicit coverage signals stop a missing provider response looking like
     # a neutral financial value. These are inputs, not confidence claims.
     "history_coverage", "volume_coverage", "fundamental_coverage",

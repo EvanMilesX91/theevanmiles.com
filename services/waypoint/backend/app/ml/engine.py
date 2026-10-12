@@ -261,7 +261,7 @@ class MLEngine:
             self.last_maintenance = result
             return result
         from .datasets import read_jsonl
-        from .evaluate import promotion_gate, walk_forward
+        from .evaluate import promotion_gate, walk_forward, walk_forward_hierarchical_prior
         from .train import train
 
         rows = read_jsonl(str(path))
@@ -290,6 +290,12 @@ class MLEngine:
         model = train(rows, **train_kwargs)
         model_record = model.to_dict() | {"validation": report["metrics"], "promotion_gate": gate}
         tree_challenger = None
+        hierarchical_prior = None
+        try:
+            hierarchical_prior = walk_forward_hierarchical_prior(rows, shrinkage=0.5)
+            hierarchical_prior["promotion_gate"] = promotion_gate(hierarchical_prior["metrics"])
+        except (OSError, ValueError, RuntimeError):
+            hierarchical_prior = {"status": "unavailable"}
         try:
             from .tree import available_backends, walk_forward_xgboost
             if "xgboost" in available_backends():
@@ -304,6 +310,7 @@ class MLEngine:
             result = {"status": "candidate_exists", "candidate_version": model.version,
                       "evaluation": report, "candidate_evaluations": [{"training": item[0], "gate": item[2], "metrics": item[1]["metrics"]} for item in evaluated],
                       "tree_challenger": tree_challenger,
+                      "hierarchical_prior": hierarchical_prior,
                       "registry_models": len(registry.get("models", {})),
                       "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
             self.last_maintenance = result
@@ -311,6 +318,7 @@ class MLEngine:
         result = {"status": "candidate_ready", "candidate_version": model.version,
                   "evaluation": report, "candidate_evaluations": [{"training": item[0], "gate": item[2], "metrics": item[1]["metrics"]} for item in evaluated],
                   "tree_challenger": tree_challenger,
+                  "hierarchical_prior": hierarchical_prior,
                   "registry_models": len(registry.get("models", {})),
                   "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
         self.last_maintenance = result

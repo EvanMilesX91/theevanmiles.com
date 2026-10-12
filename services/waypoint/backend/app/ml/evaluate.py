@@ -14,6 +14,20 @@ from .predict import predict_with_model
 from .train import train
 
 
+def _binary_outcome(actual: dict[str, Any]) -> int | None:
+    """Return the cost-aware binary outcome; neutral moves are excluded."""
+    direction = actual.get("direction_5d")
+    if direction is not None:
+        normalized = str(direction).upper()
+        if normalized == "POSITIVE":
+            return 1
+        if normalized == "NEGATIVE":
+            return 0
+        return None
+    value = actual.get("return_5d")
+    return int(float(value) > 0.007) if value is not None else None
+
+
 @dataclass(frozen=True)
 class Friction:
     spread_bps: float = 10.0
@@ -163,9 +177,10 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
     by_regime: dict[str, list[dict[str, Any]]] = {}
     for item in predictions:
         actual = item.get("actual") or {}
-        if actual.get("return_5d") is not None:
+        outcome = _binary_outcome(actual)
+        if actual.get("return_5d") is not None and outcome is not None:
             probabilities.append(item.get("probability_positive_5d", 0.5))
-            outcomes.append(int(float(actual["return_5d"]) > 0))
+            outcomes.append(outcome)
             net_returns.append(float(actual["return_5d"]) - friction.round_trip)
         by_regime.setdefault(item.get("regime", "unknown"), []).append(item)
     baseline_probability = float(np.mean(outcomes)) if outcomes else None
@@ -179,19 +194,21 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
         selected = [item for item in predictions
                     if item.get("probability_positive_5d") is not None
                     and float(item["probability_positive_5d"]) >= threshold
-                    and item.get("actual", {}).get("return_5d") is not None]
+                    and item.get("actual", {}).get("return_5d") is not None
+                    and _binary_outcome(item.get("actual", {})) is not None]
         selected_returns = [float(item["actual"]["return_5d"]) - friction.round_trip for item in selected]
         signal_thresholds[str(threshold)] = {
             "count": len(selected),
             "selection_rate": len(selected) / len(predictions) if predictions else 0.0,
             "unique_symbols": len({item.get("symbol") for item in selected}),
             "unique_regimes": len({item.get("regime") for item in selected}),
-            "win_rate": sum(float(item["actual"]["return_5d"]) > 0 for item in selected) / len(selected) if selected else None,
+            "win_rate": sum(_binary_outcome(item["actual"]) or 0 for item in selected) / len(selected) if selected else None,
             "mean_net_return_5d": float(np.mean(selected_returns)) if selected_returns else None,
         }
     ranked_buckets: dict[str, dict[str, Any]] = {}
     ranked = [item for item in predictions if item.get("probability_positive_5d") is not None
-              and item.get("actual", {}).get("return_5d") is not None]
+              and item.get("actual", {}).get("return_5d") is not None
+              and _binary_outcome(item.get("actual", {})) is not None]
     ranked.sort(key=lambda item: float(item["probability_positive_5d"]), reverse=True)
     for fraction in (0.01, 0.05, 0.10, 0.20):
         count = max(1, int(len(ranked) * fraction)) if ranked else 0
@@ -201,7 +218,7 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
             "count": count,
             "selection_rate": count / len(ranked) if ranked else 0.0,
             "threshold_probability": float(selected[-1]["probability_positive_5d"]) if selected else None,
-            "win_rate": float(np.mean([float(item["actual"]["return_5d"]) > 0 for item in selected])) if selected else None,
+            "win_rate": float(np.mean([_binary_outcome(item["actual"]) for item in selected])) if selected else None,
             "mean_net_return_5d": float(np.mean(returns)) if returns else None,
         }
     regime_metrics = {regime: {"count": len(values), "mean_net_return_5d": float(np.mean([
@@ -220,9 +237,11 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
             actual = item.get("actual", {})
             if item.get("probability_positive_5d") is None or actual.get("return_5d") is None:
                 continue
+            if _binary_outcome(actual) is None:
+                continue
             group = str(item.get(key) or "unknown")
             grouped.setdefault(group, []).append((float(item["probability_positive_5d"]),
-                                                   int(float(actual["return_5d"]) > 0)))
+                                                   _binary_outcome(actual)))
         result: dict[str, Any] = {}
         for group, values in grouped.items():
             probs = [value[0] for value in values]
@@ -272,7 +291,85 @@ def walk_forward(rows: list[PointInTimeSnapshot], *, friction: Friction | None =
                         "macro_symbol_baseline_brier_score_5d": macro_symbol_baseline,
                         "macro_regime_brier_score_5d": macro_regime_brier,
                         "macro_regime_baseline_brier_score_5d": macro_regime_baseline,
-                        "feature_coverage": _coverage(rows)}}
+            "feature_coverage": _coverage(rows)}}
+
+
+def walk_forward_hierarchical_prior(rows: list[PointInTimeSnapshot], *, friction: Friction | None = None,
+                                    shrinkage: float = 0.0, symbol_weight: float = 0.50,
+                                    sector_weight: float = 0.25, regime_weight: float = 0.15,
+                                    global_weight: float = 0.10) -> dict[str, Any]:
+    """Evaluate a leakage-safe symbol/sector/regime prior challenger.
+
+    This is a useful diagnostic between a global prevalence baseline and a
+    feature model. Counts for each validation row come only from earlier fold
+    training rows, with Laplace smoothing for unseen groups.
+    """
+    friction = friction or Friction()
+    predictions: list[dict[str, Any]] = []
+
+    def rate(values: list[int], fallback: float) -> float:
+        return (sum(values) + 1) / (len(values) + 2) if values else fallback
+
+    for training_rows, validation_rows in _folds(rows):
+        grouped: dict[str, dict[str, list[int]]] = {"symbol": {}, "sector": {}, "regime": {}}
+        outcomes = [_binary_outcome(row.labels or {}) for row in training_rows]
+        valid_training = [(row, outcome) for row, outcome in zip(training_rows, outcomes, strict=True) if outcome is not None]
+        global_rate = rate([outcome for _, outcome in valid_training], 0.5)
+        for row, outcome in valid_training:
+            sector = row.sector or "unknown"
+            for group, key in (("symbol", row.symbol), ("sector", sector), ("regime", row.regime)):
+                grouped[group].setdefault(key, []).append(outcome)
+        for row in validation_rows:
+            symbol_rate = rate(grouped["symbol"].get(row.symbol, []), global_rate)
+            sector_rate = rate(grouped["sector"].get(row.sector or "unknown", []), global_rate)
+            regime_rate = rate(grouped["regime"].get(row.regime, []), global_rate)
+            total_weight = max(1e-9, symbol_weight + sector_weight + regime_weight + global_weight)
+            raw_probability = (symbol_weight * symbol_rate + sector_weight * sector_rate
+                               + regime_weight * regime_rate + global_weight * global_rate) / total_weight
+            probability = global_rate + (raw_probability - global_rate) * (1.0 - max(0.0, min(1.0, shrinkage)))
+            predictions.append({"probability": probability, "actual": row.labels or {},
+                                "symbol": row.symbol, "regime": row.regime})
+    scored = [(item["probability"], _binary_outcome(item["actual"]), item) for item in predictions]
+    scored = [(probability, outcome, item) for probability, outcome, item in scored if outcome is not None]
+    probabilities = [item[0] for item in scored]
+    outcomes = [item[1] for item in scored]
+    baseline = float(np.mean(outcomes)) if outcomes else None
+    baseline_brier = brier_score([baseline] * len(outcomes), outcomes) if outcomes and baseline is not None else None
+    by_symbol: dict[str, list[tuple[float, int]]] = {}
+    by_regime: dict[str, list[tuple[float, int]]] = {}
+    for probability, outcome, item in scored:
+        by_symbol.setdefault(item["symbol"], []).append((probability, outcome))
+        by_regime.setdefault(item["regime"], []).append((probability, outcome))
+    def grouped(values: dict[str, list[tuple[float, int]]]) -> tuple[float | None, float | None]:
+        if not values:
+            return None, None
+        scores = [brier_score([probability for probability, _ in group], [outcome for _, outcome in group])
+                  for group in values.values()]
+        baselines = []
+        for group in values.values():
+            prior = float(np.mean([outcome for _, outcome in group]))
+            baselines.append(brier_score([prior] * len(group), [outcome for _, outcome in group]))
+        return float(np.mean(scores)), float(np.mean(baselines))
+    macro_symbol, macro_symbol_baseline = grouped(by_symbol)
+    macro_regime, macro_regime_baseline = grouped(by_regime)
+    selected = [(probability, outcome, item) for probability, outcome, item in scored if probability >= 0.55]
+    selected_returns = [float(item["actual"].get("return_5d", 0.0)) - friction.round_trip for _, _, item in selected]
+    return {"method": "chronological_hierarchical_prior", "folds": len(_folds(rows)),
+            "predictions": len(predictions), "metrics": {
+                "brier_score_5d": brier_score(probabilities, outcomes) if outcomes else None,
+                "baseline_brier_score_5d": baseline_brier,
+                "baseline_probability_5d": baseline,
+                "brier_decomposition_5d": brier_decomposition(probabilities, outcomes),
+                "macro_symbol_brier_score_5d": macro_symbol,
+                "macro_symbol_baseline_brier_score_5d": macro_symbol_baseline,
+                "macro_regime_brier_score_5d": macro_regime,
+                "macro_regime_baseline_brier_score_5d": macro_regime_baseline,
+                "signal_thresholds_5d": {"0.55": {
+                    "count": len(selected), "unique_symbols": len({item["symbol"] for _, _, item in selected}),
+                    "unique_regimes": len({item["regime"] for _, _, item in selected}),
+                    "win_rate": float(np.mean([outcome for _, outcome, _ in selected])) if selected else None,
+                    "mean_net_return_5d": float(np.mean(selected_returns)) if selected_returns else None}},
+                "friction": friction.__dict__}}
 
 
 def _coverage(rows: list[PointInTimeSnapshot]) -> dict[str, float]:
