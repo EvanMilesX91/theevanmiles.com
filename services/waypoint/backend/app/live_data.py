@@ -507,6 +507,25 @@ async def build_live_research(
     # One broad news request/cache, not one seven-day request per stock.
     news_batch, news_health = await fetch("live:news-batch:" + ",".join(sorted(set(symbols))),
                                          15 * 60, news_batch_call, market is not None)
+
+    async def alpha_news_batch_call():
+        # Alpha Vantage accepts a comma-separated ticker list, so one request
+        # can enrich the whole scan universe.  It is deliberately an optional
+        # second source: a rejected/free-plan request must not block Alpaca,
+        # SEC, or the deterministic engine.
+        assert alpha is not None
+        rows = await alpha.news_sentiment(
+            list(dict.fromkeys(symbols)), now - timedelta(days=1), now
+        )
+        return [item.model_dump(mode="json") for item in rows]
+
+    alpha_news_batch, alpha_news_health = await fetch(
+        "live:alpha-news-batch:" + ",".join(sorted(set(symbols))),
+        15 * 60,
+        alpha_news_batch_call,
+        alpha is not None and callable(getattr(alpha, "news_sentiment", None)),
+    )
+    output["provider_health"]["news_sentiment"] = alpha_news_health
     for symbol in dict.fromkeys(symbols):
         record: dict[str, Any] = {
             "identity": None,
@@ -685,10 +704,27 @@ async def build_live_research(
                 record["valuation_basis"] = valuation_basis
 
         news = [item for item in (news_batch or []) if symbol in item.get("symbols", [])]
+        # Keep both provider observations, de-duplicating by canonical URL and
+        # title.  The source id is assigned below so every displayed headline
+        # remains traceable to its provider record.
+        alpha_news = [item for item in (alpha_news_batch or []) if symbol in item.get("symbols", [])]
+        combined_news: list[dict[str, Any]] = []
+        seen_news: set[tuple[str, str]] = set()
+        for item in [*news, *alpha_news]:
+            source = item.get("source") or {}
+            key = (str(source.get("url") or ""), str(item.get("title") or "").strip().lower())
+            if key in seen_news:
+                continue
+            seen_news.add(key)
+            combined_news.append(item)
+        news = combined_news
         record["coverage"]["news"] = news_health
-        record["news_checked_at"] = news_health.get("checked_at")
+        record["coverage"]["news_sentiment"] = alpha_news_health
+        checked_at = [value for value in (news_health.get("checked_at"), alpha_news_health.get("checked_at")) if value]
+        record["news_checked_at"] = max(checked_at) if checked_at else None
         for index, item in enumerate((news or [])[:12]):
-            source_id = f"alpaca-{symbol.lower()}-news-{index}"
+            provider_slug = "alpha" if "Alpha Vantage" in str(item.get("source", {}).get("provider", "")) else "alpaca"
+            source_id = f"{provider_slug}-{symbol.lower()}-news-{index}"
             record["sources"].append(_source(item["source"], source_id))
             record["news"].append(
                 {
@@ -698,7 +734,8 @@ async def build_live_research(
                     "source_id": source_id,
                 }
             )
-        if news_health["status"] == "current" and (record["news"] or record["filings"]):
+        news_current = news_health["status"] == "current" or alpha_news_health["status"] == "current"
+        if news_current and (record["news"] or record["filings"]):
             classified = [classify_title(item["title"]) for item in record["news"]]
             filing_descriptions = [
                 classify_title(f"{item.get('form', '')} {item.get('description', '')}")
@@ -772,8 +809,12 @@ async def build_live_research(
                 "The earnings calendar has no forthcoming row for this issuer; earnings timing is unknown."
             )
         for name, health in record["coverage"].items():
+            if name == "news" and news_current:
+                continue
+            if name == "news_sentiment" and news_health["status"] == "current":
+                continue
             if health["status"] != "current":
-                record["missing_reasons"].append(f"{name.capitalize()} data is {health['status']}.")
+                record["missing_reasons"].append(f"{name.replace('_', ' ').capitalize()} data is {health['status']}.")
         record["missing_reasons"] = list(dict.fromkeys(record["missing_reasons"] + list(UNSUPPORTED.values())))
         output["by_symbol"][symbol] = record
 
