@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..config import ROOT, config
 from ..models import Setting
-from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl_tail
+from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl_stratified
 from .predict import predict_with_model, similar_setups
 from .projections import HORIZONS, build_projection, disagreement, rank_analogues
 from .registry import ModelRegistry
@@ -106,11 +106,11 @@ class MLEngine:
             return self._history_cache[2]
         if path.exists():
             try:
-                # The full archive is an offline training input.  Live
-                # projections use only the configured bounded recent sample;
-                # reading hundreds of megabytes during a dashboard request
-                # caused the first login page to time out.
-                rows.extend(read_jsonl_tail(str(path), config.historical_projection_runtime_rows))
+                # The full archive is an offline training input. Live
+                # projections use a bounded, time-stratified sample so older
+                # market regimes remain represented without loading the full
+                # archive during a dashboard request.
+                rows.extend(read_jsonl_stratified(str(path), config.historical_projection_runtime_rows))
             except (OSError, ValueError, KeyError, TypeError):
                 # A partially written offline dataset must not break the live dashboard.
                 rows = []
@@ -135,9 +135,14 @@ class MLEngine:
             unlabelled = [item for item in ordered if not item.labels]
             limit = config.historical_projection_runtime_rows
             if len(labelled) >= limit:
-                ordered = labelled[-limit:]
+                pool = labelled
             else:
-                ordered = labelled + unlabelled[-(limit - len(labelled)):]
+                pool = labelled + unlabelled
+            if len(pool) > limit:
+                positions = {round(index * (len(pool) - 1) / (limit - 1)) for index in range(limit)}
+                ordered = [pool[index] for index in sorted(positions)]
+            else:
+                ordered = pool
         self._history_cache = (str(path), modified, ordered)
         return ordered
 

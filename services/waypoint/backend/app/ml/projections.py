@@ -67,6 +67,8 @@ def _bucket(name: str) -> str:
         return "valuation"
     if any(token in lowered for token in ("event", "earnings", "filing", "catalyst")):
         return "events"
+    if "news" in lowered:
+        return "events"
     if any(token in lowered for token in ("market", "sector", "rate", "regime")):
         return "market"
     return "price"
@@ -78,6 +80,49 @@ def _finite(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
+
+
+def _coverage_name(name: str) -> str | None:
+    lowered = name.lower()
+    if name.endswith("_coverage"):
+        return None
+    if any(token in lowered for token in ("cash", "debt", "free_cash_flow", "revenue", "earnings_growth",
+                                         "operating_margin", "dilution", "valuation", "pe", "price_to", "ev_")):
+        return "fundamental_coverage"
+    if "news" in lowered:
+        return "news_coverage"
+    if any(token in lowered for token in ("earnings_in_days", "filing", "catalyst", "event")):
+        return "event_coverage"
+    if "volume" in lowered:
+        return "volume_coverage"
+    if any(token in lowered for token in ("market", "sector", "rate", "regime")):
+        return "market_context_coverage"
+    if any(token in lowered for token in ("return", "momentum", "trend", "high", "low", "gap", "volatility", "atr")):
+        return "history_coverage"
+    return None
+
+
+def _usable_feature(snapshot: PointInTimeSnapshot, name: str) -> float | None:
+    """Return a point-in-time value, excluding known missing sentinels.
+
+    Coverage flags distinguish a real zero (for example, no debt) from a
+    provider default. Dollar amounts are log-scaled before distance scoring so
+    a large company's balance sheet cannot swamp price and regime evidence.
+    """
+    value = _finite(snapshot.features.get(name))
+    if value is None:
+        return None
+    if name in {"filing_recency_days", "fundamental_freshness_days"} and value >= 900:
+        return None
+    required = _coverage_name(name)
+    # Older labelled archives predate explicit coverage flags. Keep those
+    # rows usable; current snapshots include the flags and therefore get the
+    # missingness protection above.
+    if required is not None and required in snapshot.features and (_finite(snapshot.features.get(required)) or 0.0) <= 0.0:
+        return None
+    if name in {"cash_eur", "debt_eur", "free_cash_flow_eur"}:
+        return math.copysign(math.log1p(abs(value)), value)
+    return value
 
 
 def _allowed_group(current: PointInTimeSnapshot, row: PointInTimeSnapshot, group: str) -> bool:
@@ -95,8 +140,8 @@ def _allowed_group(current: PointInTimeSnapshot, row: PointInTimeSnapshot, group
 def _why_similar(current: PointInTimeSnapshot, row: PointInTimeSnapshot, names: list[str]) -> list[str]:
     differences: list[tuple[float, str, float]] = []
     for name in names:
-        left = _finite(current.features.get(name))
-        right = _finite(row.features.get(name))
+        left = _usable_feature(current, name)
+        right = _usable_feature(row, name)
         if left is None or right is None:
             continue
         differences.append((abs(left - right), name, right - left))
@@ -118,6 +163,11 @@ def _history_ready(row: PointInTimeSnapshot, current_time: datetime) -> bool:
     return timestamp is not None and timestamp < current_time
 
 
+def _has_forward_value(row: PointInTimeSnapshot, horizon_days: int) -> bool:
+    """Require a labelled endpoint for the selected holding horizon."""
+    return _path_value(row, horizon_days) is not None
+
+
 def rank_analogues(
     current: PointInTimeSnapshot,
     history: Iterable[PointInTimeSnapshot],
@@ -132,32 +182,39 @@ def rank_analogues(
     if current_time is None:
         return []
     weights = ProjectionWeights.for_horizon(horizon_days)
-    candidates = [row for row in history if _history_ready(row, current_time)]
+    candidates = [row for row in history if _history_ready(row, current_time) and _has_forward_value(row, horizon_days)]
     candidates = [row for row in candidates if _allowed_group(current, row, group)]
     if same_regime:
         candidates = [row for row in candidates if row.regime == current.regime]
-    names = [name for name, value in current.features.items() if _finite(value) is not None]
+    names = [name for name in current.features if _usable_feature(current, name) is not None]
     if not names:
         return []
-    means: dict[str, float] = {}
+    centers: dict[str, float] = {}
     scales: dict[str, float] = {}
     for name in names:
-        values = [_finite(row.features.get(name)) for row in candidates]
+        values = [_usable_feature(row, name) for row in candidates]
         finite_values = [value for value in values if value is not None]
-        means[name] = float(np.mean(finite_values)) if finite_values else float(current.features[name])
-        deviation = float(np.std(finite_values)) if len(finite_values) > 1 else 1.0
+        current_value = _usable_feature(current, name)
+        centers[name] = float(np.median(finite_values)) if finite_values else float(current_value or 0.0)
+        if len(finite_values) > 1:
+            mad = float(np.median(np.abs(np.asarray(finite_values) - centers[name])))
+            deviation = 1.4826 * mad
+            if deviation <= 1e-9:
+                deviation = float(np.std(finite_values))
+        else:
+            deviation = 1.0
         scales[name] = deviation if deviation > 1e-9 else 1.0
     ranked: list[AnalogueMatch] = []
     for row in candidates:
         terms: list[float] = []
         present = 0
         for name in names:
-            left = _finite(current.features.get(name))
-            right = _finite(row.features.get(name))
+            left = _usable_feature(current, name)
+            right = _usable_feature(row, name)
             if left is None or right is None:
                 continue
             present += 1
-            z = (left - right) / scales[name]
+            z = max(-5.0, min(5.0, (left - right) / scales[name]))
             terms.append((z * z) * weights.values[_bucket(name)])
         if not terms:
             continue

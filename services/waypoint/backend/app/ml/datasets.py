@@ -140,6 +140,47 @@ def read_jsonl_tail(path: str, limit: int) -> list[PointInTimeSnapshot]:
     return sorted(rows, key=lambda row: row.as_of)
 
 
+def _row_from_item(item: dict[str, Any]) -> PointInTimeSnapshot:
+    row = PointInTimeSnapshot(symbol=item["symbol"], as_of=item["as_of"], features=item["features"],
+                              labels=item.get("labels"), provenance=item.get("provenance", []),
+                              regime=item.get("regime", "unknown"),
+                              company_type=item.get("company_type", "unknown"),
+                              sector=item.get("sector", "unknown"), metadata=item.get("metadata", {}))
+    assert_no_lookahead(row)
+    return row
+
+
+def read_jsonl_stratified(path: str, limit: int) -> list[PointInTimeSnapshot]:
+    """Read a deterministic sample spread across the complete JSONL archive.
+
+    The live projection engine needs a bounded read, but a newest-row tail can
+    contain only one market regime.  Two passes keep memory bounded while
+    selecting evenly spaced point-in-time rows from the entire archive.
+    """
+    if limit <= 0:
+        return []
+    total = 0
+    with open(path, "rb") as handle:
+        for line in handle:
+            if line.strip():
+                total += 1
+    if total == 0:
+        return []
+    if total <= limit:
+        return read_jsonl(path)
+    targets = {round(index * (total - 1) / (limit - 1)) for index in range(limit)}
+    rows: list[PointInTimeSnapshot] = []
+    index = 0
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            if index in targets:
+                rows.append(_row_from_item(json.loads(line)))
+            index += 1
+    return sorted(rows, key=lambda row: row.as_of)
+
+
 def build_labeled_dataset(records: Iterable[dict[str, Any]]) -> list[PointInTimeSnapshot]:
     """Build labelled rows from records containing a snapshot and future bars.
 
