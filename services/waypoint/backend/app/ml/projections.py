@@ -125,15 +125,39 @@ def _usable_feature(snapshot: PointInTimeSnapshot, name: str) -> float | None:
     return value
 
 
+def _sector_key(value: str | None) -> str:
+    """Map provider-specific industry descriptions to stable peer buckets."""
+    lowered = (value or "").lower()
+    if not lowered or lowered in {"unknown", "industry unavailable", "industry not verified", "unclassified"}:
+        return "unknown"
+    aliases = {
+        "semiconductor": "semiconductors", "chip": "semiconductors",
+        "software": "software", "prepackaged": "software", "technology": "technology",
+        "financial": "financials", "bank": "financials", "insurance": "financials",
+        "health": "healthcare", "biotech": "healthcare", "pharma": "healthcare",
+        "energy": "energy", "oil": "energy", "gas": "energy",
+        "consumer": "consumer", "retail": "consumer", "auto": "consumer",
+        "aerospace": "aerospace", "defense": "aerospace", "industrial": "industrials",
+        "real estate": "real_estate", "communication": "communications", "media": "communications",
+    }
+    for token, key in aliases.items():
+        if token in lowered:
+            return key
+    return lowered.strip().replace(" ", "_")
+
+
 def _allowed_group(current: PointInTimeSnapshot, row: PointInTimeSnapshot, group: str) -> bool:
     if group == "same_stock":
         return row.symbol.upper() == current.symbol.upper()
     if group == "peers":
         if row.symbol.upper() == current.symbol.upper():
             return False
-        return (current.company_type != "unknown" and row.company_type == current.company_type) or (
-            current.sector != "unknown" and row.sector == current.sector
-        )
+        same_type = (current.company_type.lower() not in {"unknown", "unclassified"}
+                     and row.company_type.lower() == current.company_type.lower())
+        current_sector = _sector_key(current.sector)
+        row_sector = _sector_key(row.sector)
+        same_sector = current_sector != "unknown" and row_sector == current_sector
+        return same_type or same_sector
     return True
 
 
