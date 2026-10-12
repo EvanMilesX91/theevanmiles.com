@@ -1080,11 +1080,12 @@ async def build_live_research(
         ]
         if matching:
             event = min(matching, key=lambda e: e["report_date"])
-            source_id = f"alpha-{symbol.lower()}-earnings"
+            is_codex_date = "Codex-reviewed" in str(event.get("source", {}).get("provider", ""))
+            source_id = f"{'codex' if is_codex_date else 'alpha'}-{symbol.lower()}-earnings"
             record["sources"].append(_source(event["source"], source_id))
             record["next_events"].append(
                 {
-                    "text": f"Expected earnings: {event['report_date']} (provider estimate)",
+                    "text": f"Expected earnings: {event['report_date']} ({'reviewed investor-relations date' if is_codex_date else 'provider estimate'})",
                     "date": event["report_date"],
                     "source_id": source_id,
                 }
