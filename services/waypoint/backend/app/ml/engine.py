@@ -15,6 +15,7 @@ from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl_stratified
 from .predict import predict_with_model, similar_setups
 from .projections import HORIZONS, build_projection, disagreement, rank_analogues
 from .registry import ModelRegistry
+from .experiments import ExperimentRegistry
 from .shadow import compare_deterministic_and_ml
 from .drift import assess_drift
 from .train import TrainedModel
@@ -26,6 +27,8 @@ class MLEngine:
     def __init__(self) -> None:
         path = Path(config.ml_registry_path)
         self.registry = ModelRegistry(path if path.is_absolute() else ROOT / path)
+        experiment_path = Path(config.ml_experiments_path)
+        self.experiments = ExperimentRegistry(experiment_path if experiment_path.is_absolute() else ROOT / experiment_path)
         self._model: TrainedModel | None = None
         self._model_version: str | None = None
         self._active_record: dict[str, Any] | None = None
@@ -342,6 +345,9 @@ class MLEngine:
                     -float(brier if brier is not None else 1e9))
         train_kwargs, report, gate = max(evaluated, key=rank)
         model = train(rows, **train_kwargs)
+        experiment_registry = self.experiments.record_run(
+            evaluated, dataset_version=model.dataset_version, completed_at=datetime.now(UTC).isoformat()
+        )
         model_record = model.to_dict() | {"validation": report["metrics"], "promotion_gate": gate}
         tree_challenger = None
         hierarchical_prior = None
@@ -365,7 +371,7 @@ class MLEngine:
                       "evaluation": report, "candidate_evaluations": [{"training": item[0], "gate": item[2], "metrics": item[1]["metrics"]} for item in evaluated],
                       "tree_challenger": tree_challenger,
                       "hierarchical_prior": hierarchical_prior,
-                      "registry_models": len(registry.get("models", {})),
+                      "registry_models": len(registry.get("models", {})), "research": experiment_registry,
                       "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
             self.last_maintenance = result
             return result
@@ -373,7 +379,7 @@ class MLEngine:
                   "evaluation": report, "candidate_evaluations": [{"training": item[0], "gate": item[2], "metrics": item[1]["metrics"]} for item in evaluated],
                   "tree_challenger": tree_challenger,
                   "hierarchical_prior": hierarchical_prior,
-                  "registry_models": len(registry.get("models", {})),
+                  "registry_models": len(registry.get("models", {})), "research": experiment_registry,
                   "promotion_gate": gate, "activated": False, "completed_at": datetime.now(UTC).isoformat()}
         self.last_maintenance = result
         return result

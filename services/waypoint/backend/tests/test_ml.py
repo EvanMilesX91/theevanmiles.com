@@ -10,6 +10,7 @@ from app.ml.labels import make_labels
 from app.ml.predict import predict_with_model, similar_setups
 from app.ml.registry import ModelRegistry
 from app.ml.train import train
+from app.ml.experiments import ExperimentRegistry
 
 
 def _bars(start: datetime, count: int = 30) -> list[dict[str, object]]:
@@ -118,6 +119,25 @@ def test_feature_coverage_is_explicit_when_inputs_are_missing():
     assert features["fundamental_coverage"] == 0
     assert features["news_coverage"] == 0
     assert features["event_coverage"] == 0
+
+
+def test_experiment_registry_keeps_rejected_candidates_and_compact_metrics(tmp_path):
+    registry = ExperimentRegistry(tmp_path / "experiments.json")
+    result = registry.record_run(
+        [
+            ({"feature_profile": "all"}, {"method": "chronological_walk_forward", "folds": 3,
+              "metrics": {"brier_score_5d": 0.31, "predictions": ["large"]}},
+             {"eligible": False, "reasons": ["out-of-sample return was negative"]}),
+            ({"feature_profile": "price_volume"}, {"method": "chronological_walk_forward", "folds": 3,
+              "metrics": {"brier_score_5d": 0.22, "overall_mean_net_return_5d": 0.01}},
+             {"eligible": True, "reasons": []}),
+        ],
+        dataset_version="dataset-test",
+    )
+    assert result["experiment_count"] == 2
+    assert result["rejected_count"] == 1
+    assert result["eligible_count"] == 1
+    assert result["experiments"][0]["metrics"] == {"brier_score_5d": 0.22, "overall_mean_net_return_5d": 0.01}
 
 
 def test_labels_make_costs_and_neutral_moves_explicit():

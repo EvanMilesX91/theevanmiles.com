@@ -65,6 +65,8 @@ class Config(BaseSettings):
     ml_shadow_mode: bool = True
     ml_influence_enabled: bool = False
     ml_registry_path: str = "data/ml_registry.json"
+    # Every candidate, including rejected candidates, is kept in this audit log.
+    ml_experiments_path: str = "data/ml_experiments.json"
     ml_dataset_path: str = "data/ml_snapshots.jsonl"
     ml_snapshot_limit: int = Field(default=10000, ge=100, le=100000)
     ml_prediction_limit: int = Field(default=5000, ge=100, le=50000)

@@ -1729,6 +1729,21 @@
 .waypoint-app .research-card {
   padding: 27px;
 }
+.waypoint-app .research-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.waypoint-app .experiment-list { display: grid; gap: 8px; margin-top: 18px; }
+.waypoint-app .experiment-row { border: 1px solid #244555; border-radius: 12px; background: #0b2435; overflow: hidden; }
+.waypoint-app .experiment-row summary { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 12px 14px; cursor: pointer; color: #d9e9ef; list-style: none; font-size: 11px; }
+.waypoint-app .experiment-row summary::-webkit-details-marker { display: none; }
+.waypoint-app .experiment-row summary strong { color: #f4fbff; font-size: 12px; }
+.waypoint-app .experiment-row summary span:not(.experiment-status) { color: #9eb6c2; }
+.waypoint-app .experiment-status { padding: 4px 7px; border-radius: 999px; font-size: 9px; letter-spacing: .08em; font-weight: 700; }
+.waypoint-app .experiment-status.rejected { color: #ff7080; background: #5f0b20; }
+.waypoint-app .experiment-status.paper_test { color: #ffbd45; background: #5a3b08; }
+.waypoint-app .experiment-status.eligible { color: #74e98c; background: #123e23; }
+.waypoint-app .experiment-detail { padding: 0 14px 14px; color: #a9c0ca; font-size: 11px; line-height: 1.55; }
+.waypoint-app .experiment-detail p { margin: 0 0 7px; }
+.waypoint-app .experiment-detail small { color: #7f9aa6; }
+.waypoint-app .experiment-detail .source-json { max-height: 260px; margin-top: 10px; }
 .waypoint-app .research-card > .muted {
   font-size: 12px;
   line-height: 1.8;

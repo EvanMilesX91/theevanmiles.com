@@ -465,6 +465,15 @@ async def ml_ingest(symbols: str | None = None, years: int | None = None, stride
             await sec.aclose()
 
 
+@app.get("/api/ml/research")
+async def ml_research() -> dict[str, Any]:
+    """Return the auditable candidate/rejection history without predictions."""
+    if not config.ml_enabled:
+        return {"enabled": False, "status": "disabled", "research": service.ml.experiments.list(limit=50)}
+    return {"enabled": True, "status": "ready", "research": service.ml.experiments.list(limit=50),
+            "ml": service.ml.status()}
+
+
 @app.post("/api/ml/maintenance")
 async def ml_maintenance() -> dict[str, Any]:
     if not config.ml_enabled:

@@ -214,6 +214,13 @@ walk-forward report and candidate version but never activates it. The manual
 `POST /api/ml/maintenance` endpoint is useful for an explicit run; activation
 still requires `POST /api/ml/train?activate=true` after review.
 
+Every candidate configuration, including rejected candidates, is also written
+to `ML_EXPERIMENTS_PATH` (default `data/ml_experiments.json`). The Research Lab
+page reads this audit trail and shows the number screened, rejected, and left
+in paper testing. The registry stores compact metrics and rejection reasons;
+full prediction rows remain in the evaluation response rather than being
+duplicated into the long-lived audit file.
+
 LightGBM, XGBoost and CatBoost availability is detected by `app/ml/tree.py`.
 They are optional and never silently replace the baseline model family. Social
 features are not part of V1.

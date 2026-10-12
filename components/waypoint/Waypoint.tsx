@@ -69,6 +69,7 @@ import type {
   Stock,
   TradeInput,
   PerformanceReport,
+  MLResearchReport,
   QuoteCheck,
 } from "@/lib/waypoint/types";
 
@@ -1636,8 +1637,11 @@ function SettingsView({
 
 function ResearchView({ data }: { data: Dashboard }) {
   const [report, setReport] = useState<BacktestReport | null>(null);
+  const [mlResearch, setMlResearch] = useState<MLResearchReport | null>(null);
   const [error, setError] = useState("");
+  const [mlError, setMlError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mlLoading, setMlLoading] = useState(false);
   async function run() {
     setLoading(true);
     setError("");
@@ -1649,6 +1653,29 @@ function ResearchView({ data }: { data: Dashboard }) {
       setLoading(false);
     }
   }
+  async function loadMLResearch() {
+    setMlLoading(true);
+    setMlError("");
+    try {
+      setMlResearch(await request<MLResearchReport>("/api/ml/research"));
+    } catch (e) {
+      setMlError(e instanceof Error ? e.message : "ML research history unavailable.");
+    } finally {
+      setMlLoading(false);
+    }
+  }
+  async function runMLMaintenance() {
+    setMlLoading(true);
+    setMlError("");
+    try {
+      await request("/api/ml/maintenance", { method: "POST" });
+      await loadMLResearch();
+    } catch (e) {
+      setMlError(e instanceof Error ? e.message : "Candidate evaluation failed.");
+      setMlLoading(false);
+    }
+  }
+  useEffect(() => { void loadMLResearch(); }, []);
   return (
     <div className="research-view">
       <div className="research-banner">
@@ -1736,6 +1763,56 @@ function ResearchView({ data }: { data: Dashboard }) {
             records.
           </Empty>
         )}
+      </section>
+      <section className="card research-card">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Statistical rejection engine</p>
+            <h2>Candidate models and failed ideas</h2>
+          </div>
+          <div className="research-actions">
+            <button className="button secondary" onClick={() => void loadMLResearch()} disabled={mlLoading}>
+              {mlLoading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} Refresh
+            </button>
+            <button className="button primary" onClick={() => void runMLMaintenance()} disabled={mlLoading || !data.ml?.enabled}>
+              <FlaskConical size={16} /> Evaluate candidates
+            </button>
+          </div>
+        </div>
+        <p className="muted">
+          Every candidate is evaluated chronologically, after configured friction, across symbols and regimes.
+          Rejected candidates stay visible so a lucky backtest cannot quietly become production.
+        </p>
+        {mlError && <p className="form-error" role="alert">{mlError}</p>}
+        {mlResearch ? (
+          <>
+            <div className="backtest-metrics">
+              <Stat label="Experiments screened" value={String(mlResearch.research.experiment_count)} />
+              <Stat label="Rejected" value={String(mlResearch.research.rejected_count)} />
+              <Stat label="Paper testing" value={String(mlResearch.research.paper_count)} />
+              <Stat label="Eligible, not active" value={String(mlResearch.research.eligible_count)} />
+            </div>
+            {mlResearch.research.latest_run && <p className="notice"><HelpCircle size={17} />Last run screened {mlResearch.research.latest_run.candidate_count} candidates on {dateTime(mlResearch.research.latest_run.completed_at)}. Eligible candidates remain paper-only until explicitly reviewed.</p>}
+            {!mlResearch.research.experiments.length ? (
+              <Empty icon={<FlaskConical size={30} />} title={mlResearch.enabled ? "No candidate runs yet" : "ML research is disabled"}>
+                {mlResearch.enabled ? "Run a candidate evaluation to create the first auditable research record." : "Set ML_ENABLED=true in the private engine environment before running offline candidate evaluations."}
+              </Empty>
+            ) : (
+              <div className="experiment-list">
+                {mlResearch.research.experiments.slice(0, 12).map((experiment) => {
+                  const metrics = experiment.metrics;
+                  const gate = experiment.promotion_gate;
+                  const brier = typeof metrics.brier_score_5d === "number" ? metrics.brier_score_5d.toFixed(3) : "—";
+                  const net = typeof metrics.overall_mean_net_return_5d === "number" ? `${(metrics.overall_mean_net_return_5d * 100).toFixed(2)}%` : "—";
+                  return <details className="experiment-row" key={experiment.experiment_id}>
+                    <summary><span className={`experiment-status ${experiment.status.toLowerCase()}`}>{experiment.status === "PAPER_TEST" ? "PAPER TEST" : experiment.status}</span><strong>{experiment.experiment_id}</strong><span>Brier {brier}</span><span>Net 5d {net}</span></summary>
+                    <div className="experiment-detail"><p>{experiment.decision}. {gate.reasons?.join(" · ") || "Passed the initial gate; still requires paper confirmation."}</p><small>{experiment.method} · {experiment.folds} folds · dataset {experiment.dataset_version}</small><pre className="source-json">{JSON.stringify({ training: experiment.training, metrics: experiment.metrics, gate }, null, 2)}</pre></div>
+                  </details>;
+                })}
+              </div>
+            )}
+          </>
+        ) : <Empty icon={<Loader2 className="spin" size={30} />} title="Loading research history">The registry is being read from the local engine.</Empty>}
       </section>
       <p className="page-note">
         Model {data.model_version} · Shadow signals are separate from your

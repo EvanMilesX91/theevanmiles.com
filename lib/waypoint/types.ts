@@ -384,3 +384,30 @@ export type PerformanceReport = {
   walk_forward?: Record<string, unknown> | null;
   disclaimer: string;
 };
+export type MLResearchReport = {
+  enabled: boolean;
+  status: string;
+  research: {
+    experiment_count: number;
+    rejected_count: number;
+    paper_count: number;
+    eligible_count: number;
+    latest_run: { run_id: string; dataset_version: string; completed_at: string; candidate_count: number; eligible_count: number } | null;
+    experiments: Array<{
+      experiment_id: string;
+      model_version?: string;
+      run_id: string;
+      status: string;
+      decision: string;
+      hypothesis: string;
+      training: Record<string, unknown>;
+      dataset_version: string;
+      method: string;
+      folds: number;
+      metrics: Record<string, unknown>;
+      promotion_gate: { eligible?: boolean; reasons?: string[]; selected_count?: number; selected_mean_net_return_5d?: number | null };
+      completed_at: string;
+    }>;
+  };
+  ml?: Record<string, unknown>;
+};
