@@ -28,7 +28,8 @@ class Friction:
 
 
 def promotion_gate(metrics: dict[str, Any], *, minimum_selected: int = 100,
-                   minimum_symbols: int = 5, minimum_regimes: int = 2) -> dict[str, Any]:
+                   minimum_symbols: int = 5, minimum_regimes: int = 2,
+                   selection_threshold: float = 0.55) -> dict[str, Any]:
     """Decide whether a candidate has earned the right to influence decisions.
 
     The gate is intentionally conservative: a candidate must beat the
@@ -38,9 +39,12 @@ def promotion_gate(metrics: dict[str, Any], *, minimum_selected: int = 100,
     baseline = metrics.get("baseline_brier_score_5d")
     brier = metrics.get("brier_score_5d")
     thresholds = metrics.get("signal_thresholds_5d") or {}
-    viable = [(threshold, item) for threshold, item in thresholds.items()
-              if int(item.get("count") or 0) >= minimum_selected and item.get("mean_net_return_5d") is not None]
-    selected_threshold, selected = max(viable, key=lambda pair: float(pair[1].get("mean_net_return_5d") or -1e9), default=("0.55", thresholds.get("0.55", {})))
+    # The threshold is a policy choice, not something selected after looking
+    # at the same validation returns. Otherwise the gate would overfit the
+    # walk-forward report by choosing whichever cutoff got lucky.
+    selected_key = str(selection_threshold)
+    selected_threshold = selected_key
+    selected = thresholds.get(selected_key, {})
     count = int(selected.get("count") or 0)
     selected_return = selected.get("mean_net_return_5d")
     selected_symbols = int(selected.get("unique_symbols") or 0)
