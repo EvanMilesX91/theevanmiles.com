@@ -1029,6 +1029,40 @@ async def build_live_research(
         earnings_history = history_entry.get("data") if isinstance(history_entry, dict) else None
         sec_history_entry = cache.get(f"sec:earnings_history:{symbol}")
         sec_earnings_history = sec_history_entry.get("data") if isinstance(sec_history_entry, dict) else None
+        if isinstance(sec_earnings_history, list):
+            # Reported EPS consistency is a descriptive SEC-history measure,
+            # deliberately separate from analyst estimate uncertainty. It can
+            # help explain a company while the dated estimate feed is absent,
+            # but it never satisfies the estimate-uncertainty trade gate.
+            by_period: dict[str, float] = {}
+            for row in sec_earnings_history:
+                try:
+                    period = str(row.get("period_end") or "")
+                    value = float(row.get("reported_eps"))
+                    if period and math.isfinite(value):
+                        by_period[period] = value
+                except (TypeError, ValueError):
+                    continue
+            ordered_eps = [value for _, value in sorted(by_period.items())]
+            if len(ordered_eps) >= 4:
+                changes = [
+                    abs(current - previous) / max(abs(previous), 1.0)
+                    for previous, current in zip(ordered_eps[:-1], ordered_eps[1:], strict=True)
+                ]
+                consistency = _clip(100 - (sum(changes) / len(changes)) * 100)
+                consistency_id = f"derived-{symbol.lower()}-reported-eps-consistency"
+                record["metrics"]["reported_eps_consistency_pct"] = consistency
+                record["metric_sources"]["reported_eps_consistency_pct"] = consistency_id
+                record["sources"].append(_derived_source(
+                    source_id=consistency_id,
+                    now=now,
+                    value=consistency,
+                    inputs=[str(row.get("period_end") or "") for row in sec_earnings_history],
+                    description=(
+                        "Descriptive consistency score from dated SEC reported diluted EPS history; "
+                        "not analyst estimate uncertainty and not a forward forecast."
+                    ),
+                ))
         if isinstance(earnings_history, list):
             surprises: list[float] = []
             estimate_inputs: list[str] = []

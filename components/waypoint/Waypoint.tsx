@@ -1289,6 +1289,7 @@ const observedMetricLabels: Record<string, string> = {
   dollar_volume: "Average daily dollar volume · 20 sessions",
   diluted_weighted_average_shares: "Diluted weighted-average shares",
   annual_diluted_eps_usd: "Annual diluted EPS",
+  reported_eps_consistency_pct: "Reported EPS consistency · SEC history",
   earnings_in_days: "Days until expected earnings",
 };
 
