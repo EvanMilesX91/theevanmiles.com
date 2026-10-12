@@ -63,6 +63,7 @@ candidate file; it is never used for live quotes:
 ```text
 python -m app.ml.yahoo_ingest --symbols AAPL,MSFT --years 10 --stride-days 5 --output data/ml_snapshots.yahoo.jsonl
 python -m app.ml.enrich data/ml_snapshots.yahoo.jsonl --archive-glob 'codex_research_*.jsonl'
+python -m app.ml.merge --preferred data/ml_snapshots.jsonl --supplemental data/ml_snapshots.yahoo.jsonl --output data/ml_snapshots.merged.jsonl
 ```
 
 Validate the longer file with `GET /api/ml/evaluate` or the Engine Performance
