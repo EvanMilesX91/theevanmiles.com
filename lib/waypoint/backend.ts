@@ -17,7 +17,7 @@ export function waypointBackendUrl(path: string): URL {
 
 export async function callWaypointBackend(path: string, init: RequestInit = {}): Promise<Response> {
   const url = waypointBackendUrl(path);
-  // A cold projection build now samples 500 point-in-time cases and computes
+  // A cold projection build now samples a bounded point-in-time history and computes
   // separate horizon/group maps. Give the dashboard enough time to complete
   // that first request; subsequent requests are served from the engine cache.
   const timeoutMs = path === 'dashboard'
