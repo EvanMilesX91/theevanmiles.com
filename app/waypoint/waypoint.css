@@ -1211,6 +1211,13 @@
   align-items: center;
   gap: 7px;
 }
+.waypoint-app .projection-as-of {
+  display: block;
+  margin: 7px 0 12px;
+  color: #78929e;
+  font-size: 9px;
+  letter-spacing: 0.1px;
+}
 .waypoint-app .patience-card {
   background: #eef1e4;
   border: 1px solid #e4e8d7;
