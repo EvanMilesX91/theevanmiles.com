@@ -490,9 +490,21 @@ class EngineService:
         core_projection_symbols = {
             item.strip().upper() for item in config.live_symbols.split(",") if item.strip()
         }
-        projection_symbols = core_projection_symbols | set(list(self.stocks)[:config.historical_projection_max_symbols])
-        if len(projection_symbols) > config.historical_projection_max_symbols:
-            projection_symbols = set(list(projection_symbols)[:config.historical_projection_max_symbols])
+        # Keep the configured core symbols visible on every pass, then rotate
+        # the remaining slots through the discovery/watchlist universe. This
+        # bounds synchronous work while ensuring every symbol eventually gets a
+        # fresh projection instead of permanently favouring list order.
+        max_projection_symbols = config.historical_projection_max_symbols
+        core_projection_symbols = set(list(core_projection_symbols)[:max_projection_symbols])
+        candidates = [symbol for symbol in self.stocks if symbol not in core_projection_symbols]
+        slots = max(0, max_projection_symbols - len(core_projection_symbols))
+        if candidates and slots:
+            rotation_window = max(300, config.historical_projection_cache_seconds)
+            offset = int(now.timestamp() // rotation_window) * slots % len(candidates)
+            rotated = (candidates[offset:] + candidates[:offset])[:slots]
+        else:
+            rotated = []
+        projection_symbols = core_projection_symbols | set(rotated)
         for symbol, base in self.stocks.items():
             # Dashboard updates run on every live heartbeat. Copying the full
             # research payload here duplicated historical bars and provenance
