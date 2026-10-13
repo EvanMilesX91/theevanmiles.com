@@ -345,7 +345,7 @@ class DataEngine:
         if self.refresh_lock.locked():
             # Concurrent manual/scheduled refreshes join the current refresh.
             async with self.refresh_lock:
-                return await self.publish()
+                return await self.publish(include_research=False)
         async with self.refresh_lock:
             all_symbols = list(dict.fromkeys([
                 item.strip().upper()
@@ -441,7 +441,7 @@ class DataEngine:
                     # Make each committed batch immediately visible to REST/SSE.
                     self.service.last_slow_refresh = datetime.now(UTC)
                     self.changed = True
-                    await self.publish()
+                    await self.publish(include_research=False)
                 # Peer valuation needs the complete current universe. The
                 # staged provider pass above intentionally works in tiny
                 # batches, so enrich the combined records once and rebuild
@@ -452,7 +452,7 @@ class DataEngine:
                 await prepared.refresh_live(history=False, selected_symbols=all_symbols)
                 await commit_batch(all_symbols)
                 self.changed = True
-                await self.publish()
+                await self.publish(include_research=False)
                 self.service.last_slow_refresh = datetime.now(UTC)
                 self.service.schedule_status.update(
                     running=False, last_success=datetime.now(UTC).isoformat(),
@@ -467,7 +467,7 @@ class DataEngine:
                     await prepared.provider.aclose()
                 self.usage_checkpoint()
                 self.changed = True
-            return await self.publish()
+            return await self.publish(include_research=False)
 
     async def fast_loop(self) -> None:
         last_heartbeat = 0.0
