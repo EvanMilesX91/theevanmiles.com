@@ -477,7 +477,7 @@ class EngineService:
                     plans.pop(trade.symbol, None)
         return plans
 
-    def dashboard(self, db: Session) -> dict[str, Any]:
+    def dashboard(self, db: Session, *, include_research: bool = True) -> dict[str, Any]:
         now = datetime.now(UTC)
         settings = self.settings(db)
         session = market_status(now)
@@ -585,7 +585,7 @@ class EngineService:
                 if stock["freshness"]["feed"] in {"REAL-TIME", "DELAYED"}:
                     stock["freshness"]["feed"] = "MARKET CLOSED"
                 fresh = False
-            prediction = self.ml.predict(stock, symbol=symbol, now=now, db=db)
+            prediction = self.ml.predict(stock, symbol=symbol, now=now, db=db) if include_research else None
             if prediction is not None:
                 stock["ml"] = prediction
             # Historical projections are read-only evidence and should remain
@@ -595,13 +595,14 @@ class EngineService:
             # service-level cache so polling does not repeatedly rebuild the
             # analogue map; the ML engine also caches its per-symbol result.
             projection = None
-            cached_projection = self.projection_cache.get(symbol)
-            if cached_projection and (now - cached_projection[0]).total_seconds() < 300:
-                projection = copy.deepcopy(cached_projection[1])
-            else:
-                projection = self.ml.project(stock, symbol=symbol, now=now, db=db)
-                if projection is not None:
-                    self.projection_cache[symbol] = (now, copy.deepcopy(projection))
+            if include_research:
+                cached_projection = self.projection_cache.get(symbol)
+                if cached_projection and (now - cached_projection[0]).total_seconds() < 300:
+                    projection = copy.deepcopy(cached_projection[1])
+                else:
+                    projection = self.ml.project(stock, symbol=symbol, now=now, db=db)
+                    if projection is not None:
+                        self.projection_cache[symbol] = (now, copy.deepcopy(projection))
             if projection is not None:
                 stock["projection"] = projection
             state, explanation = trade_state(
@@ -725,7 +726,12 @@ class EngineService:
                 "status": "ready" if blocked == 0 else "partial" if blocked < total else "waiting",
                 "next_step": next_step,
             })
-        projection_status = self.ml.projection_status(db)
+        projection_status = self.ml.projection_status(db) if include_research else {
+            "enabled": config.historical_projection_enabled,
+            "snapshots": 0,
+            "labelled_snapshots": 0,
+            "status": "warming",
+        }
         evidence_readiness.append({
             "label": "Historical projections",
             "ready": len(stocks) if projection_status.get("status") == "ready" else 0,
@@ -734,6 +740,15 @@ class EngineService:
             "next_step": "Use labelled historical cases; confidence remains reduced while drift is material.",
         })
         shadow = list(db.scalars(select(Shadow)))
+        ml_dashboard = self.ml.dashboard(db) if include_research else {
+            **self.ml.status(),
+            "predictions": 0,
+            "shadow_predictions": 0,
+            "evaluated_outcomes": 0,
+            "comparison": {"status": "warming"},
+            "historical_projection": projection_status,
+            "maintenance": self.ml.last_maintenance,
+        }
         return {
             "mode": config.app_mode,
             "now": now.isoformat(),
@@ -741,7 +756,7 @@ class EngineService:
             "settings": settings.model_dump(),
             "market": session,
             "data_status": self.data_status(),
-            "ml": self.ml.dashboard(db),
+            "ml": ml_dashboard,
             "portfolio": p,
             "stocks": stocks,
             "research_queue": {
@@ -774,7 +789,7 @@ class EngineService:
             "fx": self.fx or None,
         }
 
-    async def fast_tick(self, db: Session) -> None:
+    async def fast_tick(self, db: Session, *, include_research: bool = True) -> None:
         now = datetime.now(UTC)
         self.tick += 1
         if config.app_mode == "demo":
@@ -789,7 +804,7 @@ class EngineService:
                 row.data = data
             else:
                 db.add(Setting(id=2, data=data))
-        dashboard = self.dashboard(db)
+        dashboard = self.dashboard(db, include_research=include_research)
         for stock in dashboard["stocks"]:
             previous = self.previous_states.get(stock["symbol"])
             state = stock["state"]

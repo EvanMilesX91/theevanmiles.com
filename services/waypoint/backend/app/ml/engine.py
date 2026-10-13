@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..config import ROOT, config
 from ..models import Setting
-from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl_stratified
+from .datasets import PointInTimeSnapshot, make_snapshot, read_jsonl_stratified, read_jsonl_tail
 from .predict import predict_with_model, similar_setups
 from .projections import HORIZONS, build_projection, disagreement, rank_analogues
 from .registry import ModelRegistry
@@ -109,11 +109,25 @@ class MLEngine:
             return self._history_cache[2]
         if path.exists():
             try:
-                # The full archive is an offline training input. Live
-                # projections use a bounded, time-stratified sample so older
-                # market regimes remain represented without loading the full
-                # archive during a dashboard request.
-                rows.extend(read_jsonl_stratified(str(path), config.historical_projection_runtime_rows))
+                # The full archive is an offline training input. Never scan
+                # it during live startup: on a Windows-mounted Docker volume
+                # a two-pass stratified read can hold the event loop for many
+                # minutes and leave health/login requests timing out. The
+                # scheduler can still use the stratified reader offline; the
+                # live dashboard uses a bounded tail until a compact runtime
+                # cache is generated.
+                if config.app_mode == "live":
+                    # A live process must never open the multi-hundred-MB
+                    # training archive on its request path. A compact runtime
+                    # cache can be supplied at ``ml_dataset_path``; until it
+                    # exists, live snapshots in SQLite are still valid and
+                    # the projection panel simply reports that more history
+                    # is needed.
+                    runtime_path = path.with_name(f"{path.stem}.runtime{path.suffix}")
+                    if runtime_path.exists():
+                        rows.extend(read_jsonl_tail(str(runtime_path), config.historical_projection_runtime_rows))
+                else:
+                    rows.extend(read_jsonl_stratified(str(path), config.historical_projection_runtime_rows))
             except (OSError, ValueError, KeyError, TypeError):
                 # A partially written offline dataset must not break the live dashboard.
                 rows = []

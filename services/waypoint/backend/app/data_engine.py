@@ -81,7 +81,11 @@ class DataEngine:
         self.service.data_engine = self
         self.service.usage_checkpoint = self.usage_checkpoint
         self.select_symbols()
-        await self.publish()
+        # Publish a lightweight snapshot before declaring the ASGI app ready.
+        # Historical analogue matching is intentionally deferred to the first
+        # heartbeat so a large local SQLite archive cannot make health/login
+        # requests appear hung during container startup.
+        await self.publish(include_research=False)
         if config.stream_enabled and config.apca_api_key_id and config.apca_api_secret_key:
             self.stream = AlpacaStream(
                 config.apca_api_key_id, config.apca_api_secret_key, max_symbols=config.max_hot_symbols,
@@ -273,10 +277,10 @@ class DataEngine:
             ).isoformat()
             current["last_observed_at"] = max(row.observed_at for row in todays).isoformat()
 
-    async def publish(self) -> dict[str, Any]:
+    async def publish(self, *, include_research: bool = True) -> dict[str, Any]:
         async with self.service.lock:
             with self.sessions() as db:
-                self.latest = self.service.dashboard(db)
+                self.latest = self.service.dashboard(db, include_research=include_research)
         async with self.condition:
             self.version += 1
             self.condition.notify_all()
@@ -492,7 +496,10 @@ class DataEngine:
                         if now - self.last_observation_flush >= 15:
                             self._flush_observations(db)
                             self.last_observation_flush = now
-                        await self.service.fast_tick(db)
+                        # Fast heartbeats update quotes, alerts, and state. The
+                        # expensive historical/ML projection pass is refreshed
+                        # by research work, not once per price tick.
+                        await self.service.fast_tick(db, include_research=False)
                         for item in self.pending_alerts.values():
                             recent = db.scalar(select(Alert).where(Alert.symbol == item['symbol'], Alert.mode == 'live',
                                                                    Alert.state == item['state'],
@@ -501,7 +508,7 @@ class DataEngine:
                                 db.add(Alert(mode='live', **item))
                         db.commit()
                         self.pending_alerts.clear()
-                await self.publish()
+                await self.publish(include_research=False)
                 last_heartbeat = now
             if now - self.last_persist >= config.stream_checkpoint_seconds:
                 async with transaction(self.service, self.sessions):

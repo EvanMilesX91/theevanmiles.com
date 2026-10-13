@@ -171,6 +171,12 @@ async def health() -> dict[str, Any]:
 
 @app.get("/api/dashboard")
 async def dashboard() -> dict[str, Any]:
+    # The persistent engine already publishes a coherent snapshot. Returning
+    # it avoids rerunning historical analogue matching in the request handler
+    # and keeps laptop/mobile clients responsive while the next research pass
+    # is being prepared.
+    if service.data_engine and service.data_engine.latest is not None:
+        return service.data_engine.latest
     async with transaction(service, SessionLocal) as db:
         return service.dashboard(db)
 
