@@ -1169,6 +1169,18 @@
   max-width: 90px;
   margin-top: 1px;
 }
+.waypoint-app .watch-rank {
+  display: block;
+  width: fit-content;
+  margin-top: 4px;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.waypoint-app .watch-rank.riser { color: #248232; }
+.waypoint-app .watch-rank.faller { color: #ff0022; }
 .waypoint-app .watch-price {
   text-align: right;
   min-width: 0;
@@ -1178,6 +1190,13 @@
   font-size: 11px;
   margin-bottom: 3px;
   font-weight: 550;
+}
+.waypoint-app .watch-change {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1;
 }
 .waypoint-app .watch-price .state-badge {
   font-size: 8px;

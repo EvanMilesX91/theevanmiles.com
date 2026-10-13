@@ -1899,6 +1899,13 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
       (s) => s.plan && s.state !== "SKIP" && s.state !== "NO_SETUP",
     ) ??
     data?.stocks[0];
+  const rankedWatchlist = data
+    ? [...data.stocks].sort((a, b) => {
+        const aMove = a.change_pct == null ? Number.NEGATIVE_INFINITY : a.change_pct;
+        const bMove = b.change_pct == null ? Number.NEGATIVE_INFINITY : b.change_pct;
+        return bMove - aMove || a.symbol.localeCompare(b.symbol);
+      })
+    : [];
   const position = data?.portfolio.positions.find(
     (p) => p.symbol === selected?.symbol,
   );
@@ -2574,10 +2581,10 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                           </span>
                         </div>
                         <p className="card-subtitle">
-                          A short list. A clearer focus.
+                          Ranked by {data.market.is_open ? "today's" : "last session's"} move · top riser to biggest faller
                         </p>
                         <div className="watchlist">
-                          {data.stocks.map((stock) => (
+                          {rankedWatchlist.map((stock, index) => (
                             <button
                               key={stock.symbol}
                               className={`watch-item ${selected?.symbol === stock.symbol ? "selected" : ""}`}
@@ -2590,9 +2597,14 @@ export default function Waypoint({ onSignOut }: { onSignOut: () => Promise<void>
                               <div className="watch-name">
                                 <strong>{stock.symbol}</strong>
                                 <span>{stock.name}</span>
+                                {index === 0 && stock.change_pct != null && <em className="watch-rank riser">Top riser</em>}
+                                {index === rankedWatchlist.length - 1 && stock.change_pct != null && <em className="watch-rank faller">Biggest faller</em>}
                               </div>
                               <div className="watch-price">
                                 <strong>{price(stock.price)}</strong>
+                                <span className={`watch-change ${(stock.change_pct ?? 0) >= 0 ? "positive" : "negative"}`}>
+                                  {stock.change_pct == null ? "—" : `${stock.change_pct >= 0 ? "+" : ""}${stock.change_pct.toFixed(2)}%`}
+                                </span>
                                 <Badge
                                   state={stock.state}
                                   safe={stockSafe(stock)}
