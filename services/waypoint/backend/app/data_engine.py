@@ -32,6 +32,10 @@ class DataEngine:
         self.condition = asyncio.Condition()
         self.version = 0
         self.latest: dict[str, Any] | None = None
+        # The quote heartbeat publishes a lightweight snapshot frequently. Keep
+        # the most recent slower research snapshot separately so those fast
+        # updates do not erase ML/projection evidence from the dashboard.
+        self.latest_research: dict[str, Any] | None = None
         self.refresh_lock = asyncio.Lock()
         self.tasks: list[asyncio.Task[Any]] = []
         self.news_collector: Any = None
@@ -98,6 +102,12 @@ class DataEngine:
             self.service.stream_status.update(status='unavailable', connected=False,
                                              last_error='Set Alpaca credentials and enable the local stream.')
         self.tasks.append(asyncio.create_task(self.fast_loop()))
+        if config.historical_projection_enabled or config.ml_enabled:
+            # Keep first paint and health checks light, then publish the
+            # projection/ML evidence from the compact runtime history once
+            # the engine is already serving requests. This makes projections
+            # appear without making login wait on analogue matching.
+            self.tasks.append(asyncio.create_task(self.research_publish_loop()))
         if config.scheduler_enabled:
             self.tasks.append(asyncio.create_task(self.slow_loop()))
             from .news_worker import NewsCollector
@@ -280,7 +290,30 @@ class DataEngine:
     async def publish(self, *, include_research: bool = True) -> dict[str, Any]:
         async with self.service.lock:
             with self.sessions() as db:
-                self.latest = self.service.dashboard(db, include_research=include_research)
+                snapshot = self.service.dashboard(db, include_research=include_research)
+                if include_research:
+                    self.latest_research = copy.deepcopy(snapshot)
+                elif self.latest_research is not None:
+                    # Preserve slower research fields while accepting the new
+                    # prices, freshness, alerts, and portfolio state.
+                    research_by_symbol = {
+                        item.get("symbol"): item
+                        for item in self.latest_research.get("stocks", [])
+                        if item.get("symbol")
+                    }
+                    for item in snapshot.get("stocks", []):
+                        prior = research_by_symbol.get(item.get("symbol"))
+                        if prior:
+                            for key in ("ml", "projection"):
+                                if key in prior:
+                                    item[key] = copy.deepcopy(prior[key])
+                    snapshot["ml"] = copy.deepcopy(self.latest_research.get("ml", snapshot.get("ml", {})))
+                    old_queue = self.latest_research.get("research_queue", {})
+                    queue = snapshot.get("research_queue", {})
+                    if old_queue.get("evidence_readiness"):
+                        queue["evidence_readiness"] = copy.deepcopy(old_queue["evidence_readiness"])
+                    snapshot["research_queue"] = queue
+                self.latest = snapshot
         async with self.condition:
             self.version += 1
             self.condition.notify_all()
@@ -514,6 +547,18 @@ class DataEngine:
                 async with transaction(self.service, self.sessions):
                     pass
                 self.last_persist = now
+
+    async def research_publish_loop(self) -> None:
+        """Refresh the slower ML/projection view without blocking startup."""
+        await asyncio.sleep(max(45, config.stream_publish_seconds * 5))
+        while True:
+            try:
+                await self.publish(include_research=True)
+            except Exception as error:
+                self.service.schedule_status.update(
+                    projection_last_error=f"Projection refresh unavailable ({type(error).__name__})."
+                )
+            await asyncio.sleep(max(60, config.historical_projection_cache_seconds))
 
     async def slow_loop(self) -> None:
         initial = True

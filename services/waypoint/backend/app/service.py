@@ -487,6 +487,12 @@ class EngineService:
         owned = {position["symbol"] for position in p["positions"]}
         original_plans = self.position_plans(db)
         stocks = []
+        core_projection_symbols = {
+            item.strip().upper() for item in config.live_symbols.split(",") if item.strip()
+        }
+        projection_symbols = core_projection_symbols | set(list(self.stocks)[:config.historical_projection_max_symbols])
+        if len(projection_symbols) > config.historical_projection_max_symbols:
+            projection_symbols = set(list(projection_symbols)[:config.historical_projection_max_symbols])
         for symbol, base in self.stocks.items():
             # Dashboard updates run on every live heartbeat. Copying the full
             # research payload here duplicated historical bars and provenance
@@ -595,7 +601,7 @@ class EngineService:
             # service-level cache so polling does not repeatedly rebuild the
             # analogue map; the ML engine also caches its per-symbol result.
             projection = None
-            if include_research:
+            if include_research and symbol in projection_symbols:
                 cached_projection = self.projection_cache.get(symbol)
                 if cached_projection and (now - cached_projection[0]).total_seconds() < 300:
                     projection = copy.deepcopy(cached_projection[1])

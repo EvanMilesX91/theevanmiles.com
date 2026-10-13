@@ -71,10 +71,14 @@ class Config(BaseSettings):
     ml_snapshot_limit: int = Field(default=10000, ge=100, le=100000)
     ml_prediction_limit: int = Field(default=5000, ge=100, le=50000)
     historical_projection_enabled: bool = True
-    historical_projection_top_n: int = Field(default=100, ge=25, le=250)
+    historical_projection_top_n: int = Field(default=50, ge=25, le=250)
     # Bound synchronous dashboard work; the full labelled file remains available
     # to offline training and can be sampled again on the next refresh.
-    historical_projection_runtime_rows: int = Field(default=500, ge=25, le=5000)
+    historical_projection_runtime_rows: int = Field(default=100, ge=25, le=5000)
+    # Keep the live dashboard responsive while still showing projections for
+    # the core watchlist and a small rotating discovery sample. Offline
+    # training continues to use the complete archive.
+    historical_projection_max_symbols: int = Field(default=8, ge=1, le=100)
     historical_projection_cache_seconds: int = Field(default=300, ge=5, le=3600)
     # Offline ML maintenance is deliberately opt-in and never activates a candidate model.
     ml_maintenance_enabled: bool = False
