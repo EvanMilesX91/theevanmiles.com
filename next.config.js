@@ -2,6 +2,9 @@ import { fileURLToPath } from 'node:url';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Build a self-contained Node server so the same application can run on the
+  // local Docker host when the Vercel account is paused or unavailable.
+  output: 'standalone',
   outputFileTracingRoot: fileURLToPath(new URL('.', import.meta.url)),
   images: {
     remotePatterns: [
