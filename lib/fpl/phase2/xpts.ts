@@ -62,6 +62,6 @@ export function projectPlayer(input: ProjectionInput): PlayerProjection {
     : 'No scheduled fixture is available in the next six Gameweeks.';
   return {
     playerId: player.id, playerName: player.name, teamId: official.team, team: player.club, position: player.position, price: player.price, owned: player.owned,
-    minutes, role, sustainability, fixtures, xPts1: sum(1, 'xPts'), xPts3: sum(3, 'xPts'), xPts6: sum(6, 'xPts'), floor1: sum(1, 'floor'), ceiling1: sum(1, 'ceiling'), confidence, oneLineReason,
+    minutes, role, sustainability, fixtures, xPts1: sum(1, 'xPts'), xPts3: sum(3, 'xPts'), xPts6: sum(6, 'xPts'), floor1: sum(1, 'floor'), ceiling1: sum(1, 'ceiling'), confidence, oneLineReason, shadowLineup: null,
   };
 }

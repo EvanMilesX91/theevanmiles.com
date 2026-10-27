@@ -10,6 +10,41 @@ export interface CalibrationPlayerForecast {
   projectedPoints: number;
   projectedMinutes: number;
   confidence: number;
+  currentPrice?: number;
+  priceDirection?: 'likely_rise' | 'rise_watch' | 'stable' | 'fall_watch' | 'likely_fall';
+  priceConfidence?: number;
+  shadowLineupPrediction?: 'starter' | 'bench' | null;
+  shadowLineupConfidence?: number | null;
+  shadowLineupContradiction?: boolean;
+}
+
+export interface PriceCalibrationMetrics {
+  players: number;
+  directionalCalls: number;
+  correctDirectionalCalls: number;
+  directionalAccuracy: number;
+  risePrecision: number;
+  fallPrecision: number;
+  stableAccuracy: number;
+}
+
+export interface ShadowLineupMetrics {
+  predictions: number;
+  contradictions: number;
+  correctSixtyMinuteProxy: number;
+  accuracy: number;
+  starterPrecision: number;
+  benchPrecision: number;
+}
+
+export interface PriceCalibrationSnapshot {
+  capturedAt: string;
+  players: Array<{
+    playerId: number;
+    price: number;
+    direction: CalibrationPlayerForecast['priceDirection'];
+    confidence: number;
+  }>;
 }
 
 export interface CalibrationMetrics {
@@ -20,6 +55,7 @@ export interface CalibrationMetrics {
   rootMeanSquaredError: number;
   bias: number;
   minutesMeanAbsoluteError: number;
+  minutesBias?: number;
 }
 
 export interface CalibrationEvaluation {
@@ -29,6 +65,8 @@ export interface CalibrationEvaluation {
   selectedXi: CalibrationMetrics;
   selectedXiProjectedWithCaptain: number;
   selectedXiActualWithCaptain: number;
+  prices?: PriceCalibrationMetrics;
+  shadowLineups?: ShadowLineupMetrics;
 }
 
 export interface ProjectionCalibrationRecord {
@@ -38,6 +76,7 @@ export interface ProjectionCalibrationRecord {
   modelVersion: 'phase6-calibration-v1';
   ledgerStale: boolean;
   players: CalibrationPlayerForecast[];
+  priceSnapshots?: PriceCalibrationSnapshot[];
   evaluation: CalibrationEvaluation | null;
 }
 
@@ -61,6 +100,7 @@ export interface CalibrationDashboardSummary {
   trackedGameweeks: number;
   evaluatedGameweeks: number[];
   pendingGameweeks: number[];
+  priceSnapshots: number;
   latestEvaluation: {
     gameweek: number;
     evaluatedAt: string;
@@ -73,8 +113,12 @@ export interface CalibrationDashboardSummary {
     selectedXiRootMeanSquaredError: number;
     selectedXiBias: number;
     minutesMeanAbsoluteError: number;
+    minutesBias: number;
     projectedWithCaptain: number;
     actualWithCaptain: number;
+    priceDirectionalAccuracy: number | null;
+    shadowLineupAccuracy: number | null;
+    shadowLineupContradictions: number;
   } | null;
 }
 
@@ -85,6 +129,7 @@ interface OfficialEvent {
 
 interface OfficialBootstrapEvents {
   events: OfficialEvent[];
+  elements?: Array<{ id: number; now_cost: number }>;
 }
 
 interface EventLivePayload {
@@ -107,13 +152,23 @@ export function summarizeCalibration(
   const weighted = (select: (record: ProjectionCalibrationRecord) => number) => totalXiPlayers
     ? round(evaluated.reduce((sum, record) => sum + select(record) * (record.evaluation?.selectedXi.players ?? 0), 0) / totalXiPlayers)
     : 0;
+  const priceRows = evaluated.map((record) => record.evaluation?.prices).filter((metric): metric is PriceCalibrationMetrics => Boolean(metric?.directionalCalls));
+  const shadowRows = evaluated.map((record) => record.evaluation?.shadowLineups).filter((metric): metric is ShadowLineupMetrics => Boolean(metric?.predictions));
   const aggregate = evaluated.length ? {
     selectedXiMeanAbsoluteError: weighted((record) => record.evaluation!.selectedXi.meanAbsoluteError),
     selectedXiRootMeanSquaredError: weighted((record) => record.evaluation!.selectedXi.rootMeanSquaredError),
     selectedXiBias: weighted((record) => record.evaluation!.selectedXi.bias),
     minutesMeanAbsoluteError: weighted((record) => record.evaluation!.selectedXi.minutesMeanAbsoluteError),
+    minutesBias: weighted((record) => record.evaluation!.selectedXi.minutesBias ?? 0),
     projectedWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiProjectedWithCaptain, 0)),
     actualWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiActualWithCaptain, 0)),
+    priceDirectionalAccuracy: priceRows.length
+      ? round(priceRows.reduce((sum, row) => sum + row.directionalAccuracy * row.directionalCalls, 0) / priceRows.reduce((sum, row) => sum + row.directionalCalls, 0), 1)
+      : null,
+    shadowLineupAccuracy: shadowRows.length
+      ? round(shadowRows.reduce((sum, row) => sum + row.accuracy * row.predictions, 0) / shadowRows.reduce((sum, row) => sum + row.predictions, 0), 1)
+      : null,
+    shadowLineupContradictions: shadowRows.reduce((sum, row) => sum + row.contradictions, 0),
   } : null;
   return {
     status: evaluated.length ? 'measured' : 'collecting',
@@ -121,6 +176,7 @@ export function summarizeCalibration(
     trackedGameweeks: ordered.length,
     evaluatedGameweeks: evaluated.map((record) => record.gameweek),
     pendingGameweeks: ordered.filter((record) => !record.evaluation).map((record) => record.gameweek),
+    priceSnapshots: ordered.reduce((sum, record) => sum + (record.priceSnapshots?.length ?? 0), 0),
     latestEvaluation: latest?.evaluation ? {
       gameweek: latest.gameweek,
       evaluatedAt: latest.evaluation.evaluatedAt,
@@ -138,7 +194,7 @@ export async function loadCalibrationSummary(store: ProjectionCalibrationStore):
 
 function buildMetrics(players: CalibrationPlayerForecast[], actual: Map<number, { points: number; minutes: number }>): CalibrationMetrics {
   if (!players.length) {
-    return { players: 0, projectedPoints: 0, actualPoints: 0, meanAbsoluteError: 0, rootMeanSquaredError: 0, bias: 0, minutesMeanAbsoluteError: 0 };
+    return { players: 0, projectedPoints: 0, actualPoints: 0, meanAbsoluteError: 0, rootMeanSquaredError: 0, bias: 0, minutesMeanAbsoluteError: 0, minutesBias: 0 };
   }
   const rows = players.map((player) => {
     const result = actual.get(player.playerId) ?? { points: 0, minutes: 0 };
@@ -157,11 +213,77 @@ function buildMetrics(players: CalibrationPlayerForecast[], actual: Map<number, 
     rootMeanSquaredError: round(Math.sqrt(rows.reduce((sum, row) => sum + row.pointError ** 2, 0) / rows.length)),
     bias: round(rows.reduce((sum, row) => sum + row.pointError, 0) / rows.length),
     minutesMeanAbsoluteError: round(rows.reduce((sum, row) => sum + Math.abs(row.minuteError), 0) / rows.length),
+    minutesBias: round(rows.reduce((sum, row) => sum + row.minuteError, 0) / rows.length),
+  };
+}
+
+function priceClass(direction: CalibrationPlayerForecast['priceDirection']): 'rise' | 'stable' | 'fall' {
+  if (direction === 'likely_rise' || direction === 'rise_watch') return 'rise';
+  if (direction === 'likely_fall' || direction === 'fall_watch') return 'fall';
+  return 'stable';
+}
+
+function buildPriceMetrics(record: ProjectionCalibrationRecord, currentPrices: Map<number, number>): PriceCalibrationMetrics {
+  const snapshots = record.priceSnapshots?.length ? record.priceSnapshots : [{
+    capturedAt: record.capturedAt,
+    players: record.players.flatMap((player) => player.currentPrice === undefined ? [] : [{ playerId: player.playerId, price: player.currentPrice, direction: player.priceDirection, confidence: player.priceConfidence ?? 0 }]),
+  }];
+  const rows = snapshots.flatMap((snapshot, index) => {
+    const next = snapshots[index + 1];
+    const nextPrices = next ? new Map(next.players.map((player) => [player.playerId, player.price])) : currentPrices;
+    return snapshot.players.flatMap((player) => {
+      const current = nextPrices.get(player.playerId);
+      if (current === undefined || !player.direction) return [];
+      const change = Math.round((current - player.price) * 10) / 10;
+      return [{ predicted: priceClass(player.direction), actual: change > 0 ? 'rise' as const : change < 0 ? 'fall' as const : 'stable' as const }];
+    });
+  });
+  const directional = rows.filter((row) => row.predicted !== 'stable');
+  const rises = rows.filter((row) => row.predicted === 'rise');
+  const falls = rows.filter((row) => row.predicted === 'fall');
+  const stable = rows.filter((row) => row.predicted === 'stable');
+  const ratio = (correct: number, total: number) => total ? round(correct / total * 100, 1) : 0;
+  return {
+    players: rows.length,
+    directionalCalls: directional.length,
+    correctDirectionalCalls: directional.filter((row) => row.predicted === row.actual).length,
+    directionalAccuracy: ratio(directional.filter((row) => row.predicted === row.actual).length, directional.length),
+    risePrecision: ratio(rises.filter((row) => row.actual === 'rise').length, rises.length),
+    fallPrecision: ratio(falls.filter((row) => row.actual === 'fall').length, falls.length),
+    stableAccuracy: ratio(stable.filter((row) => row.actual === 'stable').length, stable.length),
+  };
+}
+
+function buildShadowLineupMetrics(players: CalibrationPlayerForecast[], actual: Map<number, { points: number; minutes: number }>): ShadowLineupMetrics {
+  const rows = players.flatMap((player) => player.shadowLineupPrediction ? [{
+    prediction: player.shadowLineupPrediction,
+    actualStarterProxy: (actual.get(player.playerId)?.minutes ?? 0) >= 60,
+    contradiction: player.shadowLineupContradiction ?? false,
+  }] : []);
+  const starters = rows.filter((row) => row.prediction === 'starter');
+  const bench = rows.filter((row) => row.prediction === 'bench');
+  const correct = rows.filter((row) => (row.prediction === 'starter') === row.actualStarterProxy).length;
+  const ratio = (value: number, total: number) => total ? round(value / total * 100, 1) : 0;
+  return {
+    predictions: rows.length,
+    contradictions: rows.filter((row) => row.contradiction).length,
+    correctSixtyMinuteProxy: correct,
+    accuracy: ratio(correct, rows.length),
+    starterPrecision: ratio(starters.filter((row) => row.actualStarterProxy).length, starters.length),
+    benchPrecision: ratio(bench.filter((row) => !row.actualStarterProxy).length, bench.length),
+  };
+}
+
+export function createPriceCalibrationSnapshot(snapshot: PhaseFiveSnapshot, capturedAt = new Date()): PriceCalibrationSnapshot {
+  return {
+    capturedAt: capturedAt.toISOString(),
+    players: snapshot.players.map((player) => ({ playerId: player.id, price: player.price, direction: player.pricePressure?.direction, confidence: player.pricePressure?.confidence ?? 0 })),
   };
 }
 
 export function createCalibrationForecast(snapshot: PhaseFiveSnapshot, capturedAt = new Date()): ProjectionCalibrationRecord {
   const starters = new Set(snapshot.lineup.starterIds);
+  const priceSnapshot = createPriceCalibrationSnapshot(snapshot, capturedAt);
   return {
     schemaVersion: 1,
     gameweek: snapshot.nextGameweek,
@@ -177,7 +299,14 @@ export function createCalibrationForecast(snapshot: PhaseFiveSnapshot, capturedA
       projectedPoints: player.xPts1,
       projectedMinutes: player.expectedMinutes,
       confidence: player.confidence,
+      currentPrice: player.price,
+      priceDirection: player.pricePressure?.direction,
+      priceConfidence: player.pricePressure?.confidence,
+      shadowLineupPrediction: player.shadowLineupPrediction,
+      shadowLineupConfidence: player.shadowLineupConfidence,
+      shadowLineupContradiction: player.shadowLineupContradiction,
     })),
+    priceSnapshots: [priceSnapshot],
     evaluation: null,
   };
 }
@@ -186,6 +315,7 @@ export function evaluateCalibrationRecord(
   record: ProjectionCalibrationRecord,
   live: EventLivePayload,
   evaluatedAt = new Date(),
+  currentPrices: Map<number, number> = new Map(),
 ): ProjectionCalibrationRecord {
   const actual = new Map(live.elements.map((element) => [element.id, { points: element.stats.total_points, minutes: element.stats.minutes }]));
   const owned = record.players.filter((player) => player.owned);
@@ -202,6 +332,8 @@ export function evaluateCalibrationRecord(
       selectedXi: xiMetrics,
       selectedXiProjectedWithCaptain: round(xiMetrics.projectedPoints + (captain?.projectedPoints ?? 0)),
       selectedXiActualWithCaptain: round(xiMetrics.actualPoints + captainActual),
+      prices: buildPriceMetrics(record, currentPrices),
+      shadowLineups: buildShadowLineupMetrics(record.players, actual),
     },
   };
 }
@@ -239,6 +371,18 @@ export async function refreshProjectionCalibration(options: {
     forecastReplaced = Boolean(existingForecast);
   }
 
+  const currentForecast = byGameweek.get(options.snapshot.nextGameweek);
+  if (currentForecast) {
+    const snapshots = currentForecast.priceSnapshots ?? [];
+    const lastCaptured = snapshots.at(-1)?.capturedAt;
+    const ageMs = lastCaptured ? now.getTime() - new Date(lastCaptured).getTime() : Number.POSITIVE_INFINITY;
+    if (ageMs >= 2 * 60 * 60 * 1000) {
+      const updated = { ...currentForecast, priceSnapshots: [...snapshots, createPriceCalibrationSnapshot(options.snapshot, now)].slice(-30) };
+      await options.store.write(updated);
+      byGameweek.set(updated.gameweek, updated);
+    }
+  }
+
   const pending = [...byGameweek.values()].filter((record) => !record.evaluation && record.gameweek < options.snapshot.nextGameweek);
   const evaluatedGameweeks: number[] = [];
   if (pending.length) {
@@ -247,7 +391,8 @@ export async function refreshProjectionCalibration(options: {
     for (const record of pending) {
       if (!finished.has(record.gameweek)) continue;
       const live = await fetchJson<EventLivePayload>(`https://fantasy.premierleague.com/api/event/${record.gameweek}/live/`, fetcher);
-      const evaluated = evaluateCalibrationRecord(record, live, now);
+      const currentPrices = new Map((bootstrap.elements ?? []).map((player) => [player.id, player.now_cost / 10]));
+      const evaluated = evaluateCalibrationRecord(record, live, now, currentPrices);
       await options.store.write(evaluated);
       evaluatedGameweeks.push(record.gameweek);
     }

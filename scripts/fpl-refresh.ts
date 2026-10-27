@@ -22,6 +22,7 @@ async function main() {
   });
   const lineup = snapshot.sourceHealth.find((source) => source.key === 'independent_lineups');
   const forwardMinutes = snapshot.sourceHealth.find((source) => source.key === 'forward_minutes_fpl_cat');
+  const predictedLineups = snapshot.sourceHealth.find((source) => source.key === 'predicted_lineups_shadow');
   process.stdout.write(`${JSON.stringify({
     refreshedAt: snapshot.automation.refreshedAt,
     backend: snapshot.automation.backend,
@@ -33,8 +34,12 @@ async function main() {
     players: snapshot.players.length,
     lineupSource: lineup,
     forwardMinutesSource: forwardMinutes,
+    predictedLineupsSource: predictedLineups,
     calibration,
     calibrationSummary: snapshot.calibration,
+    learning: snapshot.learning,
+    operations: snapshot.operations,
+    modelVersions: snapshot.modelVersions,
   }, null, 2)}\n`);
 }
 

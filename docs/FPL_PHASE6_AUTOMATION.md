@@ -4,13 +4,14 @@ Phase 6 moves expensive calculation out of the private dashboard request path. A
 
 ## Runtime flow
 
-1. The production scheduler calls `GET /api/cron/fpl-refresh` at 05:15 each day. Vercel uses `vercel.json`; the self-hosted Windows service uses the `EvanMiles Website - FPL refresh` Scheduled Task and `scripts/fpl-production-refresh.ps1`.
+1. The production scheduler calls `GET /api/cron/fpl-refresh` at 05:15 each day. A second self-hosted task checks every 30 minutes but calls the model only inside the final eight hours before a published FPL deadline. Install both with `scripts/install-fpl-scheduler.ps1`.
 2. The route fails closed unless the request has `Authorization: Bearer $CRON_SECRET` and the configured secret is at least 16 characters.
 3. The complete official-data, projection, optimization, Council and Red Team pipeline runs once.
 4. A server-only record is upserted to Supabase with its refresh time, trigger, runtime, checksum and JSON payload.
 5. Authenticated admin requests read that record. A two-minute server memory cache prevents repeated database reads; private/no-store headers prevent browser or shared-cache disclosure.
 6. If no record exists yet, the authenticated endpoint performs a one-time bootstrap calculation and persists it. Existing aging or stale records remain visible and are labelled honestly rather than being silently replaced with live computation.
-7. The first projection saved for each upcoming Gameweek is frozen. Once FPL marks that Gameweek finished, official player points and minutes are attached with mean absolute error, RMSE, bias and minutes error for the whole pool, owned players and selected XI.
+7. The first projection saved for each upcoming Gameweek is frozen. Once FPL marks that Gameweek finished, official player points, minutes and prices are attached with points/minutes error, price-direction accuracy and shadow predicted-lineup accuracy.
+8. Bias learning remains locked until four completed Gameweeks exist. It then applies capped corrections (±0.75 points and ±8 minutes). Predicted lineups remain shadow-only unless their four-Gameweek 60-minute-proxy accuracy reaches 80%.
 
 Local development uses `data/fpl/phase6/latest.json`; every production runtime (Vercel or the self-hosted Docker service) uses Supabase. The local generated directory is ignored by Git.
 

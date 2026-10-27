@@ -1,5 +1,5 @@
 import { fetchPhaseOneOfficialData, type FetchLike, type PhaseOneOfficialData, type SquadLedger } from '../phase1';
-import { runPhaseTwo } from '../phase2';
+import { runPhaseTwo, type ModelLearningAdjustment } from '../phase2';
 import { optimizeLineup, optimizeTransfers } from './optimizer';
 import { writePhaseThreeSnapshot } from './store';
 import type { PhaseThreeSnapshot, TransferDecision } from './types';
@@ -13,6 +13,7 @@ export interface RunPhaseThreeOptions {
   officialData?: PhaseOneOfficialData;
   now?: Date;
   lineupUrl?: string;
+  learningAdjustment?: ModelLearningAdjustment;
 }
 
 export async function runPhaseThree(options: RunPhaseThreeOptions = {}): Promise<PhaseThreeSnapshot> {
@@ -20,7 +21,7 @@ export async function runPhaseThree(options: RunPhaseThreeOptions = {}): Promise
   const persist = options.persist ?? process.env.VERCEL !== '1';
   const officialData = options.officialData ?? await fetchPhaseOneOfficialData(options.fetcher);
   const phaseTwo = await runPhaseTwo({ ...options, root, persist, officialData });
-  const players = buildDecisionPlayers(phaseTwo.projections, officialData.bootstrap.elements);
+  const players = buildDecisionPlayers(phaseTwo.projections, officialData.bootstrap.elements, options.learningAdjustment?.priceDirectionalAccuracy ?? null);
   const playerById = new Map(players.map((player) => [player.projection.playerId, player]));
   const owned = phaseTwo.phaseOne.ledger.squad.map((entry) => playerById.get(entry.elementId)).filter((player): player is NonNullable<typeof player> => Boolean(player));
   const ownedLineup = optimizeLineup(owned);
@@ -39,8 +40,10 @@ export async function runPhaseThree(options: RunPhaseThreeOptions = {}): Promise
     alternatives: optimized.scenarios.slice(0, 5),
   };
   const priceSourceHealth = {
-    key: 'price_pressure_model', status: 'degraded' as const, retrievedAt: new Date().toISOString(), records: players.length,
-    message: 'Uses official net transfer activity as a relative pressure proxy. FPL publishes neither thresholds nor an official rise/fall forecast.',
+    key: 'price_pressure_model', status: options.learningAdjustment?.priceDirectionalAccuracy != null && options.learningAdjustment.priceDirectionalAccuracy >= 60 ? 'healthy' as const : 'degraded' as const, retrievedAt: new Date().toISOString(), records: players.length,
+    message: options.learningAdjustment?.priceDirectionalAccuracy != null
+      ? `Uses official net transfer activity with observed directional accuracy of ${options.learningAdjustment.priceDirectionalAccuracy.toFixed(1)}%. FPL still publishes no threshold.`
+      : 'Uses official net transfer activity as a relative pressure proxy. FPL publishes neither thresholds nor an official rise/fall forecast; calibration is collecting.',
   };
   const snapshot: PhaseThreeSnapshot = {
     schemaVersion: 3, modelVersion: 'phase3-decision-v1', generatedAt: (options.now ?? new Date()).toISOString(),

@@ -1,5 +1,6 @@
 import type { PhaseFiveSnapshot } from '../phase5';
 import type { CalibrationDashboardSummary } from './calibration';
+import type { ModelLearningProfile } from './learning';
 
 export type RefreshTrigger = 'scheduled' | 'manual' | 'bootstrap';
 export type SnapshotFreshness = 'fresh' | 'aging' | 'stale';
@@ -26,9 +27,34 @@ export interface AutomationMetadata {
   backend: SnapshotBackend;
 }
 
+export interface OperationalAlert {
+  key: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  message: string;
+}
+
+export interface OperationalSummary {
+  nextDeadline: string | null;
+  hoursToDeadline: number | null;
+  deadlineMode: boolean;
+  alerts: OperationalAlert[];
+}
+
+export interface ModelVersions {
+  projection: 'phase2-transparent-v2';
+  decision: 'phase3-decision-v1';
+  explainability: 'phase4-explainability-v1';
+  dashboard: 'phase5-dashboard-v1';
+  automation: 'phase6-automation-v1';
+  revision: '2026-10-28';
+}
+
 export type PhaseSixSnapshot = PhaseFiveSnapshot & {
   automation: AutomationMetadata;
   calibration: CalibrationDashboardSummary;
+  learning: ModelLearningProfile;
+  operations: OperationalSummary;
+  modelVersions: ModelVersions;
 };
 
 export interface DashboardSnapshotStore {

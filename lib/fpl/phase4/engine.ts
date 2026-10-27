@@ -1,4 +1,5 @@
 import { fetchPhaseOneOfficialData, type FetchLike, type PhaseOneOfficialData, type SquadLedger } from '../phase1';
+import type { ModelLearningAdjustment } from '../phase2';
 import { runPhaseThree, optimizeTransfers } from '../phase3';
 import { COUNCIL_WEIGHTS } from './config';
 import { buildPlayerCouncils } from './council';
@@ -15,6 +16,7 @@ export interface RunPhaseFourOptions {
   officialData?: PhaseOneOfficialData;
   now?: Date;
   lineupUrl?: string;
+  learningAdjustment?: ModelLearningAdjustment;
 }
 
 function resultingIds(ownedIds: number[], moves: Array<{ outPlayerId: number; inPlayerId: number }>): Set<number> {

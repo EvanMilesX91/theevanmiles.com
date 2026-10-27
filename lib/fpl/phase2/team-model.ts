@@ -1,5 +1,5 @@
 import type { OfficialBootstrap, OfficialFixture, OfficialPlayer } from '../phase1';
-import type { InjuryImpact, TeamRating } from './types';
+import type { AvailabilityObservation, InjuryImpact, TeamRating } from './types';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 
@@ -9,11 +9,14 @@ function availability(player: OfficialPlayer): number {
   return player.status === 'd' ? 0.5 : 1;
 }
 
-export function calculateInjuryImpacts(bootstrap: OfficialBootstrap): InjuryImpact[] {
+export function calculateInjuryImpacts(bootstrap: OfficialBootstrap, independent: AvailabilityObservation[] = [], now = new Date()): InjuryImpact[] {
   const teamMinutes = new Map<number, number>();
+  const independentById = new Map(independent.filter((item) => !item.returnDate || new Date(item.returnDate).getTime() > now.getTime()).map((item) => [item.playerId, item]));
   for (const player of bootstrap.elements) teamMinutes.set(player.team, (teamMinutes.get(player.team) ?? 0) + player.minutes);
   return bootstrap.elements.flatMap((player): InjuryImpact[] => {
-    const available = availability(player);
+    const independentFlag = independentById.get(player.id);
+    const officialAvailability = availability(player);
+    const available = officialAvailability < 0.99 ? officialAvailability : independentFlag ? (independentFlag.status === 'suspension' ? 0.65 : independentFlag.status === 'injury' ? 0.8 : 0.85) : 1;
     if (available >= 0.99 || player.removed || player.can_select === false) return [];
     const minutesShare = player.minutes / Math.max(1, (teamMinutes.get(player.team) ?? 1) / 11);
     const attackingOutput = Number(player.expected_goal_involvements || 0);
@@ -29,7 +32,9 @@ export function calculateInjuryImpacts(bootstrap: OfficialBootstrap): InjuryImpa
     return [{
       playerId: player.id, playerName: player.web_name, teamId: player.team, availability: round(available), importance: round(importance),
       attackReduction: round(attackReduction, 3), defenceWeakening: round(defenceWeakening, 3),
-      fact: `${player.web_name} is ${player.status === 'd' ? 'flagged as doubtful' : 'officially unavailable'}${player.news ? `: ${player.news}` : '.'}`,
+      fact: officialAvailability < 0.99
+        ? `${player.web_name} is ${player.status === 'd' ? 'flagged as doubtful' : 'officially unavailable'}${player.news ? `: ${player.news}` : '.'}`
+        : `${player.web_name} has an independent availability flag from ${independentFlag?.source}: ${independentFlag?.reason ?? 'unknown issue'}. Effect is capped pending official confirmation.`,
       modelEffect: `Estimated team attack -${round(attackReduction * 100, 1)}%; expected goals conceded +${round(defenceWeakening * 100, 1)}%.`,
     }];
   });

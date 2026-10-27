@@ -3,6 +3,7 @@ import type { PhaseFiveSnapshot } from '@/lib/fpl/phase5';
 import {
   classifySnapshotFreshness,
   createCalibrationForecast,
+  deriveModelLearning,
   evaluateCalibrationRecord,
   loadAutomatedDashboard,
   refreshProjectionCalibration,
@@ -21,6 +22,7 @@ function phaseFive(generatedAt = '2026-10-26T05:15:00.000Z'): PhaseFiveSnapshot 
     generatedAt,
     currentGameweek: 8,
     nextGameweek: 9,
+    deadlineTime: '2026-10-26T10:15:00.000Z',
     sourceHealth: [],
     ledger: { managerName: 'Dominika', teamName: 'Test XI', nextGameweek: 9, bank: 0.5, freeTransfers: 1, stale: false },
     players: [],
@@ -64,6 +66,7 @@ describe('Phase 6 automation', () => {
 
     expect(runs).toBe(1);
     expect(refreshed.automation).toMatchObject({ backend: 'memory', freshness: 'fresh', trigger: 'scheduled' });
+    expect(refreshed.operations).toMatchObject({ hoursToDeadline: 5, deadlineMode: true });
     expect(refreshed.automation.checksum).toMatch(/^[a-f0-9]{16}$/);
     expect(store.record?.schemaVersion).toBe(6);
 
@@ -80,8 +83,8 @@ describe('Phase 6 automation', () => {
     const snapshot = {
       ...phaseFive(),
       players: [
-        { id: 1, name: 'One', owned: true, xPts1: 6, expectedMinutes: 90, confidence: 80 },
-        { id: 2, name: 'Two', owned: true, xPts1: 4, expectedMinutes: 70, confidence: 60 },
+        { id: 1, name: 'One', owned: true, price: 5, xPts1: 6, expectedMinutes: 90, confidence: 80, pricePressure: { direction: 'likely_rise', confidence: 60 }, shadowLineupPrediction: 'starter', shadowLineupConfidence: 80, shadowLineupContradiction: false },
+        { id: 2, name: 'Two', owned: true, price: 6, xPts1: 4, expectedMinutes: 70, confidence: 60, pricePressure: { direction: 'stable', confidence: 30 }, shadowLineupPrediction: 'bench', shadowLineupConfidence: 80, shadowLineupContradiction: false },
       ],
       lineup: { starterIds: [1, 2], captainId: 1 },
     } as unknown as PhaseFiveSnapshot;
@@ -91,10 +94,12 @@ describe('Phase 6 automation', () => {
         { id: 1, stats: { total_points: 8, minutes: 90 } },
         { id: 2, stats: { total_points: 2, minutes: 60 } },
       ],
-    }, new Date('2026-10-27T12:00:00.000Z'));
+    }, new Date('2026-10-27T12:00:00.000Z'), new Map([[1, 5.1], [2, 6]]));
     expect(evaluated.evaluation?.selectedXi).toMatchObject({ projectedPoints: 10, actualPoints: 10, meanAbsoluteError: 2, bias: 0 });
     expect(evaluated.evaluation?.selectedXiProjectedWithCaptain).toBe(16);
     expect(evaluated.evaluation?.selectedXiActualWithCaptain).toBe(18);
+    expect(evaluated.evaluation?.prices).toMatchObject({ directionalCalls: 1, directionalAccuracy: 100 });
+    expect(evaluated.evaluation?.shadowLineups).toMatchObject({ predictions: 2, accuracy: 50 });
     const summary = summarizeCalibration([evaluated], 'memory');
     expect(summary).toMatchObject({
       status: 'measured',
@@ -110,6 +115,15 @@ describe('Phase 6 automation', () => {
     expect(summarizeCalibration([createCalibrationForecast(snapshot)], 'memory')).toMatchObject({
       status: 'collecting', trackedGameweeks: 1, evaluatedGameweeks: [], pendingGameweeks: [9], aggregate: null,
     });
+  });
+
+  it('locks model learning for four Gameweeks and caps corrections once active', () => {
+    const snapshot = { ...phaseFive(), players: [{ id: 1, name: 'One', owned: true, price: 5, xPts1: 6, expectedMinutes: 80, confidence: 80, pricePressure: { direction: 'stable', confidence: 30 } }], lineup: { starterIds: [1], captainId: 1 } } as unknown as PhaseFiveSnapshot;
+    const records = [9, 10, 11, 12].map((gameweek) => evaluateCalibrationRecord({ ...createCalibrationForecast({ ...snapshot, nextGameweek: gameweek } as PhaseFiveSnapshot), gameweek }, { elements: [{ id: 1, stats: { total_points: 3, minutes: 60 } }] }));
+    const locked = deriveModelLearning(summarizeCalibration(records.slice(0, 3), 'memory'));
+    const active = deriveModelLearning(summarizeCalibration(records, 'memory'));
+    expect(locked.active).toBe(false);
+    expect(active).toMatchObject({ active: true, evaluatedGameweeks: 4, pointsBiasCorrection: 0.75, minutesBiasCorrection: 8 });
   });
 
   it('keeps the first pre-deadline forecast instead of overwriting it', async () => {

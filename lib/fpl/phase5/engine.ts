@@ -1,4 +1,5 @@
 import { fetchPhaseOneOfficialData, type FetchLike, type PhaseOneOfficialData, type SquadLedger } from '../phase1';
+import type { ModelLearningAdjustment } from '../phase2';
 import type { DecisionPlayer } from '../phase3';
 import { runPhaseFour } from '../phase4';
 import type { PlayerCouncil } from '../phase4';
@@ -12,6 +13,7 @@ export interface RunPhaseFiveOptions {
   officialData?: PhaseOneOfficialData;
   now?: Date;
   lineupUrl?: string;
+  learningAdjustment?: ModelLearningAdjustment;
 }
 
 export function isLedgerStale(confirmedNextGameweek: number, officialNextGameweek: number): boolean {
@@ -28,6 +30,9 @@ export function buildDashboardPlayer(player: DecisionPlayer, council: PlayerCoun
     expectedMinutes: projection.minutes.expectedMinutesPerFixture,
     startProbability: projection.minutes.startProbability,
     appearanceProbability: projection.minutes.appearanceProbability,
+    shadowLineupPrediction: projection.shadowLineup?.prediction ?? null,
+    shadowLineupConfidence: projection.shadowLineup?.confidence ?? null,
+    shadowLineupContradiction: projection.shadowLineup?.contradiction ?? false,
     rotationRisk: projection.minutes.rotationRisk, role: projection.role.tacticalRole,
     roleChange: projection.role.change, sustainability: projection.sustainability.label,
     oneLineReason: projection.oneLineReason, fixtures: projection.fixtures,
@@ -43,6 +48,7 @@ export async function runPhaseFive(options: RunPhaseFiveOptions = {}): Promise<P
   return {
     schemaVersion: 5, viewVersion: 'phase5-dashboard-v1', generatedAt: phaseFour.generatedAt,
     currentGameweek: phaseFour.currentGameweek, nextGameweek: phaseFour.nextGameweek,
+    deadlineTime: officialData.bootstrap.events.find((event) => event.id === phaseFour.nextGameweek)?.deadline_time ?? null,
     sourceHealth: phaseFour.sourceHealth,
     ledger: {
       managerName: ledger.managerName, teamName: ledger.teamName, nextGameweek: ledger.nextGameweek,

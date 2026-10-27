@@ -1,5 +1,5 @@
 import type { MonitoredPlayer, OfficialPlayer } from '../phase1';
-import type { ForwardMinutesSignal, MinutesProjection, RoleAssessment, SustainablePerformance } from './types';
+import type { AvailabilityObservation, ForwardMinutesSignal, MinutesProjection, RoleAssessment, SustainablePerformance } from './types';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -10,7 +10,7 @@ function availability(player: OfficialPlayer): number {
   return player.status === 'd' ? 0.5 : 1;
 }
 
-export function projectMinutes(player: MonitoredPlayer, official: OfficialPlayer, role: RoleAssessment, upcomingFixtures: number, gamesPlayed = Math.max(1, player.rolling5.gameweeks), forward?: ForwardMinutesSignal): MinutesProjection {
+export function projectMinutes(player: MonitoredPlayer, official: OfficialPlayer, role: RoleAssessment, upcomingFixtures: number, gamesPlayed = Math.max(1, player.rolling5.gameweeks), forward?: ForwardMinutesSignal, independentAvailability?: AvailabilityObservation, now = new Date()): MinutesProjection {
   const available = availability(official);
   if (!available) return { startProbability: 0, appearanceProbability: 0, expectedMinutesPerFixture: 0, futureStartProbability: 0, futureAppearanceProbability: 0, futureExpectedMinutesPerFixture: 0, expectedMinutes1: 0, expectedMinutes3: 0, expectedMinutes6: 0, rotationRisk: 'unavailable', confidence: 98, evidence: [official.news || 'Official FPL status says unavailable.'] };
   const seasonStart = clamp(official.starts / Math.max(gamesPlayed, official.starts, 1), 0, 1);
@@ -40,6 +40,17 @@ export function projectMinutes(player: MonitoredPlayer, official: OfficialPlayer
     confidence = Math.round(clamp(confidence + (disagreement <= 12 ? 6 : disagreement > 30 ? -10 : -2), 20, 94));
     evidence.push(`${forward.source} GW${forward.gameweek} benchmark: ${round(forward.expectedMinutes)} expected minutes and ${round(forward.playChance * 100)}% play chance; ${round(weight * 100)}% ensemble weight.`);
     if (disagreement > 30) evidence.push(`Independent and internal minutes estimates disagree by ${round(disagreement)} minutes, so confidence is reduced and the external weight is capped.`);
+  }
+  if (independentAvailability && official.status === 'a') {
+    const returnTime = independentAvailability.returnDate ? new Date(independentAvailability.returnDate).getTime() : Number.POSITIVE_INFINITY;
+    if (returnTime > now.getTime()) {
+      const multiplier = independentAvailability.status === 'suspension' ? 0.65 : independentAvailability.status === 'injury' ? 0.8 : 0.85;
+      startProbability *= multiplier;
+      appearanceProbability = Math.max(startProbability, appearanceProbability * multiplier);
+      expected *= multiplier;
+      confidence = Math.round(clamp(confidence - 6, 20, 94));
+      evidence.push(`${independentAvailability.source} flags ${independentAvailability.reason}${independentAvailability.returnLabel ? ` (${independentAvailability.returnLabel})` : ''}; next-fixture minutes are conservatively reduced by ${round((1 - multiplier) * 100)}% pending official confirmation.`);
+    }
   }
   const rotationRisk = startProbability < 0.55 || volatility > 35 ? 'high' : startProbability < 0.78 || volatility > 22 ? 'medium' : 'low';
   if (role.change === 'possible' || role.change === 'confirmed') evidence.push(`Role evidence is ${role.change}; it changes scoring components, not minutes by itself.`);

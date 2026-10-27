@@ -27,6 +27,9 @@ async function refresh(request: NextRequest, trigger: RefreshTrigger) {
       players: snapshot.players.length,
       action: snapshot.finalCommittee.action,
       calibration,
+      learning: snapshot.learning,
+      operations: { deadlineMode: snapshot.operations.deadlineMode, alerts: snapshot.operations.alerts },
+      modelVersions: snapshot.modelVersions,
     }, { headers: ADMIN_HEADERS });
   } catch (error) {
     return NextResponse.json({

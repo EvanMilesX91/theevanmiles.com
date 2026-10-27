@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FetchLike, MonitoredPlayer, OfficialBootstrap, OfficialFixture, SourceHealth } from '../phase1';
 import { fetchLiveScoreObservations } from './livescore';
-import type { LineupObservation, RoleAssessment, TacticalRole } from './types';
+import type { AvailabilityObservation, LineupObservation, RoleAssessment, TacticalRole } from './types';
 
 interface RawLineupPlayer {
   playerId?: number;
@@ -69,8 +69,9 @@ export async function loadLineupObservations(args: {
   url?: string;
   fetcher?: FetchLike;
   now?: Date;
-}): Promise<{ observations: LineupObservation[]; health: SourceHealth }> {
+}): Promise<{ observations: LineupObservation[]; availability: AvailabilityObservation[]; health: SourceHealth }> {
   let observations: LineupObservation[] = [];
+  let availability: AvailabilityObservation[] = [];
   let source = 'No lineup evidence configured.';
   let unresolved = 0;
   const url = args.url ?? process.env.FPL_MATCH_LINEUPS_JSON_URL;
@@ -94,8 +95,9 @@ export async function loadLineupObservations(args: {
         now: args.now,
       });
       observations = live.observations;
+      availability = live.availability;
       unresolved = live.unresolved.length;
-      source = `LiveScore confirmed lineups loaded for ${live.matches} matches; ${unresolved} lineup names were unresolved.`;
+      source = `LiveScore confirmed lineups loaded for ${live.matches} matches with ${availability.length} latest-matchday availability records; ${unresolved} names were unresolved.`;
     } catch (error) {
       source = `LiveScore refresh failed (${String(error)}); checking stored evidence.`;
     }
@@ -109,6 +111,7 @@ export async function loadLineupObservations(args: {
   const stale = !observations.length || latestGameweek < args.currentGameweek - 1;
   return {
     observations,
+    availability,
     health: {
       key: 'independent_lineups', status: observations.length && !stale && unresolved <= 5 ? 'healthy' : observations.length ? 'degraded' : 'failed',
       retrievedAt: (args.now ?? new Date()).toISOString(), records: observations.length,

@@ -29,6 +29,42 @@ export interface ForwardMinutesSignal {
   sourceUrl: string;
 }
 
+export interface AvailabilityObservation {
+  playerId: number;
+  teamId: number;
+  observedGameweek: number;
+  status: 'injury' | 'suspension' | 'doubt';
+  reason: string;
+  returnDate: string | null;
+  returnLabel: string | null;
+  confidence: number;
+  source: 'LiveScore availability';
+  sourceUrl: string;
+  retrievedAt: string;
+}
+
+export interface ShadowLineupSignal {
+  playerId: number;
+  teamId: number;
+  prediction: 'starter' | 'bench';
+  confidence: number;
+  listedStatus: string;
+  contradiction: boolean;
+  verifiedAt: string;
+  source: 'Touchline Wire';
+  sourceUrl: string;
+}
+
+export interface ModelLearningAdjustment {
+  active: boolean;
+  evaluatedGameweeks: number;
+  pointsBiasCorrection: number;
+  minutesBiasCorrection: number;
+  priceDirectionalAccuracy: number | null;
+  shadowLineupPromoted: boolean;
+  reason: string;
+}
+
 export interface RoleAssessment {
   listedPosition: Position;
   tacticalRole: TacticalRole;
@@ -136,11 +172,12 @@ export interface PlayerProjection {
   ceiling1: number;
   confidence: number;
   oneLineReason: string;
+  shadowLineup?: ShadowLineupSignal | null;
 }
 
 export interface PhaseTwoSnapshot {
   schemaVersion: 2;
-  modelVersion: 'phase2-transparent-v1';
+  modelVersion: 'phase2-transparent-v2';
   generatedAt: string;
   currentGameweek: number;
   nextGameweek: number;
@@ -150,5 +187,6 @@ export interface PhaseTwoSnapshot {
   injuryImpacts: InjuryImpact[];
   projections: PlayerProjection[];
   roleChanges: PlayerProjection[];
+  shadowLineups: ShadowLineupSignal[];
   modelNotes: string[];
 }

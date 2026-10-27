@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MonitoredPlayer, OfficialBootstrap, OfficialFixture, OfficialPlayer } from '@/lib/fpl/phase1';
-import { assessRole, assessSustainability, buildTeamRatings, calculateInjuryImpacts, parseForwardMinutes, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
+import { assessRole, assessSustainability, buildTeamRatings, calculateInjuryImpacts, parseForwardMinutes, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, parseShadowLineups, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
 import type { TeamRating } from '@/lib/fpl/phase2';
 
 const window = { gameweeks: 5, appearances: 5, startEquivalents: 5, minutes: 430, points: 25, pointsPerAppearance: 5, goals: 2, assists: 1, cleanSheets: 1, bonus: 3, defensiveContribution: 25, expectedGoals: 1.8, expectedAssists: 0.8, expectedGoalInvolvements: 2.6, expectedGoalInvolvementsPer90: 0.54 };
@@ -95,10 +95,10 @@ describe('Phase 2 modelling', () => {
     const bootstrap = {
       events: [],
       teams: [{ id: 1, name: 'Alpha', short_name: 'ALP' }, { id: 2, name: 'Beta', short_name: 'BET' }],
-      elements: [official({ id: 10, first_name: 'Test', second_name: 'Player', web_name: 'Player', team: 1 })],
+      elements: [official({ id: 10, first_name: 'Test', second_name: 'Player', web_name: 'Player', team: 1 }), official({ id: 11, first_name: 'Injured', second_name: 'Player', web_name: 'Injured', team: 1 })],
     } satisfies OfficialBootstrap;
     const result = parseLiveScoreLineup({
-      response: { Lu: [{ Tnb: 1, Fo: [4, 3, 3], Ps: [{ Fn: 'Test', Ln: 'Player', Pon: 'Midfielder', Pos: 1, PosA: 2, Fp: '3:1' }] }] },
+      response: { Lu: [{ Tnb: 1, Fo: [4, 3, 3], Ps: [{ Fn: 'Test', Ln: 'Player', Pon: 'Midfielder', Pos: 1, PosA: 2, Fp: '3:1' }], IS: [{ Fn: 'Injured', Ln: 'Player', Rs: 'Knee injury', Rton: 20261130000000, RtonS: 'Late November' }] }] },
       fixture: { id: 88, event: 8, kickoff_time: null, team_h: 1, team_a: 2, team_h_difficulty: 2, team_a_difficulty: 4, finished: true },
       gameweek: 8,
       eventId: 'event-1',
@@ -109,5 +109,14 @@ describe('Phase 2 modelling', () => {
     });
     expect(result.unresolved).toEqual([]);
     expect(result.observations[0]).toMatchObject({ playerId: 10, gameweek: 8, status: 'starter', actualPosition: 'MID', formation: '4-3-3', confidence: 98 });
+    expect(result.availability[0]).toMatchObject({ playerId: 11, status: 'injury', returnDate: '2026-11-30T00:00:00.000Z', returnLabel: 'Late November' });
+  });
+
+  it('keeps predicted lineups in shadow mode and surfaces contradictions', () => {
+    const bootstrap = { events: [], teams: [{ id: 1, name: 'Alpha', short_name: 'ALP' }], elements: [official({ id: 1, team: 1 }), official({ id: 2, team: 1 })] } satisfies OfficialBootstrap;
+    const result = parseShadowLineups({ data: [{ team_id: 1, tactical_confidence_rate: 0.82, last_verified_iso: '2026-10-27 12:00:00 UTC', starters: [{ id: 1, status: 'i' }], bench: [{ id: 2, status: 'a' }] }] }, bootstrap, new Date('2026-10-27T13:00:00Z'));
+    expect(result.signals).toHaveLength(2);
+    expect(result.signals[0]).toMatchObject({ prediction: 'starter', contradiction: true, confidence: 82 });
+    expect(result.health.status).toBe('degraded');
   });
 });

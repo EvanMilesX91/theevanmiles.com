@@ -19,6 +19,9 @@ export interface DashboardPlayer {
   expectedMinutes: number;
   startProbability: number;
   appearanceProbability: number;
+  shadowLineupPrediction: 'starter' | 'bench' | null;
+  shadowLineupConfidence: number | null;
+  shadowLineupContradiction: boolean;
   rotationRisk: string;
   role: string;
   roleChange: string;
@@ -37,6 +40,7 @@ export interface PhaseFiveSnapshot {
   generatedAt: string;
   currentGameweek: number;
   nextGameweek: number;
+  deadlineTime: string | null;
   sourceHealth: SourceHealth[];
   ledger: {
     managerName: string;
