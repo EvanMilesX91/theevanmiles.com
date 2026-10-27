@@ -19,7 +19,7 @@ async function getSnapshot(): Promise<PhaseSixSnapshot> {
   if (cached && cached.expiresAt > Date.now()) return cached.snapshot;
   if (!inFlight) {
     inFlight = (async () => {
-      const store = createDashboardSnapshotStore({ preferRemote: process.env.VERCEL === '1' });
+      const store = createDashboardSnapshotStore({ preferRemote: process.env.NODE_ENV === 'production' });
       const stored = await loadAutomatedDashboard(store);
       const snapshot = stored ?? await refreshAutomatedDashboard({ store, trigger: 'bootstrap' });
       cached = { snapshot, expiresAt: Date.now() + MEMORY_CACHE_MS };

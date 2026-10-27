@@ -12,7 +12,7 @@ Phase 6 moves expensive calculation out of the private dashboard request path. A
 6. If no record exists yet, the authenticated endpoint performs a one-time bootstrap calculation and persists it. Existing aging or stale records remain visible and are labelled honestly rather than being silently replaced with live computation.
 7. The first projection saved for each upcoming Gameweek is frozen. Once FPL marks that Gameweek finished, official player points and minutes are attached with mean absolute error, RMSE, bias and minutes error for the whole pool, owned players and selected XI.
 
-Local development uses `data/fpl/phase6/latest.json`; production uses Supabase. The local generated directory is ignored by Git.
+Local development uses `data/fpl/phase6/latest.json`; every production runtime (Vercel or the self-hosted Docker service) uses Supabase. The local generated directory is ignored by Git.
 
 ## Production setup
 

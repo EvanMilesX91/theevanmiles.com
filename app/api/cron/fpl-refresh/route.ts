@@ -12,8 +12,9 @@ async function refresh(request: NextRequest, trigger: RefreshTrigger) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: ADMIN_HEADERS });
   }
   try {
-    const store = createDashboardSnapshotStore({ preferRemote: process.env.VERCEL === '1' });
-    const calibrationStore = createProjectionCalibrationStore({ preferRemote: process.env.VERCEL === '1' });
+    const preferRemote = process.env.NODE_ENV === 'production';
+    const store = createDashboardSnapshotStore({ preferRemote });
+    const calibrationStore = createProjectionCalibrationStore({ preferRemote });
     let calibration: CalibrationRefreshResult | null = null;
     const snapshot = await refreshAutomatedDashboard({ store, calibrationStore, trigger, onCalibration: (result) => { calibration = result; } });
     return NextResponse.json({
