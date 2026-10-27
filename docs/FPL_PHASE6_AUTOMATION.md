@@ -4,7 +4,7 @@ Phase 6 moves expensive calculation out of the private dashboard request path. A
 
 ## Runtime flow
 
-1. Vercel calls `GET /api/cron/fpl-refresh` at 05:15 UTC each day.
+1. The production scheduler calls `GET /api/cron/fpl-refresh` at 05:15 each day. Vercel uses `vercel.json`; the self-hosted Windows service uses the `EvanMiles Website - FPL refresh` Scheduled Task and `scripts/fpl-production-refresh.ps1`.
 2. The route fails closed unless the request has `Authorization: Bearer $CRON_SECRET` and the configured secret is at least 16 characters.
 3. The complete official-data, projection, optimization, Council and Red Team pipeline runs once.
 4. A server-only record is upserted to Supabase with its refresh time, trigger, runtime, checksum and JSON payload.
