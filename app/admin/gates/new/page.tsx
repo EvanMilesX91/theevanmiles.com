@@ -25,14 +25,11 @@ export default function NewGatePage() {
     setLoading(true);
 
     try {
-      // Get admin auth from localStorage
-      const adminAuth = localStorage.getItem('admin_auth');
-
       const response = await fetch('/api/admin/create-gate', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-auth': adminAuth || '',
         },
         body: JSON.stringify(formData),
       });

@@ -1,6 +1,7 @@
 // app/api/admin/create-gate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { ADMIN_HEADERS, requireAdmin } from '@/lib/admin/auth';
 
 // Use service role key for admin operations
 const supabaseAdmin = createClient(
@@ -15,16 +16,9 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(request: NextRequest) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   try {
-    // Check admin auth
-    const adminAuth = request.headers.get('x-admin-auth');
-    if (adminAuth !== 'authenticated') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const {
       slug,
@@ -65,7 +59,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ data }, { status: 201 });
+    return NextResponse.json({ data }, { status: 201, headers: ADMIN_HEADERS });
   } catch (error) {
     console.error('Server error:', error);
     return NextResponse.json(

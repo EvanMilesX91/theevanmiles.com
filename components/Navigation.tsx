@@ -10,7 +10,8 @@ export default function Navigation() {
   const [menuOpen, setMenuOpen] = useState(false);
   const lastTouchRef = useRef(0);
   
-  const isStyledNav = pathname === '/' || pathname === '/mixes' || pathname === '/contact' || pathname === '/downloads' || pathname === '/press';
+  const isFplPage = pathname === '/fpl-helper';
+  const isStyledNav = pathname === '/' || pathname === '/mixes' || pathname === '/contact' || pathname === '/downloads' || pathname === '/press' || isFplPage;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -98,10 +99,11 @@ export default function Navigation() {
   }, [pathname]);
 
   const styledNavStyles = isStyledNav ? {
-    background: 'rgba(24, 23, 33, 0.65)',
+    background: isFplPage ? 'rgba(55, 0, 60, 0.92)' : 'rgba(24, 23, 33, 0.65)',
     backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(234, 233, 209, 0.25)'
+    borderBottom: isFplPage ? '1px solid rgba(0, 255, 135, 0.35)' : '1px solid rgba(234, 233, 209, 0.25)'
   } : {};
+  const navAccent = isFplPage ? '#00ff87' : '#cf3a00';
 
   const defaultClass = isStyledNav ? '' : 'bg-black/50 backdrop-blur-md border-b border-white/50';
 
@@ -131,7 +133,7 @@ export default function Navigation() {
                 }}>
                 <div 
                   className="w-2 h-2 rounded-full pulse-orange"
-                  style={{ background: '#cf3a00' }}
+                  style={{ background: navAccent }}
                 />
                 <span className="hidden sm:inline">system online · </span>
                 <span>{currentTime}</span>
@@ -159,7 +161,7 @@ export default function Navigation() {
                         {isActive && (
                           <div 
                             className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: '#cf3a00' }}
+                            style={{ background: navAccent }}
                           />
                         )}
                         {link.name}
@@ -252,7 +254,7 @@ export default function Navigation() {
                       {isActive && (
                         <div 
                           className="w-2 h-2 rounded-full"
-                          style={{ background: '#cf3a00' }}
+                          style={{ background: navAccent }}
                         />
                       )}
                       {link.name}

@@ -1,0 +1,64 @@
+import { fetchPhaseOneOfficialData, type FetchLike, type PhaseOneOfficialData, type SquadLedger } from '../phase1';
+import type { DecisionPlayer } from '../phase3';
+import { runPhaseFour } from '../phase4';
+import type { PlayerCouncil } from '../phase4';
+import type { DashboardPlayer, PhaseFiveSnapshot } from './types';
+
+export interface RunPhaseFiveOptions {
+  fetcher?: FetchLike;
+  persist?: boolean;
+  root?: string;
+  ledger?: SquadLedger;
+  officialData?: PhaseOneOfficialData;
+  now?: Date;
+  lineupUrl?: string;
+}
+
+export function isLedgerStale(confirmedNextGameweek: number, officialNextGameweek: number): boolean {
+  return confirmedNextGameweek < officialNextGameweek;
+}
+
+export function buildDashboardPlayer(player: DecisionPlayer, council: PlayerCouncil): DashboardPlayer {
+  const projection = player.projection;
+  return {
+    id: projection.playerId, name: projection.playerName, team: projection.team, position: projection.position,
+    price: projection.price, owned: projection.owned,
+    xPts1: projection.xPts1, xPts3: projection.xPts3, xPts6: projection.xPts6,
+    floor1: projection.floor1, ceiling1: projection.ceiling1, confidence: projection.confidence,
+    expectedMinutes: projection.minutes.expectedMinutesPerFixture,
+    startProbability: projection.minutes.startProbability,
+    appearanceProbability: projection.minutes.appearanceProbability,
+    rotationRisk: projection.minutes.rotationRisk, role: projection.role.tacticalRole,
+    roleChange: projection.role.change, sustainability: projection.sustainability.label,
+    oneLineReason: projection.oneLineReason, fixtures: projection.fixtures,
+    value: player.value, pricePressure: player.pricePressure, newPlayer: player.newPlayer, council,
+  };
+}
+
+export async function runPhaseFive(options: RunPhaseFiveOptions = {}): Promise<PhaseFiveSnapshot> {
+  const officialData = options.officialData ?? await fetchPhaseOneOfficialData(options.fetcher);
+  const phaseFour = await runPhaseFour({ ...options, officialData });
+  const councilById = new Map(phaseFour.councils.map((council) => [council.playerId, council]));
+  const ledger = phaseFour.phaseThree.phaseTwo.phaseOne.ledger;
+  return {
+    schemaVersion: 5, viewVersion: 'phase5-dashboard-v1', generatedAt: phaseFour.generatedAt,
+    currentGameweek: phaseFour.currentGameweek, nextGameweek: phaseFour.nextGameweek,
+    sourceHealth: phaseFour.sourceHealth,
+    ledger: {
+      managerName: ledger.managerName, teamName: ledger.teamName, nextGameweek: ledger.nextGameweek,
+      bank: ledger.bank, freeTransfers: ledger.freeTransfers, stale: isLedgerStale(ledger.nextGameweek, officialData.nextGameweek),
+    },
+    lineup: phaseFour.finalCommittee.primaryScenario.lineup,
+    transferDecision: phaseFour.phaseThree.transferDecision,
+    finalCommittee: phaseFour.finalCommittee,
+    redTeam: phaseFour.redTeam,
+    transferComparisons: phaseFour.transferComparisons,
+    notableOmissions: phaseFour.notableOmissions,
+    players: phaseFour.phaseThree.players.map((player) => {
+      const council = councilById.get(player.projection.playerId);
+      if (!council) throw new Error(`Council result missing for player ${player.projection.playerId}.`);
+      return buildDashboardPlayer(player, council);
+    }),
+    modelNotes: phaseFour.modelNotes,
+  };
+}

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { ADMIN_HEADERS, requireAdmin } from '@/lib/admin/auth';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -28,7 +29,9 @@ interface Track {
   files: TrackFile[];
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   try {
     console.log('=== SCAN STORAGE (Using RPC) ===');
     
@@ -168,7 +171,7 @@ export async function GET() {
       stems: { tracks },
       edits,
       tunes,
-    });
+    }, { headers: ADMIN_HEADERS });
 
   } catch (error: any) {
     console.error('Error scanning storage:', error);

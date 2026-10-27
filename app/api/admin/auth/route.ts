@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ADMIN_COOKIE, ADMIN_HEADERS, ADMIN_SESSION_SECONDS, adminAuthenticated, adminConfigured, adminOriginAllowed, createAdminSession, verifyAdminPassword } from '@/lib/admin/auth';
+import { readSmallJson, RequestBodyError } from '@/lib/http/request';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // In-memory store for rate limiting
 // Note: This resets on server restart/redeploy, which is fine for basic protection
@@ -58,6 +63,8 @@ function clearAttempts(ip: string): void {
 }
 
 export async function POST(request: NextRequest) {
+  if (!adminOriginAllowed(request)) return NextResponse.json({ error: 'Open this website to sign in.' }, { status: 403, headers: ADMIN_HEADERS });
+  if (!adminConfigured()) return NextResponse.json({ error: 'Admin sign-in is not configured. Set ADMIN_PASSWORD (12+ characters) and ADMIN_SESSION_SECRET (32+ characters).' }, { status: 503, headers: ADMIN_HEADERS });
   try {
     const ip = getClientIP(request);
     
@@ -71,16 +78,18 @@ export async function POST(request: NextRequest) {
           error: 'Too many failed attempts. Please try again later.',
           lockoutMinutesRemaining: minutesRemaining 
         },
-        { status: 429 }
+        { status: 429, headers: { ...ADMIN_HEADERS, 'Retry-After': String(Math.max(1, Math.ceil((lockoutEndsAt! - Date.now()) / 1000))) } }
       );
     }
     
-    const { password } = await request.json();
+    const body = await readSmallJson(request, 2048) as { password?: unknown } | null;
     
-    if (password === process.env.ADMIN_PASSWORD) {
+    if (verifyAdminPassword(body?.password)) {
       // Successful login - clear any failed attempts
       clearAttempts(ip);
-      return NextResponse.json({ success: true });
+      const response = NextResponse.json({ success: true }, { headers: ADMIN_HEADERS });
+      response.cookies.set(ADMIN_COOKIE, createAdminSession(), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: ADMIN_SESSION_SECONDS });
+      return response;
     } else {
       // Failed login - record attempt
       recordFailedAttempt(ip);
@@ -92,13 +101,24 @@ export async function POST(request: NextRequest) {
           attemptsRemaining: newRemaining,
           ...(newRemaining === 0 && { message: 'Account locked for 15 minutes.' })
         },
-        { status: 401 }
+        { status: 401, headers: ADMIN_HEADERS }
       );
     }
   } catch (error) {
     return NextResponse.json(
       { error: 'Authentication failed' },
-      { status: 500 }
+      { status: error instanceof RequestBodyError ? error.status : 500, headers: ADMIN_HEADERS }
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  return NextResponse.json({ authenticated: adminAuthenticated(request.cookies.get(ADMIN_COOKIE)?.value), configured: adminConfigured() }, { headers: ADMIN_HEADERS });
+}
+
+export async function DELETE(request: NextRequest) {
+  if (!adminOriginAllowed(request)) return NextResponse.json({ error: 'Open this website to sign out.' }, { status: 403, headers: ADMIN_HEADERS });
+  const response = NextResponse.json({ authenticated: false }, { headers: ADMIN_HEADERS });
+  response.cookies.set(ADMIN_COOKIE, '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: 0 });
+  return response;
 }

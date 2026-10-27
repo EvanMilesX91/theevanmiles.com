@@ -7,7 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:fpl-phase1": "vitest run tests/fpl/phase-one.test.ts",
+    "test:fpl-phase2": "vitest run tests/fpl/phase-two.test.ts",
+    "test:fpl-phase3": "vitest run tests/fpl/phase-three.test.ts",
+    "test:fpl-phase4": "vitest run tests/fpl/phase-four.test.ts",
+    "test:fpl-phase5": "vitest run tests/fpl/phase-five.test.ts",
+    "test:fpl-phase6": "vitest run tests/fpl/phase-six.test.ts",
+    "fpl:refresh": "npx --yes tsx@4.20.6 scripts/fpl-refresh.ts"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.8.7",

@@ -1,0 +1,284 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Activity, AlertTriangle, ArrowRight, BarChart3, Check, ChevronRight,
+  Clock3, Database, RefreshCw, Search, ShieldCheck, Sparkles, Target,
+  TrendingDown, TrendingUp, X,
+} from 'lucide-react';
+import type { DashboardPlayer } from '@/lib/fpl/phase5';
+import type { PhaseSixSnapshot } from '@/lib/fpl/phase6';
+import styles from './FplDashboard.module.css';
+
+type Tab = 'overview' | 'squad' | 'transfers' | 'council' | 'data';
+
+const tabs: Array<{ id: Tab; label: string }> = [
+  { id: 'overview', label: 'Decision' },
+  { id: 'squad', label: 'Squad' },
+  { id: 'transfers', label: 'Transfers' },
+  { id: 'council', label: 'Council' },
+  { id: 'data', label: 'Data' },
+];
+
+const pct = (value: number) => `${Math.round(value * 100)}%`;
+const price = (value: number) => `£${value.toFixed(1)}m`;
+const signed = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
+const titleCase = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+function StatusDot({ status }: { status: string }) {
+  return <span className={`${styles.statusDot} ${styles[`status_${status}`] ?? ''}`} aria-hidden="true" />;
+}
+
+function LoadingState() {
+  return (
+    <div className={styles.loadingShell}>
+      <div className={styles.loaderMark}><span /><span /><span /></div>
+      <p>Compiling the decision room</p>
+      <span>Refreshing prices, projections, Council and Red Team…</span>
+    </div>
+  );
+}
+
+function PlayerDrawer({ player, onClose }: { player: DashboardPlayer; onClose: () => void }) {
+  return (
+    <div className={styles.drawerBackdrop} onMouseDown={onClose} role="presentation">
+      <aside className={styles.drawer} onMouseDown={(event) => event.stopPropagation()} aria-label={`${player.name} analysis`}>
+        <button className={styles.closeButton} onClick={onClose} aria-label="Close player analysis"><X size={18} /></button>
+        <div className={styles.eyebrow}>{player.position} · {player.team}</div>
+        <div className={styles.drawerHeading}>
+          <div><h2>{player.name}</h2><p>{price(player.price)} · {player.expectedMinutes} expected minutes</p></div>
+          <div className={styles.scoreOrb}><strong>{player.council.score}</strong><span>Council</span></div>
+        </div>
+        <div className={styles.playerStats}>
+          <div><span>GW xPts</span><strong>{player.xPts1}</strong></div>
+          <div><span>3 GW</span><strong>{player.xPts3}</strong></div>
+          <div><span>6 GW</span><strong>{player.xPts6}</strong></div>
+          <div><span>Confidence</span><strong>{player.confidence}%</strong></div>
+        </div>
+        <p className={styles.drawerReason}>{player.oneLineReason}</p>
+        {player.council.disagreement && <div className={styles.disagreement}><AlertTriangle size={16} /><span>{player.council.disagreementSummary}</span></div>}
+
+        <section className={styles.drawerSection}>
+          <div className={styles.sectionLabel}>For</div>
+          {player.council.for.map((reason) => <p className={styles.proLine} key={reason}><Check size={14} />{reason}</p>)}
+        </section>
+        <section className={styles.drawerSection}>
+          <div className={styles.sectionLabel}>Against</div>
+          {player.council.against.map((reason) => <p className={styles.conLine} key={reason}><X size={14} />{reason}</p>)}
+        </section>
+        <section className={styles.drawerSection}>
+          <div className={styles.sectionLabel}>Council lenses</div>
+          <div className={styles.lensList}>
+            {player.council.opinions.map((opinion) => (
+              <div className={`${styles.lensRow} ${!opinion.applicable ? styles.notApplicable : ''}`} key={opinion.key}>
+                <div><strong>{opinion.name}</strong><span>{opinion.reason}</span></div>
+                <div className={styles.lensScore}>{opinion.score}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className={styles.drawerSection}>
+          <div className={styles.sectionLabel}>Fixtures</div>
+          <div className={styles.fixtureStrip}>
+            {player.fixtures.slice(0, 6).map((fixture) => (
+              <div key={`${fixture.gameweek}-${fixture.opponent}`}><span>GW{fixture.gameweek}</span><strong>{fixture.opponent} {fixture.home ? 'H' : 'A'}</strong><em>{fixture.xPts}</em></div>
+            ))}
+          </div>
+        </section>
+        <section className={styles.drawerSection}>
+          <div className={styles.sectionLabel}>Value & risk</div>
+          <dl className={styles.detailList}>
+            <div><dt>Value above replacement</dt><dd>{signed(player.value.valueAboveReplacement6)}</dd></div>
+            <div><dt>Six-GW xPts / £m</dt><dd>{player.value.xPtsPerMillion6}</dd></div>
+            <div><dt>Start probability</dt><dd>{pct(player.startProbability)}</dd></div>
+            <div><dt>Price pressure</dt><dd>{titleCase(player.pricePressure.direction)}</dd></div>
+            <div><dt>Role evidence</dt><dd>{titleCase(player.roleChange)}</dd></div>
+            <div><dt>Return profile</dt><dd>{titleCase(player.sustainability)}</dd></div>
+          </dl>
+          <p className={styles.caveat}>{player.pricePressure.caveat}</p>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+function Pitch({ data, playerById, onPlayer }: { data: PhaseSixSnapshot; playerById: Map<number, DashboardPlayer>; onPlayer: (player: DashboardPlayer) => void }) {
+  const lineup = data.lineup;
+  const starters = lineup.starterIds.map((id) => playerById.get(id)).filter((player): player is DashboardPlayer => Boolean(player));
+  const groups = (['FWD', 'MID', 'DEF', 'GK'] as const).map((position) => starters.filter((player) => player.position === position));
+  return (
+    <div className={styles.pitchWrap}>
+      <div className={styles.pitch}>
+        <div className={styles.pitchCircle} /><div className={styles.pitchHalf} /><div className={styles.boxTop} /><div className={styles.boxBottom} />
+        <div className={styles.pitchPlayers}>
+          {groups.map((group, index) => (
+            <div className={styles.pitchLine} style={{ gridTemplateColumns: `repeat(${Math.max(1, group.length)}, minmax(0, 1fr))` }} key={index}>
+              {group.map((player) => (
+                <button className={styles.pitchPlayer} onClick={() => onPlayer(player)} key={player.id}>
+                  <span className={styles.playerBadges}>
+                    {lineup.captainId === player.id && <b>C</b>}
+                    {lineup.viceCaptainId === player.id && <b>V</b>}
+                  </span>
+                  <strong>{player.name}</strong><small>{player.xPts1} xPts</small>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function FplDashboard() {
+  const [data, setData] = useState<PhaseSixSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('overview');
+  const [selectedPlayer, setSelectedPlayer] = useState<DashboardPlayer | null>(null);
+  const [query, setQuery] = useState('');
+  const [compareA, setCompareA] = useState<number | null>(null);
+  const [compareB, setCompareB] = useState<number | null>(null);
+
+  const load = async () => {
+    setLoading(true); setError(null);
+    try {
+      const response = await fetch('/api/fpl/phase-six', { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || 'The decision engine did not return a valid response.');
+      setData(payload);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to refresh the decision room.');
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const playerById = useMemo(() => new Map((data?.players ?? []).map((player) => [player.id, player])), [data]);
+  const owned = useMemo(() => (data?.players ?? []).filter((player) => player.owned), [data]);
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return (data?.players ?? []).filter((player) => !normalized || `${player.name} ${player.team} ${player.position}`.toLowerCase().includes(normalized)).sort((a, b) => b.council.score - a.council.score).slice(0, normalized ? 40 : 20);
+  }, [data, query]);
+
+  if (loading && !data) return <main className={styles.page}><LoadingState /></main>;
+  if (!data) return <main className={styles.page}><div className={styles.errorState}><AlertTriangle /><h1>Decision room unavailable</h1><p>{error}</p><button onClick={load}><RefreshCw size={16} /> Retry refresh</button></div></main>;
+
+  const primary = data.finalCommittee.primaryScenario;
+  const captain = playerById.get(data.lineup.captainId);
+  const vice = playerById.get(data.lineup.viceCaptainId);
+  const bench = data.lineup.benchIds.map((id) => playerById.get(id)).filter((player): player is DashboardPlayer => Boolean(player));
+  const healthySources = data.sourceHealth.filter((source) => source.status === 'healthy').length;
+  const compareFirst = compareA ? playerById.get(compareA) : null;
+  const compareSecond = compareB ? playerById.get(compareB) : null;
+
+  return (
+    <main className={styles.page}>
+      <div className={styles.ambientOne} /><div className={styles.ambientTwo} /><div className={styles.gridNoise} />
+      <div className={styles.shell}>
+        <header className={styles.hero}>
+          <div>
+            <div className={styles.kicker}><span>EM / FPL</span><i />GW{data.nextGameweek} decision room</div>
+            <h1>Build the edge.<br /><em>Explain every call.</em></h1>
+            <p>Whole-pool projections, a legal optimizer, ten independent decision lenses and a Red Team that is paid to disagree.</p>
+          </div>
+          <div className={styles.heroMeta}>
+            <div><StatusDot status={data.ledger.stale ? 'degraded' : 'healthy'} /><span>{data.ledger.stale ? 'Ledger needs confirmation' : 'Decision state current'}</span></div>
+            <button onClick={load} disabled={loading}><RefreshCw size={15} className={loading ? styles.spinning : ''} /> Refresh</button>
+            <small>Snapshot {new Date(data.automation.refreshedAt).toLocaleString('en-IE', { dateStyle: 'medium', timeStyle: 'short' })}</small>
+          </div>
+        </header>
+
+        <nav className={styles.tabs} aria-label="FPL dashboard sections">
+          {tabs.map((item) => <button className={tab === item.id ? styles.activeTab : ''} onClick={() => setTab(item.id)} key={item.id}>{item.label}</button>)}
+        </nav>
+
+        {error && <div className={styles.inlineError}><AlertTriangle size={15} /> Latest refresh failed; showing the previous result. {error}</div>}
+
+        {tab === 'overview' && <>
+          <section className={`${styles.decisionCard} ${data.finalCommittee.status === 'blocked_pending_ledger' ? styles.waitDecision : styles.goDecision}`}>
+            <div className={styles.decisionIcon}>{data.finalCommittee.status === 'blocked_pending_ledger' ? <Clock3 /> : <Sparkles />}</div>
+            <div><span>Final Committee</span><h2>{data.finalCommittee.decisionLine}</h2><p>{data.finalCommittee.rationale[2]}</p></div>
+            <div className={styles.confidence}><strong>{data.finalCommittee.confidence}</strong><span>confidence</span></div>
+          </section>
+
+          <section className={styles.metricGrid}>
+            <article><Target /><span>Projected XI</span><strong>{data.lineup.xPts1WithCaptain}</strong><small>GW{data.nextGameweek} incl. captain</small></article>
+            <article><BarChart3 /><span>Formation</span><strong>{data.lineup.formation}</strong><small>{data.lineup.validation.pass ? 'Rule check passed' : 'Validation issue'}</small></article>
+            <article><Sparkles /><span>Captain</span><strong>{captain?.name ?? '—'}</strong><small>VC · {vice?.name ?? '—'}</small></article>
+            <article><Database /><span>Source health</span><strong>{healthySources}/{data.sourceHealth.length}</strong><small>healthy inputs</small></article>
+          </section>
+
+          <section className={styles.twoColumn}>
+            <article className={styles.panel}>
+              <div className={styles.panelHead}><div><span>Provisional action</span><h3>{primary.moves.length ? primary.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join(' + ') : 'Roll the transfer'}</h3></div><TrendingUp /></div>
+              <div className={styles.gainGrid}>
+                <div><span>GW1 gain</span><strong>{signed(primary.netGain1)}</strong></div><div><span>3 GW gain</span><strong>{signed(primary.netGain3)}</strong></div><div><span>6 GW gain</span><strong>{signed(primary.netGain6)}</strong></div>
+              </div>
+              <p>{data.transferDecision.reason}</p>
+              <button className={styles.textButton} onClick={() => setTab('transfers')}>Interrogate the transfer <ArrowRight size={15} /></button>
+            </article>
+            <article className={styles.panel}>
+              <div className={styles.panelHead}><div><span>Red Team</span><h3>{titleCase(data.redTeam.verdict)}</h3></div><ShieldCheck /></div>
+              <p className={styles.redTeamLead}>{data.redTeam.strongestObjection}</p>
+              <div className={styles.altRoute}><span>Alternative route</span><strong>{data.redTeam.alternativeScenario.moves.length ? data.redTeam.alternativeScenario.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ') : 'Roll'}</strong></div>
+              <button className={styles.textButton} onClick={() => setTab('transfers')}>Read the challenge <ArrowRight size={15} /></button>
+            </article>
+          </section>
+
+          <section className={styles.panel}>
+            <div className={styles.panelHead}><div><span>Evidence chain</span><h3>From source to decision</h3></div><Activity /></div>
+            <div className={styles.evidenceChain}>{data.finalCommittee.evidenceChain.map((item, index) => <div key={item.kind}><b>{String(index + 1).padStart(2, '0')}</b><span>{titleCase(item.kind)}</span><p>{item.statement}</p></div>)}</div>
+          </section>
+        </>}
+
+        {tab === 'squad' && <>
+          <section className={styles.squadHeader}><div><span>Optimized XI</span><h2>{data.lineup.formation} · {data.lineup.xPts1WithCaptain} xPts</h2></div><p>Tap any player to inspect the evidence behind their selection.</p></section>
+          <section className={styles.squadLayout}>
+            <Pitch data={data} playerById={playerById} onPlayer={setSelectedPlayer} />
+            <aside className={styles.benchPanel}>
+              <div className={styles.sectionLabel}>Bench order</div>
+              {bench.map((player, index) => <button onClick={() => setSelectedPlayer(player)} key={player.id}><b>{player.position === 'GK' ? 'GK' : index + 1}</b><span><strong>{player.name}</strong><small>{player.team} · {player.xPts1} xPts</small></span><ChevronRight size={15} /></button>)}
+              <div className={styles.captainBlock}><span>Captaincy shortlist</span>{data.lineup.captaincy.slice(0, 4).map((candidate, index) => <div key={candidate.playerId}><b>{index + 1}</b><strong>{candidate.playerName}</strong><span>{candidate.relativeScore}</span></div>)}</div>
+            </aside>
+          </section>
+          <section className={styles.ownedGrid}>{owned.sort((a, b) => b.council.score - a.council.score).map((player) => <button className={styles.playerTile} onClick={() => setSelectedPlayer(player)} key={player.id}><div><span>{player.position} · {player.team}</span><strong>{player.name}</strong></div><div className={styles.tileScore}>{player.council.score}</div><p>{player.oneLineReason}</p>{player.council.disagreement && <em><AlertTriangle size={13} /> Council disagreement</em>}</button>)}</section>
+        </>}
+
+        {tab === 'transfers' && <>
+          <section className={styles.transferHero}>
+            <div><span>Transfer state</span><h2>{titleCase(data.transferDecision.action)}</h2><p>{data.transferDecision.reason}</p></div>
+            <div><span>Bank after primary</span><strong>{price(primary.bankAfter)}</strong><small>{primary.hitCost ? `-${primary.hitCost} hit` : 'No hit'}</small></div>
+          </section>
+          <section className={styles.scenarioGrid}>
+            {[primary, data.redTeam.alternativeScenario, data.transferDecision.baseline].filter((item, index, all) => all.findIndex((other) => other.id === item.id) === index).map((scenario, index) => (
+              <article className={styles.scenario} key={scenario.id}><div className={styles.scenarioRank}>0{index + 1}</div><span>{index === 0 ? 'Primary model route' : index === 1 ? 'Red Team route' : 'Roll baseline'}</span><h3>{scenario.moves.length ? scenario.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ') : 'No transfer'}</h3><div className={styles.scenarioNumbers}><div><span>3 GW</span><strong>{signed(scenario.netGain3)}</strong></div><div><span>6 GW</span><strong>{signed(scenario.netGain6)}</strong></div><div><span>Bank</span><strong>{price(scenario.bankAfter)}</strong></div></div><p>{scenario.explanation}</p></article>
+            ))}
+          </section>
+          {data.transferComparisons.map((comparison) => <section className={styles.comparisonCard} key={`${comparison.selectedPlayerId}-${comparison.alternativePlayerId}`}><div className={styles.versus}><strong>{comparison.selectedPlayerName}</strong><span>instead of</span><strong>{comparison.alternativePlayerName}</strong></div><div className={styles.comparisonNumbers}><span>{signed(comparison.xPtsDifference3)} xPts / 3GW</span><span>{signed(comparison.priceDifference)}m price</span><span>{signed(comparison.councilDifference)} Council</span></div><p>{comparison.reason}</p><small>Decision flips if: {comparison.whatWouldChange}</small></section>)}
+          <section className={styles.panel}><div className={styles.panelHead}><div><span>Red Team objections</span><h3>How this plan fails</h3></div><ShieldCheck /></div><div className={styles.objectionList}>{data.redTeam.objections.map((objection) => <article key={objection.question}><b className={styles[`severity_${objection.severity}`]}>{objection.severity}</b><div><strong>{objection.question}</strong><p>{objection.finding}</p><small>{objection.mitigation}</small></div></article>)}</div></section>
+        </>}
+
+        {tab === 'council' && <>
+          <section className={styles.councilIntro}><div><span>Decision Council</span><h2>Ten lenses. One accountable verdict.</h2><p>Different evidence is allowed to disagree. Scores are deterministic model views—not simulated personalities.</p></div><div><strong>{data.players.filter((player) => player.council.disagreement).length}</strong><span>material disagreements</span></div></section>
+          <div className={styles.searchBox}><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search every available player…" /></div>
+          <section className={styles.councilTable}>
+            <div className={styles.tableHead}><span>Player</span><span>xPts 3</span><span>Minutes</span><span>Council</span><span>Verdict</span></div>
+            {filtered.map((player) => <button onClick={() => setSelectedPlayer(player)} key={player.id}><span><b>{player.name}</b><small>{player.team} · {player.position} · {price(player.price)}</small></span><strong>{player.xPts3}</strong><strong>{player.expectedMinutes}</strong><strong>{player.council.score}</strong><em className={styles[`verdict_${player.council.verdict}`]}>{titleCase(player.council.verdict)}</em></button>)}
+          </section>
+          <section className={styles.comparePanel}><div><span>Player comparison</span><h3>Put two decisions side by side</h3></div><div className={styles.selectRow}><select value={compareA ?? ''} onChange={(event) => setCompareA(Number(event.target.value) || null)}><option value="">Select player A</option>{data.players.slice().sort((a, b) => a.name.localeCompare(b.name)).map((player) => <option value={player.id} key={player.id}>{player.name} · {player.team}</option>)}</select><span>VS</span><select value={compareB ?? ''} onChange={(event) => setCompareB(Number(event.target.value) || null)}><option value="">Select player B</option>{data.players.slice().sort((a, b) => a.name.localeCompare(b.name)).map((player) => <option value={player.id} key={player.id}>{player.name} · {player.team}</option>)}</select></div>{compareFirst && compareSecond && <div className={styles.compareResult}><div><strong>{compareFirst.name}</strong><span>{compareFirst.xPts3} xPts · {price(compareFirst.price)}</span><em>Council {compareFirst.council.score}</em></div><div className={styles.compareDelta}><span>3GW edge</span><strong>{signed(compareFirst.xPts3 - compareSecond.xPts3)}</strong><small>{price(Math.abs(compareFirst.price - compareSecond.price))} price gap</small></div><div><strong>{compareSecond.name}</strong><span>{compareSecond.xPts3} xPts · {price(compareSecond.price)}</span><em>Council {compareSecond.council.score}</em></div></div>}</section>
+          <section><div className={styles.sectionHeading}><span>Notable omissions</span><h3>Why not them?</h3></div><div className={styles.omissionGrid}>{data.notableOmissions.map((omission) => <article key={omission.playerId}><div><span>{price(omission.price)} · {omission.xPts3} xPts</span><strong>{omission.playerName}</strong></div><b>{omission.councilScore}</b><p>{omission.whyExcluded}</p><small>{omission.whatWouldChange}</small></article>)}</div></section>
+        </>}
+
+        {tab === 'data' && <>
+          <section className={styles.dataIntro}><div><span>Pipeline health</span><h2>Show the seams.</h2><p>Current facts, degraded enrichments and model limitations are visible here instead of being hidden behind a single confidence number.</p></div><Database /></section>
+          <section className={styles.sourceList}><article><StatusDot status={data.automation.freshness === 'fresh' ? 'healthy' : 'degraded'} /><div><strong>Automated decision snapshot</strong><p>Precomputed by the Phase 6 pipeline; private dashboard reads do not rerun the full model.</p></div><span>{data.automation.ageMinutes} min old</span><b>{data.automation.freshness}</b></article>{data.sourceHealth.map((source) => <article key={source.key}><StatusDot status={source.status} /><div><strong>{titleCase(source.key)}</strong><p>{source.message}</p></div><span>{source.records.toLocaleString()} records</span><b>{source.status}</b></article>)}</section>
+          <section className={styles.dataColumns}><article className={styles.panel}><div className={styles.panelHead}><div><span>Automation</span><h3>{titleCase(data.automation.freshness)} snapshot</h3></div><RefreshCw /></div><dl className={styles.detailList}><div><dt>Last refresh</dt><dd>{new Date(data.automation.refreshedAt).toLocaleString('en-IE', { dateStyle: 'medium', timeStyle: 'short' })}</dd></div><div><dt>Trigger</dt><dd>{titleCase(data.automation.trigger)}</dd></div><div><dt>Backend</dt><dd>{titleCase(data.automation.backend)}</dd></div><div><dt>Pipeline duration</dt><dd>{(data.automation.durationMs / 1000).toFixed(1)}s</dd></div><div><dt>Checksum</dt><dd>{data.automation.checksum}</dd></div></dl></article><article className={styles.panel}><div className={styles.panelHead}><div><span>Ledger</span><h3>{data.ledger.teamName}</h3></div><Database /></div><dl className={styles.detailList}><div><dt>Manager</dt><dd>{data.ledger.managerName}</dd></div><div><dt>Confirmed next GW</dt><dd>{data.ledger.nextGameweek}</dd></div><div><dt>Official next GW</dt><dd>{data.nextGameweek}</dd></div><div><dt>Bank</dt><dd>{price(data.ledger.bank)}</dd></div><div><dt>Free transfers</dt><dd>{data.ledger.freeTransfers}</dd></div></dl></article><article className={styles.panel}><div className={styles.panelHead}><div><span>Model notes</span><h3>Known boundaries</h3></div><AlertTriangle /></div><ul className={styles.notesList}>{data.modelNotes.map((note) => <li key={note}>{note}</li>)}</ul></article></section>
+        </>}
+
+        <footer className={styles.footer}><span>FPL DECISION ENGINE / PHASE 6</span><span>Precomputed daily · facts ≠ estimates ≠ decisions</span></footer>
+      </div>
+      {selectedPlayer && <PlayerDrawer player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />}
+    </main>
+  );
+}

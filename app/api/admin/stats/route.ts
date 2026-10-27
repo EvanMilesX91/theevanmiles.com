@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { ADMIN_HEADERS, requireAdmin } from '@/lib/admin/auth';
 import { createClient } from '@supabase/supabase-js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -8,7 +9,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   try {
     // Get total tracks
     const { count: tracksCount, error: tracksError } = await supabase
@@ -86,7 +89,7 @@ export async function GET() {
       totalPresaves: presavesCount || 0,
       totalGates: gatesCount || 0,
       totalDownloads: downloadsCount || 0,
-    });
+    }, { headers: ADMIN_HEADERS });
   } catch (error: any) {
     console.error('Error fetching admin stats:', error);
     return NextResponse.json(

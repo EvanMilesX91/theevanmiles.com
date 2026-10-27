@@ -25,14 +25,11 @@ export default function NewPresavePage() {
     setLoading(true);
 
     try {
-      // Get admin auth from localStorage
-      const adminAuth = localStorage.getItem('admin_auth');
-
       const response = await fetch('/api/admin/create-presave', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-auth': adminAuth || '',
         },
         body: JSON.stringify(formData),
       });

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Database, Download, Music, Mail, LogOut, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
@@ -16,7 +15,6 @@ interface Stats {
 }
 
 export default function AdminDashboard() {
-  const router = useRouter();
   const [stats, setStats] = useState<Stats>({
     totalPresaves: 0,
     totalGates: 0,
@@ -43,7 +41,7 @@ export default function AdminDashboard() {
         },
       });
       const data = await res.json();
-      console.log('Fetched stats:', data);
+      if (!res.ok) throw new Error(data.error || 'Could not load admin statistics.');
       setStats(data);
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -53,9 +51,12 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_authenticated');
-    router.push('/admin');
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/admin/auth', { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) throw new Error('Sign-out failed. Please try again.');
+      window.location.assign('/admin');
+    } catch (reason) { alert(reason instanceof Error ? reason.message : 'Sign-out failed. Please try again.'); }
   };
 
   return (

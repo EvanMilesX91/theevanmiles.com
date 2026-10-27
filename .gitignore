@@ -17,6 +17,15 @@
 .DS_Store
 *.pem
 
+# generated FPL monitoring state
+/data/fpl/phase1/
+/data/fpl/phase2/
+/data/fpl/phase3/
+/data/fpl/phase4/
+/data/fpl/phase6/
+/data/fpl/calibration/
+/data/fpl/owner-ledger.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*

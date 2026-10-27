@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { ADMIN_HEADERS, requireAdmin } from '@/lib/admin/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,6 +8,8 @@ const supabase = createClient(
 );
 
 export async function POST(request: NextRequest) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   try {
     const { stems, edits, tunes } = await request.json();
 
@@ -149,7 +152,7 @@ export async function POST(request: NextRequest) {
       stems_added,
       edits_added,
       tunes_added,
-    });
+    }, { headers: ADMIN_HEADERS });
   } catch (error: any) {
     console.error('Error syncing to database:', error);
     return NextResponse.json(
