@@ -1,4 +1,5 @@
 import type { PhaseFiveSnapshot } from '../phase5';
+import type { CalibrationDashboardSummary } from './calibration';
 
 export type RefreshTrigger = 'scheduled' | 'manual' | 'bootstrap';
 export type SnapshotFreshness = 'fresh' | 'aging' | 'stale';
@@ -27,6 +28,7 @@ export interface AutomationMetadata {
 
 export type PhaseSixSnapshot = PhaseFiveSnapshot & {
   automation: AutomationMetadata;
+  calibration: CalibrationDashboardSummary;
 };
 
 export interface DashboardSnapshotStore {

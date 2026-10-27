@@ -1,5 +1,5 @@
 import type { MonitoredPlayer, OfficialPlayer } from '../phase1';
-import type { MinutesProjection, RoleAssessment, SustainablePerformance } from './types';
+import type { ForwardMinutesSignal, MinutesProjection, RoleAssessment, SustainablePerformance } from './types';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -10,26 +10,48 @@ function availability(player: OfficialPlayer): number {
   return player.status === 'd' ? 0.5 : 1;
 }
 
-export function projectMinutes(player: MonitoredPlayer, official: OfficialPlayer, role: RoleAssessment, upcomingFixtures: number, gamesPlayed = Math.max(1, player.rolling5.gameweeks)): MinutesProjection {
+export function projectMinutes(player: MonitoredPlayer, official: OfficialPlayer, role: RoleAssessment, upcomingFixtures: number, gamesPlayed = Math.max(1, player.rolling5.gameweeks), forward?: ForwardMinutesSignal): MinutesProjection {
   const available = availability(official);
-  if (!available) return { startProbability: 0, appearanceProbability: 0, expectedMinutesPerFixture: 0, expectedMinutes1: 0, expectedMinutes3: 0, expectedMinutes6: 0, rotationRisk: 'unavailable', confidence: 98, evidence: [official.news || 'Official FPL status says unavailable.'] };
+  if (!available) return { startProbability: 0, appearanceProbability: 0, expectedMinutesPerFixture: 0, futureStartProbability: 0, futureAppearanceProbability: 0, futureExpectedMinutesPerFixture: 0, expectedMinutes1: 0, expectedMinutes3: 0, expectedMinutes6: 0, rotationRisk: 'unavailable', confidence: 98, evidence: [official.news || 'Official FPL status says unavailable.'] };
   const seasonStart = clamp(official.starts / Math.max(gamesPlayed, official.starts, 1), 0, 1);
   const recentStart = player.rolling5.gameweeks ? player.rolling5.startEquivalents / player.rolling5.gameweeks : seasonStart;
   const lastStart = player.rolling1.minutes >= 60 ? 1 : player.rolling1.minutes > 0 ? 0.25 : 0;
   const rawStartProbability = clamp(seasonStart * 0.45 + recentStart * 0.4 + lastStart * 0.15, 0, 0.98);
-  const startProbability = rawStartProbability * available;
+  let startProbability = rawStartProbability * available;
   const seasonAppearance = clamp((official.minutes > 0 ? Math.max(official.starts, Math.ceil(official.minutes / 90)) : 0) / Math.max(1, gamesPlayed), 0, 1);
   const recentAppearance = player.rolling5.gameweeks ? player.rolling5.appearances / player.rolling5.gameweeks : seasonAppearance;
-  const appearanceProbability = clamp(Math.max(rawStartProbability, seasonAppearance * 0.4 + recentAppearance * 0.6) * available, 0, 0.99);
+  let appearanceProbability = clamp(Math.max(rawStartProbability, seasonAppearance * 0.4 + recentAppearance * 0.6) * available, 0, 0.99);
   const conditionalSubProbability = clamp((appearanceProbability - startProbability) / Math.max(0.01, 1 - startProbability), 0, 0.75);
   const startMinutes = clamp(player.rolling5.startEquivalents ? player.rolling5.minutes / player.rolling5.startEquivalents : 78, 55, 90);
-  const expected = clamp(startProbability * startMinutes + (1 - startProbability) * conditionalSubProbability * 15, 0, 90);
+  let expected = clamp(startProbability * startMinutes + (1 - startProbability) * conditionalSubProbability * 15, 0, 90);
+  const futureStartProbability = startProbability;
+  const futureAppearanceProbability = appearanceProbability;
+  const futureExpectedMinutesPerFixture = expected;
   const volatility = Math.abs(player.rolling1.minutes - player.rolling5.minutes / Math.max(1, player.rolling5.gameweeks));
-  const rotationRisk = startProbability < 0.55 || volatility > 35 ? 'high' : startProbability < 0.78 || volatility > 22 ? 'medium' : 'low';
+  let confidence = Math.round(clamp(45 + official.starts * 3 + player.rolling5.appearances * 4 - (available < 1 ? 20 : 0), 20, 92));
   const evidence = [`Season starts: ${official.starts}; last-five start equivalents: ${player.rolling5.startEquivalents}.`, `Official availability multiplier: ${round(available, 2)}.`];
+  if (forward) {
+    const disagreement = Math.abs(expected - forward.expectedMinutes);
+    const weight = disagreement > 30 ? 0.18 : 0.3;
+    const externalStart = clamp((forward.expectedMinutes - (1 - forward.playChance) * 10) / Math.max(60, startMinutes), 0, 0.98);
+    startProbability = clamp(startProbability * (1 - weight) + externalStart * weight, 0, 0.98);
+    appearanceProbability = clamp(appearanceProbability * (1 - weight) + forward.playChance * weight, startProbability, 0.99);
+    expected = clamp(expected * (1 - weight) + forward.expectedMinutes * weight, 0, 90);
+    confidence = Math.round(clamp(confidence + (disagreement <= 12 ? 6 : disagreement > 30 ? -10 : -2), 20, 94));
+    evidence.push(`${forward.source} GW${forward.gameweek} benchmark: ${round(forward.expectedMinutes)} expected minutes and ${round(forward.playChance * 100)}% play chance; ${round(weight * 100)}% ensemble weight.`);
+    if (disagreement > 30) evidence.push(`Independent and internal minutes estimates disagree by ${round(disagreement)} minutes, so confidence is reduced and the external weight is capped.`);
+  }
+  const rotationRisk = startProbability < 0.55 || volatility > 35 ? 'high' : startProbability < 0.78 || volatility > 22 ? 'medium' : 'low';
   if (role.change === 'possible' || role.change === 'confirmed') evidence.push(`Role evidence is ${role.change}; it changes scoring components, not minutes by itself.`);
-  const horizon = (count: number) => round(expected * Math.min(count, upcomingFixtures));
-  return { startProbability: round(startProbability, 3), appearanceProbability: round(appearanceProbability, 3), expectedMinutesPerFixture: round(expected), expectedMinutes1: horizon(1), expectedMinutes3: horizon(3), expectedMinutes6: horizon(6), rotationRisk, confidence: Math.round(clamp(45 + official.starts * 3 + player.rolling5.appearances * 4 - (available < 1 ? 20 : 0), 20, 92)), evidence };
+  const horizon = (count: number) => {
+    const fixtures = Math.min(count, upcomingFixtures);
+    return round(fixtures ? expected + futureExpectedMinutesPerFixture * Math.max(0, fixtures - 1) : 0);
+  };
+  return {
+    startProbability: round(startProbability, 3), appearanceProbability: round(appearanceProbability, 3), expectedMinutesPerFixture: round(expected),
+    futureStartProbability: round(futureStartProbability, 3), futureAppearanceProbability: round(futureAppearanceProbability, 3), futureExpectedMinutesPerFixture: round(futureExpectedMinutesPerFixture),
+    expectedMinutes1: horizon(1), expectedMinutes3: horizon(3), expectedMinutes6: horizon(6), rotationRisk, confidence, evidence,
+  };
 }
 
 export function assessSustainability(player: MonitoredPlayer, official: OfficialPlayer): SustainablePerformance {

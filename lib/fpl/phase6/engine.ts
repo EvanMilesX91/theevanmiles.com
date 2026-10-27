@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { runPhaseFive, type PhaseFiveSnapshot, type RunPhaseFiveOptions } from '../phase5';
 import type { DashboardSnapshotStore, PhaseSixSnapshot, RefreshTrigger, SnapshotFreshness, StoredDashboardRecord } from './types';
-import { refreshProjectionCalibration, type CalibrationRefreshResult, type ProjectionCalibrationStore } from './calibration';
+import { loadCalibrationSummary, refreshProjectionCalibration, summarizeCalibration, type CalibrationDashboardSummary, type CalibrationRefreshResult, type ProjectionCalibrationStore } from './calibration';
 
 const FRESH_MINUTES = 26 * 60;
 const AGING_MINUTES = 48 * 60;
@@ -14,7 +14,12 @@ export function classifySnapshotFreshness(refreshedAt: string, now = new Date())
   return { freshness: 'stale', ageMinutes };
 }
 
-export function presentStoredDashboard(record: StoredDashboardRecord, backend: DashboardSnapshotStore['backend'], now = new Date()): PhaseSixSnapshot {
+export function presentStoredDashboard(
+  record: StoredDashboardRecord,
+  backend: DashboardSnapshotStore['backend'],
+  now = new Date(),
+  calibration: CalibrationDashboardSummary = summarizeCalibration([], 'memory'),
+): PhaseSixSnapshot {
   const freshness = classifySnapshotFreshness(record.refreshedAt, now);
   return {
     ...record.snapshot,
@@ -27,6 +32,7 @@ export function presentStoredDashboard(record: StoredDashboardRecord, backend: D
       checksum: record.checksum,
       backend,
     },
+    calibration,
   };
 }
 
@@ -54,6 +60,7 @@ export async function refreshAutomatedDashboard(options: RefreshAutomatedDashboa
     snapshot,
   };
   await options.store.write(record);
+  let calibration = summarizeCalibration([], 'memory');
   if (options.calibrationStore) {
     const result = await refreshProjectionCalibration({
       snapshot,
@@ -62,11 +69,14 @@ export async function refreshAutomatedDashboard(options: RefreshAutomatedDashboa
       now,
     });
     options.onCalibration?.(result);
+    calibration = await loadCalibrationSummary(options.calibrationStore);
   }
-  return presentStoredDashboard(record, options.store.backend, now);
+  return presentStoredDashboard(record, options.store.backend, now, calibration);
 }
 
-export async function loadAutomatedDashboard(store: DashboardSnapshotStore, now = new Date()): Promise<PhaseSixSnapshot | null> {
+export async function loadAutomatedDashboard(store: DashboardSnapshotStore, now = new Date(), calibrationStore?: ProjectionCalibrationStore): Promise<PhaseSixSnapshot | null> {
   const record = await store.read();
-  return record ? presentStoredDashboard(record, store.backend, now) : null;
+  if (!record) return null;
+  const calibration = calibrationStore ? await loadCalibrationSummary(calibrationStore) : summarizeCalibration([], 'memory');
+  return presentStoredDashboard(record, store.backend, now, calibration);
 }

@@ -21,6 +21,7 @@ async function main() {
     onCalibration: (result) => { calibration = result; },
   });
   const lineup = snapshot.sourceHealth.find((source) => source.key === 'independent_lineups');
+  const forwardMinutes = snapshot.sourceHealth.find((source) => source.key === 'forward_minutes_fpl_cat');
   process.stdout.write(`${JSON.stringify({
     refreshedAt: snapshot.automation.refreshedAt,
     backend: snapshot.automation.backend,
@@ -31,7 +32,9 @@ async function main() {
     confidence: snapshot.finalCommittee.confidence,
     players: snapshot.players.length,
     lineupSource: lineup,
+    forwardMinutesSource: forwardMinutes,
     calibration,
+    calibrationSummary: snapshot.calibration,
   }, null, 2)}\n`);
 }
 

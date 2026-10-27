@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MonitoredPlayer, OfficialBootstrap, OfficialFixture, OfficialPlayer } from '@/lib/fpl/phase1';
-import { assessRole, assessSustainability, buildTeamRatings, calculateInjuryImpacts, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
+import { assessRole, assessSustainability, buildTeamRatings, calculateInjuryImpacts, parseForwardMinutes, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
 import type { TeamRating } from '@/lib/fpl/phase2';
 
 const window = { gameweeks: 5, appearances: 5, startEquivalents: 5, minutes: 430, points: 25, pointsPerAppearance: 5, goals: 2, assists: 1, cleanSheets: 1, bonus: 3, defensiveContribution: 25, expectedGoals: 1.8, expectedAssists: 0.8, expectedGoalInvolvements: 2.6, expectedGoalInvolvementsPer90: 0.54 };
@@ -26,6 +26,26 @@ describe('Phase 2 modelling', () => {
     expect(result.expectedMinutes1).toBe(0);
     expect(result.appearanceProbability).toBe(0);
     expect(result.rotationRisk).toBe('unavailable');
+  });
+
+  it('blends a fresh independent minutes benchmark without letting it dominate', () => {
+    const role = { listedPosition: 'DEF' as const, tacticalRole: 'unknown' as const, change: 'insufficient_data' as const, confidence: 15, observations: 0, latestGameweek: null, evidence: [] };
+    const internal = projectMinutes(monitored(), official(), role, 6, 8);
+    const blended = projectMinutes(monitored(), official(), role, 6, 8, {
+      playerId: 1, gameweek: 9, expectedMinutes: 20, playChance: 0.5, projectedPoints: 1.2,
+      confidence: 78, computedAt: '2026-10-27T12:00:00Z', source: 'FPL Cat', sourceUrl: 'https://fplcat.com/developers',
+    });
+    expect(blended.expectedMinutesPerFixture).toBeLessThan(internal.expectedMinutesPerFixture);
+    expect(blended.expectedMinutesPerFixture).toBeGreaterThan(20);
+    expect(blended.expectedMinutes3).toBeCloseTo(blended.expectedMinutesPerFixture + internal.expectedMinutesPerFixture * 2, 1);
+    expect(blended.evidence.join(' ')).toContain('ensemble weight');
+  });
+
+  it('rejects a forward benchmark for the wrong Gameweek', () => {
+    const parsed = parseForwardMinutes({ gameweek: 8, computed_at: '2026-10-27T12:00:00Z', players: [{ id: 1, xp: 5, expected_minutes: 80, play_chance: 0.95 }] }, 9, new Date('2026-10-27T13:00:00Z'));
+    expect(parsed.signals).toEqual([]);
+    expect(parsed.health.status).toBe('failed');
+    expect(parsed.health.message).toContain('ignored');
   });
 
   it('separates observed returns from sustainable underlying returns', () => {

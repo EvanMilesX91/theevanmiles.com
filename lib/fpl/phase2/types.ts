@@ -17,6 +17,18 @@ export interface LineupObservation {
   retrievedAt: string;
 }
 
+export interface ForwardMinutesSignal {
+  playerId: number;
+  gameweek: number;
+  expectedMinutes: number;
+  playChance: number;
+  projectedPoints: number;
+  confidence: number;
+  computedAt: string;
+  source: 'FPL Cat';
+  sourceUrl: string;
+}
+
 export interface RoleAssessment {
   listedPosition: Position;
   tacticalRole: TacticalRole;
@@ -31,6 +43,9 @@ export interface MinutesProjection {
   startProbability: number;
   appearanceProbability: number;
   expectedMinutesPerFixture: number;
+  futureStartProbability?: number;
+  futureAppearanceProbability?: number;
+  futureExpectedMinutesPerFixture?: number;
   expectedMinutes1: number;
   expectedMinutes3: number;
   expectedMinutes6: number;

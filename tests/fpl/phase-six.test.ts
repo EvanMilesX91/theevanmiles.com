@@ -7,6 +7,7 @@ import {
   loadAutomatedDashboard,
   refreshProjectionCalibration,
   refreshAutomatedDashboard,
+  summarizeCalibration,
   type DashboardSnapshotStore,
   type ProjectionCalibrationRecord,
   type ProjectionCalibrationStore,
@@ -94,6 +95,21 @@ describe('Phase 6 automation', () => {
     expect(evaluated.evaluation?.selectedXi).toMatchObject({ projectedPoints: 10, actualPoints: 10, meanAbsoluteError: 2, bias: 0 });
     expect(evaluated.evaluation?.selectedXiProjectedWithCaptain).toBe(16);
     expect(evaluated.evaluation?.selectedXiActualWithCaptain).toBe(18);
+    const summary = summarizeCalibration([evaluated], 'memory');
+    expect(summary).toMatchObject({
+      status: 'measured',
+      evaluatedGameweeks: [9],
+      pendingGameweeks: [],
+      aggregate: { selectedXiMeanAbsoluteError: 2, selectedXiBias: 0, projectedWithCaptain: 16, actualWithCaptain: 18 },
+      latestEvaluation: { gameweek: 9, projectedWithCaptain: 16, actualWithCaptain: 18 },
+    });
+  });
+
+  it('labels an unevaluated forecast as collecting instead of inventing accuracy', () => {
+    const snapshot = { ...phaseFive(), players: [], lineup: { starterIds: [], captainId: 0 } } as unknown as PhaseFiveSnapshot;
+    expect(summarizeCalibration([createCalibrationForecast(snapshot)], 'memory')).toMatchObject({
+      status: 'collecting', trackedGameweeks: 1, evaluatedGameweeks: [], pendingGameweeks: [9], aggregate: null,
+    });
   });
 
   it('keeps the first pre-deadline forecast instead of overwriting it', async () => {

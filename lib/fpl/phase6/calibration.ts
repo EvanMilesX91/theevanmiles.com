@@ -55,6 +55,29 @@ export interface CalibrationRefreshResult {
   backend: ProjectionCalibrationStore['backend'];
 }
 
+export interface CalibrationDashboardSummary {
+  status: 'collecting' | 'measured';
+  backend: ProjectionCalibrationStore['backend'];
+  trackedGameweeks: number;
+  evaluatedGameweeks: number[];
+  pendingGameweeks: number[];
+  latestEvaluation: {
+    gameweek: number;
+    evaluatedAt: string;
+    selectedXi: CalibrationMetrics;
+    projectedWithCaptain: number;
+    actualWithCaptain: number;
+  } | null;
+  aggregate: {
+    selectedXiMeanAbsoluteError: number;
+    selectedXiRootMeanSquaredError: number;
+    selectedXiBias: number;
+    minutesMeanAbsoluteError: number;
+    projectedWithCaptain: number;
+    actualWithCaptain: number;
+  } | null;
+}
+
 interface OfficialEvent {
   id: number;
   finished: boolean;
@@ -71,6 +94,46 @@ interface EventLivePayload {
 function round(value: number, digits = 2): number {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
+}
+
+export function summarizeCalibration(
+  records: ProjectionCalibrationRecord[],
+  backend: ProjectionCalibrationStore['backend'],
+): CalibrationDashboardSummary {
+  const ordered = records.slice().sort((a, b) => a.gameweek - b.gameweek);
+  const evaluated = ordered.filter((record) => record.evaluation);
+  const latest = evaluated.at(-1);
+  const totalXiPlayers = evaluated.reduce((sum, record) => sum + (record.evaluation?.selectedXi.players ?? 0), 0);
+  const weighted = (select: (record: ProjectionCalibrationRecord) => number) => totalXiPlayers
+    ? round(evaluated.reduce((sum, record) => sum + select(record) * (record.evaluation?.selectedXi.players ?? 0), 0) / totalXiPlayers)
+    : 0;
+  const aggregate = evaluated.length ? {
+    selectedXiMeanAbsoluteError: weighted((record) => record.evaluation!.selectedXi.meanAbsoluteError),
+    selectedXiRootMeanSquaredError: weighted((record) => record.evaluation!.selectedXi.rootMeanSquaredError),
+    selectedXiBias: weighted((record) => record.evaluation!.selectedXi.bias),
+    minutesMeanAbsoluteError: weighted((record) => record.evaluation!.selectedXi.minutesMeanAbsoluteError),
+    projectedWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiProjectedWithCaptain, 0)),
+    actualWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiActualWithCaptain, 0)),
+  } : null;
+  return {
+    status: evaluated.length ? 'measured' : 'collecting',
+    backend,
+    trackedGameweeks: ordered.length,
+    evaluatedGameweeks: evaluated.map((record) => record.gameweek),
+    pendingGameweeks: ordered.filter((record) => !record.evaluation).map((record) => record.gameweek),
+    latestEvaluation: latest?.evaluation ? {
+      gameweek: latest.gameweek,
+      evaluatedAt: latest.evaluation.evaluatedAt,
+      selectedXi: latest.evaluation.selectedXi,
+      projectedWithCaptain: latest.evaluation.selectedXiProjectedWithCaptain,
+      actualWithCaptain: latest.evaluation.selectedXiActualWithCaptain,
+    } : null,
+    aggregate,
+  };
+}
+
+export async function loadCalibrationSummary(store: ProjectionCalibrationStore): Promise<CalibrationDashboardSummary> {
+  return summarizeCalibration(await store.readAll(), store.backend);
 }
 
 function buildMetrics(players: CalibrationPlayerForecast[], actual: Map<number, { points: number; minutes: number }>): CalibrationMetrics {

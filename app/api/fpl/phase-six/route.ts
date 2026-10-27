@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin/auth';
 import {
   createDashboardSnapshotStore,
+  createProjectionCalibrationStore,
   loadAutomatedDashboard,
   refreshAutomatedDashboard,
   type PhaseSixSnapshot,
@@ -20,8 +21,9 @@ async function getSnapshot(): Promise<PhaseSixSnapshot> {
   if (!inFlight) {
     inFlight = (async () => {
       const store = createDashboardSnapshotStore({ preferRemote: process.env.NODE_ENV === 'production' });
-      const stored = await loadAutomatedDashboard(store);
-      const snapshot = stored ?? await refreshAutomatedDashboard({ store, trigger: 'bootstrap' });
+      const calibrationStore = createProjectionCalibrationStore({ preferRemote: process.env.NODE_ENV === 'production' });
+      const stored = await loadAutomatedDashboard(store, new Date(), calibrationStore);
+      const snapshot = stored ?? await refreshAutomatedDashboard({ store, calibrationStore, trigger: 'bootstrap' });
       cached = { snapshot, expiresAt: Date.now() + MEMORY_CACHE_MS };
       return snapshot;
     })().finally(() => { inFlight = null; });
