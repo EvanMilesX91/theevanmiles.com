@@ -106,4 +106,15 @@ describe('Phase 6 automation', () => {
     expect(store.records).toHaveLength(1);
     expect(store.records[0].capturedAt).toBe('2026-10-27T10:00:00.000Z');
   });
+
+  it('replaces a stale-ledger forecast once the owner confirms the actual squad', async () => {
+    const store = new MemoryCalibrationStore();
+    const stale = { ...phaseFive(), nextGameweek: 9, ledger: { ...phaseFive().ledger, stale: true }, players: [], lineup: { starterIds: [], captainId: 0 } } as unknown as PhaseFiveSnapshot;
+    const confirmed = { ...stale, ledger: { ...stale.ledger, stale: false } };
+    const fetcher = async () => new Response(JSON.stringify({ events: [] }), { status: 200 });
+    await refreshProjectionCalibration({ snapshot: stale, store, fetcher, now: new Date('2026-10-27T10:00:00.000Z') });
+    const result = await refreshProjectionCalibration({ snapshot: confirmed, store, fetcher, now: new Date('2026-10-27T13:00:00.000Z') });
+    expect(result).toMatchObject({ forecastCreated: false, forecastReplaced: true });
+    expect(store.records[0]).toMatchObject({ capturedAt: '2026-10-27T13:00:00.000Z', ledgerStale: false });
+  });
 });

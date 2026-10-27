@@ -3,6 +3,7 @@ import {
   DEFAULT_OWNER_LEDGER,
   buildMonitoredPlayers,
   calculateRollingWindow,
+  confirmGameweek,
   confirmTransfer,
   createTransferProposal,
   detectChanges,
@@ -112,9 +113,22 @@ function monitored(overrides: Partial<MonitoredPlayer> & Pick<MonitoredPlayer, '
   };
 }
 
+function preGw8Ledger() {
+  const ledger = structuredClone(DEFAULT_OWNER_LEDGER);
+  const index = ledger.squad.findIndex((player) => player.elementId === 40);
+  ledger.squad[index] = { elementId: 426, purchasePrice: 12, acquiredGameweek: 1 };
+  ledger.lastConfirmedGameweek = 7;
+  ledger.nextGameweek = 8;
+  ledger.bank = 0.9;
+  ledger.freeTransfers = 1;
+  ledger.confirmedTransfers = [];
+  ledger.confirmedGameweeks = [];
+  return ledger;
+}
+
 describe('Phase 1 owner ledger', () => {
   it('keeps a proposal separate from confirmed state', () => {
-    const ledger = structuredClone(DEFAULT_OWNER_LEDGER);
+    const ledger = preGw8Ledger();
     const players = [
       officialPlayer({ id: 426, web_name: 'B.Fernandes', element_type: 3, now_cost: 118 }),
       officialPlayer({ id: 40, web_name: 'Rogers', element_type: 3, now_cost: 80 }),
@@ -127,7 +141,7 @@ describe('Phase 1 owner ledger', () => {
   });
 
   it('changes only a cloned ledger after explicit confirmation', () => {
-    const ledger = structuredClone(DEFAULT_OWNER_LEDGER);
+    const ledger = preGw8Ledger();
     const players = [
       officialPlayer({ id: 426, web_name: 'B.Fernandes', element_type: 3, now_cost: 118 }),
       officialPlayer({ id: 40, web_name: 'Rogers', element_type: 3, now_cost: 80 }),
@@ -139,6 +153,24 @@ describe('Phase 1 owner ledger', () => {
     expect(confirmed.bank).toBe(4.7);
     expect(confirmed.confirmedTransfers).toHaveLength(1);
     expect(ledger.squad.some((player) => player.elementId === 426)).toBe(true);
+  });
+
+  it('records the confirmed score, XI and bench while advancing free transfers', () => {
+    const ledger = preGw8Ledger();
+    ledger.squad[ledger.squad.findIndex((player) => player.elementId === 426)] = { elementId: 40, purchasePrice: 8, acquiredGameweek: 8 };
+    ledger.freeTransfers = 0;
+    const confirmed = confirmGameweek({ ledger, record: {
+      gameweek: 8,
+      points: 48,
+      starterIds: [1, 31, 204, 388, 229, 40, 13, 124, 290, 338, 411],
+      benchIds: [110, 165, 176, 441],
+      captainId: 411,
+      viceCaptainId: 40,
+      confirmedAt: '2026-10-27T16:37:00.000Z',
+      confirmationReference: 'Official GW8 points screenshot.',
+    } });
+    expect(confirmed).toMatchObject({ lastConfirmedGameweek: 8, nextGameweek: 9, freeTransfers: 1, captainId: 411, viceCaptainId: 40 });
+    expect(confirmed.confirmedGameweeks[0]).toMatchObject({ gameweek: 8, points: 48 });
   });
 });
 

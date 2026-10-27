@@ -52,7 +52,7 @@ describe('Phase 3 decision layer', () => {
   it('compares affordable transfers without mutating the ledger', () => {
     const owned = squad();
     const incoming = decision(projection(16, 'FWD', 9, 9, 5));
-    const ledger: SquadLedger = { schemaVersion: 1, managerName: 'Test', teamName: 'Test', lastConfirmedGameweek: 7, nextGameweek: 8, bank: 0, freeTransfers: 1, squad: owned.map((player) => ({ elementId: player.projection.playerId, purchasePrice: player.projection.price, acquiredGameweek: 1 })), lastConfirmedXi: [], captainId: null, viceCaptainId: null, chips: {}, confirmedTransfers: [], updatedAt: '2026-01-01T00:00:00Z' };
+    const ledger: SquadLedger = { schemaVersion: 1, managerName: 'Test', teamName: 'Test', lastConfirmedGameweek: 7, nextGameweek: 8, bank: 0, freeTransfers: 1, squad: owned.map((player) => ({ elementId: player.projection.playerId, purchasePrice: player.projection.price, acquiredGameweek: 1 })), lastConfirmedXi: [], captainId: null, viceCaptainId: null, chips: {}, confirmedTransfers: [], confirmedGameweeks: [], updatedAt: '2026-01-01T00:00:00Z' };
     const before = JSON.stringify(ledger);
     const result = optimizeTransfers({ players: [...owned, incoming], ledger, monitored: owned.map((player) => ({ id: player.projection.playerId, sellingPrice: player.projection.price })) as MonitoredPlayer[] });
     expect(result.scenarios.some((item) => item.moves.some((move) => move.inPlayerId === 16))).toBe(true);

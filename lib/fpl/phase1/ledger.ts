@@ -2,18 +2,17 @@ import type {
   ConfirmedTransfer,
   OfficialPlayer,
   SquadLedger,
+  ConfirmedGameweek,
   TransferProposal,
 } from './types';
-
-const INITIAL_UPDATED_AT = '2026-10-23T17:30:00.000Z';
 
 export const DEFAULT_OWNER_LEDGER: SquadLedger = {
   schemaVersion: 1,
   managerName: 'Dominika Kuzniar',
   teamName: 'What The Van Vecke',
-  lastConfirmedGameweek: 7,
-  nextGameweek: 8,
-  bank: 0.9,
+  lastConfirmedGameweek: 8,
+  nextGameweek: 9,
+  bank: 4.7,
   freeTransfers: 1,
   squad: [
     { elementId: 1, purchasePrice: 6.0, acquiredGameweek: 1 },
@@ -23,7 +22,7 @@ export const DEFAULT_OWNER_LEDGER: SquadLedger = {
     { elementId: 229, purchasePrice: 6.0, acquiredGameweek: 1 },
     { elementId: 31, purchasePrice: 4.5, acquiredGameweek: 1 },
     { elementId: 176, purchasePrice: 4.0, acquiredGameweek: 7 },
-    { elementId: 426, purchasePrice: 12.0, acquiredGameweek: 1 },
+    { elementId: 40, purchasePrice: 8.0, acquiredGameweek: 8 },
     { elementId: 13, purchasePrice: 7.5, acquiredGameweek: 1 },
     { elementId: 124, purchasePrice: 6.1, acquiredGameweek: 7 },
     { elementId: 290, purchasePrice: 4.5, acquiredGameweek: 1 },
@@ -32,17 +31,37 @@ export const DEFAULT_OWNER_LEDGER: SquadLedger = {
     { elementId: 165, purchasePrice: 7.7, acquiredGameweek: 4 },
     { elementId: 441, purchasePrice: 4.5, acquiredGameweek: 1 },
   ],
-  lastConfirmedXi: [1, 388, 229, 204, 31, 426, 13, 124, 290, 411, 165],
+  lastConfirmedXi: [1, 31, 204, 388, 229, 40, 13, 124, 290, 338, 411],
   captainId: 411,
-  viceCaptainId: 165,
+  viceCaptainId: 40,
   chips: {
     wildcard: 'available',
     free_hit: 'available',
     triple_captain: 'used',
     bench_boost: 'available',
   },
-  confirmedTransfers: [],
-  updatedAt: INITIAL_UPDATED_AT,
+  confirmedTransfers: [{
+    id: 'confirmed-8-426-40-gw8-screenshot',
+    gameweek: 8,
+    outElementId: 426,
+    inElementId: 40,
+    sellPrice: 11.8,
+    buyPrice: 8.0,
+    hitCost: 0,
+    confirmedAt: '2026-10-27T16:37:00.000Z',
+    confirmationReference: 'User-supplied official FPL GW8 points screenshot.',
+  }],
+  confirmedGameweeks: [{
+    gameweek: 8,
+    points: 48,
+    starterIds: [1, 31, 204, 388, 229, 40, 13, 124, 290, 338, 411],
+    benchIds: [110, 165, 176, 441],
+    captainId: 411,
+    viceCaptainId: 40,
+    confirmedAt: '2026-10-27T16:37:00.000Z',
+    confirmationReference: 'User-supplied official FPL GW8 points screenshot.',
+  }],
+  updatedAt: '2026-10-27T16:37:00.000Z',
 };
 
 export function cloneLedger(ledger: SquadLedger): SquadLedger {
@@ -130,6 +149,29 @@ export function confirmTransfer(args: {
   return next;
 }
 
+export function confirmGameweek(args: {
+  ledger: SquadLedger;
+  record: ConfirmedGameweek;
+}): SquadLedger {
+  const { record } = args;
+  const next = cloneLedger(args.ledger);
+  const squadIds = new Set(next.squad.map((player) => player.elementId));
+  const selected = [...record.starterIds, ...record.benchIds];
+  if (record.gameweek !== next.nextGameweek) throw new Error('Confirmed Gameweek must match the ledger next Gameweek.');
+  if (record.starterIds.length !== 11 || record.benchIds.length !== 4 || new Set(selected).size !== 15) throw new Error('Confirmed Gameweek must contain one unique 11-player XI and four-player bench.');
+  if (selected.some((id) => !squadIds.has(id))) throw new Error('Confirmed Gameweek contains a player outside the confirmed squad.');
+  if (!record.starterIds.includes(record.captainId) || !record.starterIds.includes(record.viceCaptainId)) throw new Error('Captain and vice-captain must be in the confirmed XI.');
+  next.lastConfirmedGameweek = record.gameweek;
+  next.nextGameweek = Math.min(38, record.gameweek + 1);
+  next.lastConfirmedXi = [...record.starterIds];
+  next.captainId = record.captainId;
+  next.viceCaptainId = record.viceCaptainId;
+  next.freeTransfers = Math.min(5, next.freeTransfers + 1);
+  next.confirmedGameweeks = [...next.confirmedGameweeks.filter((item) => item.gameweek !== record.gameweek), structuredClone(record)].sort((a, b) => a.gameweek - b.gameweek);
+  next.updatedAt = record.confirmedAt;
+  return next;
+}
+
 export function validateLedgerShape(ledger: SquadLedger): string[] {
   const problems: string[] = [];
   if (ledger.squad.length !== 15) problems.push(`Expected 15 players, found ${ledger.squad.length}.`);
@@ -137,5 +179,6 @@ export function validateLedgerShape(ledger: SquadLedger): string[] {
   if (new Set(ids).size !== ids.length) problems.push('Confirmed squad contains duplicate player IDs.');
   if (ledger.bank < 0) problems.push('Confirmed bank cannot be negative.');
   if (ledger.freeTransfers < 0 || ledger.freeTransfers > 5) problems.push('Free transfers must be between zero and five.');
+  if (!Array.isArray(ledger.confirmedGameweeks)) problems.push('Confirmed Gameweek history is missing.');
   return problems;
 }

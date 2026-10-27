@@ -125,6 +125,17 @@ export interface ConfirmedTransfer {
   confirmationReference: string;
 }
 
+export interface ConfirmedGameweek {
+  gameweek: number;
+  points: number;
+  starterIds: number[];
+  benchIds: number[];
+  captainId: number;
+  viceCaptainId: number;
+  confirmedAt: string;
+  confirmationReference: string;
+}
+
 export interface SquadLedger {
   schemaVersion: 1;
   managerName: string;
@@ -139,6 +150,7 @@ export interface SquadLedger {
   viceCaptainId: number | null;
   chips: Record<string, 'available' | 'used' | 'unknown'>;
   confirmedTransfers: ConfirmedTransfer[];
+  confirmedGameweeks: ConfirmedGameweek[];
   updatedAt: string;
 }
 

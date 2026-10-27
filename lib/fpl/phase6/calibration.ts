@@ -49,6 +49,7 @@ export interface ProjectionCalibrationStore {
 
 export interface CalibrationRefreshResult {
   forecastCreated: boolean;
+  forecastReplaced: boolean;
   forecastGameweek: number;
   evaluatedGameweeks: number[];
   backend: ProjectionCalibrationStore['backend'];
@@ -163,13 +164,16 @@ export async function refreshProjectionCalibration(options: {
   const existing = await options.store.readAll();
   const byGameweek = new Map(existing.map((record) => [record.gameweek, record]));
   let forecastCreated = false;
+  let forecastReplaced = false;
 
   // Freeze the first stored forecast for a Gameweek so later results cannot leak into it.
-  if (!byGameweek.has(options.snapshot.nextGameweek)) {
+  const existingForecast = byGameweek.get(options.snapshot.nextGameweek);
+  if (!existingForecast || (existingForecast.ledgerStale && !options.snapshot.ledger.stale)) {
     const forecast = createCalibrationForecast(options.snapshot, now);
     await options.store.write(forecast);
     byGameweek.set(forecast.gameweek, forecast);
-    forecastCreated = true;
+    forecastCreated = !existingForecast;
+    forecastReplaced = Boolean(existingForecast);
   }
 
   const pending = [...byGameweek.values()].filter((record) => !record.evaluation && record.gameweek < options.snapshot.nextGameweek);
@@ -186,5 +190,5 @@ export async function refreshProjectionCalibration(options: {
     }
   }
 
-  return { forecastCreated, forecastGameweek: options.snapshot.nextGameweek, evaluatedGameweeks, backend: options.store.backend };
+  return { forecastCreated, forecastReplaced, forecastGameweek: options.snapshot.nextGameweek, evaluatedGameweeks, backend: options.store.backend };
 }
