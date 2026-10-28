@@ -11,22 +11,28 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 
 export function deriveModelLearning(summary: CalibrationDashboardSummary, minimumGameweeks = 4): ModelLearningProfile {
   const evaluatedGameweeks = summary.evaluatedGameweeks.length;
-  const active = evaluatedGameweeks >= minimumGameweeks && Boolean(summary.aggregate);
+  const effectiveGameweeks = summary.effectiveGameweeks;
+  const forwardGameweeks = summary.forwardEvaluatedGameweeks.length;
+  const historicalGameweeks = summary.historicalEvaluatedGameweeks.length;
+  const active = effectiveGameweeks >= minimumGameweeks && Boolean(summary.aggregate);
   const shadowAccuracy = summary.aggregate?.shadowLineupAccuracy ?? null;
   const shadowContradictions = summary.aggregate?.shadowLineupContradictions ?? 0;
   const priceAccuracy = summary.aggregate?.priceDirectionalAccuracy ?? null;
   return {
     active,
     evaluatedGameweeks,
+    effectiveGameweeks,
+    forwardGameweeks,
+    historicalGameweeks,
     minimumGameweeks,
     pointsBiasCorrection: active ? clamp(summary.aggregate!.selectedXiBias, -0.75, 0.75) : 0,
     minutesBiasCorrection: active ? clamp(summary.aggregate!.minutesBias, -8, 8) : 0,
-    priceDirectionalAccuracy: priceAccuracy,
-    shadowLineupPromoted: evaluatedGameweeks >= minimumGameweeks && shadowAccuracy !== null && shadowAccuracy >= 80 && shadowContradictions === 0,
+    priceDirectionalAccuracy: effectiveGameweeks >= minimumGameweeks ? priceAccuracy : null,
+    shadowLineupPromoted: forwardGameweeks >= minimumGameweeks && shadowAccuracy !== null && shadowAccuracy >= 80 && shadowContradictions === 0,
     reason: active
-      ? `Applied capped corrections from ${evaluatedGameweeks} completed Gameweeks; positive bias is subtracted from future projections.`
-      : `Learning locked until ${minimumGameweeks} completed Gameweeks are available (${evaluatedGameweeks}/${minimumGameweeks}).`,
-    shadowLineupPromotion: evaluatedGameweeks < minimumGameweeks || shadowAccuracy === null ? 'locked' : shadowAccuracy >= 80 && shadowContradictions === 0 ? 'eligible' : 'rejected',
-    priceModelStatus: evaluatedGameweeks >= minimumGameweeks && priceAccuracy !== null ? 'calibrated' : 'collecting',
+      ? `Applied capped corrections from ${effectiveGameweeks.toFixed(1)} effective Gameweeks (${forwardGameweeks} forward, ${historicalGameweeks} historical at half weight); positive bias is subtracted from future projections.`
+      : `Learning gate is ${effectiveGameweeks.toFixed(1)}/${minimumGameweeks} effective Gameweeks: ${forwardGameweeks} forward at full weight and ${historicalGameweeks} historical at half weight.`,
+    shadowLineupPromotion: forwardGameweeks < minimumGameweeks || shadowAccuracy === null ? 'locked' : shadowAccuracy >= 80 && shadowContradictions === 0 ? 'eligible' : 'rejected',
+    priceModelStatus: effectiveGameweeks >= minimumGameweeks && priceAccuracy !== null ? 'calibrated' : 'collecting',
   };
 }

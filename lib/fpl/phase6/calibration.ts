@@ -74,6 +74,10 @@ export interface ProjectionCalibrationRecord {
   gameweek: number;
   capturedAt: string;
   modelVersion: 'phase6-calibration-v1';
+  evidenceKind?: 'forward' | 'historical_backtest';
+  evidenceWeight?: number;
+  sourceModelVersion?: string;
+  limitations?: string[];
   ledgerStale: boolean;
   players: CalibrationPlayerForecast[];
   priceSnapshots?: PriceCalibrationSnapshot[];
@@ -99,6 +103,10 @@ export interface CalibrationDashboardSummary {
   backend: ProjectionCalibrationStore['backend'];
   trackedGameweeks: number;
   evaluatedGameweeks: number[];
+  forwardEvaluatedGameweeks: number[];
+  historicalEvaluatedGameweeks: number[];
+  effectiveGameweeks: number;
+  historicalWeight: number;
   pendingGameweeks: number[];
   priceSnapshots: number;
   latestEvaluation: {
@@ -141,29 +149,40 @@ function round(value: number, digits = 2): number {
   return Math.round(value * scale) / scale;
 }
 
+export function calibrationEvidenceWeight(record: ProjectionCalibrationRecord): number {
+  if (record.evidenceKind !== 'historical_backtest') return 1;
+  return Math.max(0, Math.min(1, record.evidenceWeight ?? 0.5));
+}
+
 export function summarizeCalibration(
   records: ProjectionCalibrationRecord[],
   backend: ProjectionCalibrationStore['backend'],
 ): CalibrationDashboardSummary {
   const ordered = records.slice().sort((a, b) => a.gameweek - b.gameweek);
   const evaluated = ordered.filter((record) => record.evaluation);
+  const forwardEvaluated = evaluated.filter((record) => record.evidenceKind !== 'historical_backtest');
+  const historicalEvaluated = evaluated.filter((record) => record.evidenceKind === 'historical_backtest');
   const latest = evaluated.at(-1);
-  const totalXiPlayers = evaluated.reduce((sum, record) => sum + (record.evaluation?.selectedXi.players ?? 0), 0);
+  const totalXiPlayers = evaluated.reduce((sum, record) => sum + (record.evaluation?.selectedXi.players ?? 0) * calibrationEvidenceWeight(record), 0);
   const weighted = (select: (record: ProjectionCalibrationRecord) => number) => totalXiPlayers
-    ? round(evaluated.reduce((sum, record) => sum + select(record) * (record.evaluation?.selectedXi.players ?? 0), 0) / totalXiPlayers)
+    ? round(evaluated.reduce((sum, record) => sum + select(record) * (record.evaluation?.selectedXi.players ?? 0) * calibrationEvidenceWeight(record), 0) / totalXiPlayers)
     : 0;
-  const priceRows = evaluated.map((record) => record.evaluation?.prices).filter((metric): metric is PriceCalibrationMetrics => Boolean(metric?.directionalCalls));
-  const shadowRows = evaluated.map((record) => record.evaluation?.shadowLineups).filter((metric): metric is ShadowLineupMetrics => Boolean(metric?.predictions));
+  const priceRows = evaluated.flatMap((record) => record.evaluation?.prices?.directionalCalls
+    ? [{ metric: record.evaluation.prices, weight: calibrationEvidenceWeight(record) }]
+    : []);
+  // Historical predicted-lineup pages were not archived consistently. Only forward
+  // shadow observations are allowed to contribute to the promotion gate.
+  const shadowRows = forwardEvaluated.map((record) => record.evaluation?.shadowLineups).filter((metric): metric is ShadowLineupMetrics => Boolean(metric?.predictions));
   const aggregate = evaluated.length ? {
     selectedXiMeanAbsoluteError: weighted((record) => record.evaluation!.selectedXi.meanAbsoluteError),
     selectedXiRootMeanSquaredError: weighted((record) => record.evaluation!.selectedXi.rootMeanSquaredError),
     selectedXiBias: weighted((record) => record.evaluation!.selectedXi.bias),
     minutesMeanAbsoluteError: weighted((record) => record.evaluation!.selectedXi.minutesMeanAbsoluteError),
     minutesBias: weighted((record) => record.evaluation!.selectedXi.minutesBias ?? 0),
-    projectedWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiProjectedWithCaptain, 0)),
-    actualWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiActualWithCaptain, 0)),
+    projectedWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiProjectedWithCaptain * calibrationEvidenceWeight(record), 0)),
+    actualWithCaptain: round(evaluated.reduce((sum, record) => sum + record.evaluation!.selectedXiActualWithCaptain * calibrationEvidenceWeight(record), 0)),
     priceDirectionalAccuracy: priceRows.length
-      ? round(priceRows.reduce((sum, row) => sum + row.directionalAccuracy * row.directionalCalls, 0) / priceRows.reduce((sum, row) => sum + row.directionalCalls, 0), 1)
+      ? round(priceRows.reduce((sum, row) => sum + row.metric.directionalAccuracy * row.metric.directionalCalls * row.weight, 0) / priceRows.reduce((sum, row) => sum + row.metric.directionalCalls * row.weight, 0), 1)
       : null,
     shadowLineupAccuracy: shadowRows.length
       ? round(shadowRows.reduce((sum, row) => sum + row.accuracy * row.predictions, 0) / shadowRows.reduce((sum, row) => sum + row.predictions, 0), 1)
@@ -175,6 +194,10 @@ export function summarizeCalibration(
     backend,
     trackedGameweeks: ordered.length,
     evaluatedGameweeks: evaluated.map((record) => record.gameweek),
+    forwardEvaluatedGameweeks: forwardEvaluated.map((record) => record.gameweek),
+    historicalEvaluatedGameweeks: historicalEvaluated.map((record) => record.gameweek),
+    effectiveGameweeks: round(evaluated.reduce((sum, record) => sum + calibrationEvidenceWeight(record), 0), 1),
+    historicalWeight: 0.5,
     pendingGameweeks: ordered.filter((record) => !record.evaluation).map((record) => record.gameweek),
     priceSnapshots: ordered.reduce((sum, record) => sum + (record.priceSnapshots?.length ?? 0), 0),
     latestEvaluation: latest?.evaluation ? {
@@ -230,6 +253,7 @@ function buildPriceMetrics(record: ProjectionCalibrationRecord, currentPrices: M
   }];
   const rows = snapshots.flatMap((snapshot, index) => {
     const next = snapshots[index + 1];
+    if (record.evidenceKind === 'historical_backtest' && !next) return [];
     const nextPrices = next ? new Map(next.players.map((player) => [player.playerId, player.price])) : currentPrices;
     return snapshot.players.flatMap((player) => {
       const current = nextPrices.get(player.playerId);
@@ -289,6 +313,9 @@ export function createCalibrationForecast(snapshot: PhaseFiveSnapshot, capturedA
     gameweek: snapshot.nextGameweek,
     capturedAt: capturedAt.toISOString(),
     modelVersion: 'phase6-calibration-v1',
+    evidenceKind: 'forward',
+    evidenceWeight: 1,
+    sourceModelVersion: snapshot.viewVersion,
     ledgerStale: snapshot.ledger.stale,
     players: snapshot.players.map((player) => ({
       playerId: player.id,

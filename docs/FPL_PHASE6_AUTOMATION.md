@@ -19,6 +19,16 @@ Local development uses `data/fpl/phase6/latest.json`; every production runtime (
 
 Apply both [`supabase/migrations/202610260001_fpl_dashboard_snapshots.sql`](../supabase/migrations/202610260001_fpl_dashboard_snapshots.sql) and [`supabase/migrations/202610270001_fpl_projection_calibration.sql`](../supabase/migrations/202610270001_fpl_projection_calibration.sql) to the existing Supabase project before enabling the cron. Both tables have row-level security enabled and grant no browser role access. Reads and writes happen server-side with the existing service-role key.
 
+## Historical calibration warm start
+
+Archived pre-deadline recommendation files can seed points, minutes, captaincy and price-direction evaluation without pretending that reconstructed forecasts are live evidence:
+
+```powershell
+npx --yes tsx@4.20.6 scripts/fpl-backfill-calibration.ts --archive-dir "C:\path\to\data\fpl" --gameweeks 2,3,4,5 --remote
+```
+
+The importer selects the final valid pre-deadline forecast for each Gameweek, evaluates it against the official event endpoint and writes an idempotent calibration record. It will not overwrite a forward record. Historical records count at 50%, so four backtests contribute 2.0 effective Gameweeks; forward records count at 100%. Historical predicted-lineup observations are deliberately excluded because the source pages were not archived consistently. The predicted-XI promotion gate therefore remains forward-only.
+
 The automation reuses existing environment variables:
 
 - `NEXT_PUBLIC_SUPABASE_URL`

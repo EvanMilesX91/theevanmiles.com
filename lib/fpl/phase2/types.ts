@@ -58,6 +58,9 @@ export interface ShadowLineupSignal {
 export interface ModelLearningAdjustment {
   active: boolean;
   evaluatedGameweeks: number;
+  effectiveGameweeks: number;
+  forwardGameweeks: number;
+  historicalGameweeks: number;
   pointsBiasCorrection: number;
   minutesBiasCorrection: number;
   priceDirectionalAccuracy: number | null;

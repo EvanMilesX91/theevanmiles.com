@@ -129,7 +129,7 @@ export async function runPhaseTwo(options: RunPhaseTwoOptions = {}): Promise<Pha
       'Role changes require confirmed-lineup evidence: two matching starts for confirmed, one for possible.',
       'Predicted lineups run in shadow mode and cannot affect selection until at least four completed Gameweeks meet the promotion accuracy gate.',
       'Ranges express model and minutes uncertainty; they are not calibrated betting intervals.',
-      options.learningAdjustment?.active ? options.learningAdjustment.reason : 'Automatic bias correction remains locked until four completed calibration Gameweeks exist.',
+      options.learningAdjustment?.active ? options.learningAdjustment.reason : 'Automatic bias correction remains locked until four effective calibration Gameweeks exist.',
     ],
   };
   if (persist) await writePhaseTwoSnapshot(snapshot, root);

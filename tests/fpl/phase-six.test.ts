@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PhaseFiveSnapshot } from '@/lib/fpl/phase5';
 import {
   classifySnapshotFreshness,
+  createHistoricalCalibrationRecord,
   createCalibrationForecast,
   deriveModelLearning,
   evaluateCalibrationRecord,
@@ -104,6 +105,9 @@ describe('Phase 6 automation', () => {
     expect(summary).toMatchObject({
       status: 'measured',
       evaluatedGameweeks: [9],
+      forwardEvaluatedGameweeks: [9],
+      historicalEvaluatedGameweeks: [],
+      effectiveGameweeks: 1,
       pendingGameweeks: [],
       aggregate: { selectedXiMeanAbsoluteError: 2, selectedXiBias: 0, projectedWithCaptain: 16, actualWithCaptain: 18 },
       latestEvaluation: { gameweek: 9, projectedWithCaptain: 16, actualWithCaptain: 18 },
@@ -123,7 +127,51 @@ describe('Phase 6 automation', () => {
     const locked = deriveModelLearning(summarizeCalibration(records.slice(0, 3), 'memory'));
     const active = deriveModelLearning(summarizeCalibration(records, 'memory'));
     expect(locked.active).toBe(false);
-    expect(active).toMatchObject({ active: true, evaluatedGameweeks: 4, pointsBiasCorrection: 0.75, minutesBiasCorrection: 8 });
+    expect(active).toMatchObject({ active: true, evaluatedGameweeks: 4, effectiveGameweeks: 4, forwardGameweeks: 4, historicalGameweeks: 0, pointsBiasCorrection: 0.75, minutesBiasCorrection: 8 });
+  });
+
+  it('uses historical backtests at half weight and keeps predicted-lineup learning forward-only', () => {
+    const snapshot = { ...phaseFive(), players: [{ id: 1, name: 'One', owned: true, price: 5, xPts1: 6, expectedMinutes: 80, confidence: 80, pricePressure: { direction: 'stable', confidence: 30 } }], lineup: { starterIds: [1], captainId: 1 } } as unknown as PhaseFiveSnapshot;
+    const evaluated = (gameweek: number, evidenceKind: 'forward' | 'historical_backtest') => evaluateCalibrationRecord({
+      ...createCalibrationForecast({ ...snapshot, nextGameweek: gameweek } as PhaseFiveSnapshot),
+      gameweek,
+      evidenceKind,
+      evidenceWeight: evidenceKind === 'historical_backtest' ? 0.5 : 1,
+    }, { elements: [{ id: 1, stats: { total_points: 3, minutes: 60 } }] });
+    const historical = [2, 3, 4, 5].map((gameweek) => evaluated(gameweek, 'historical_backtest'));
+    const warmStart = summarizeCalibration(historical, 'memory');
+    expect(warmStart).toMatchObject({
+      historicalEvaluatedGameweeks: [2, 3, 4, 5],
+      forwardEvaluatedGameweeks: [],
+      effectiveGameweeks: 2,
+    });
+    expect(deriveModelLearning(warmStart)).toMatchObject({ active: false, effectiveGameweeks: 2, historicalGameweeks: 4, forwardGameweeks: 0, shadowLineupPromotion: 'locked' });
+    const active = deriveModelLearning(summarizeCalibration([...historical, evaluated(9, 'forward'), evaluated(10, 'forward')], 'memory'));
+    expect(active).toMatchObject({ active: true, effectiveGameweeks: 4, historicalGameweeks: 4, forwardGameweeks: 2, shadowLineupPromotion: 'locked' });
+  });
+
+  it('converts an archived pre-deadline squad into reduced-weight calibration evidence', () => {
+    const player = (id: number, name: string, xPts: number) => ({
+      id, name, price: 5, confidence: 70, expectedMinutesNext: 80, xPts1: xPts,
+      fixtures: [{ gameweek: 4, kickoffTime: '2026-09-12T14:00:00.000Z' }],
+      gameweekProjections: [{ gameweek: 4, expectedMinutes: 79, xPts }],
+      pricePrediction: { direction: 'rise', likelihood: 5, confidence: 90 },
+    });
+    const one = player(1, 'One', 6);
+    const two = player(2, 'Two', 4);
+    const record = createHistoricalCalibrationRecord({
+      modelVersion: 'legacy-v1', generatedAt: '2026-09-12T08:00:00.000Z', nextGameweek: 4,
+      primary: { players: [one, two], starters: [one], captain: one },
+    });
+    expect(record).toMatchObject({
+      gameweek: 4,
+      evidenceKind: 'historical_backtest',
+      evidenceWeight: 0.5,
+      sourceModelVersion: 'legacy-v1',
+    });
+    expect(record.players[0]).toMatchObject({ playerId: 1, starter: true, captain: true, projectedPoints: 6, projectedMinutes: 79, priceDirection: 'likely_rise' });
+    const evaluated = evaluateCalibrationRecord(record, { elements: [{ id: 1, stats: { total_points: 5, minutes: 90 } }, { id: 2, stats: { total_points: 2, minutes: 20 } }] }, new Date(), new Map([[1, 5.1]]));
+    expect(evaluated.evaluation?.prices).toMatchObject({ players: 0, directionalCalls: 0 });
   });
 
   it('keeps the first pre-deadline forecast instead of overwriting it', async () => {
