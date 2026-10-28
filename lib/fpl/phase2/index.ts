@@ -3,6 +3,7 @@ export * from './lineups';
 export * from './forward-minutes';
 export * from './predicted-lineups';
 export * from './livescore';
+export * from './commentary';
 export * from './team-model';
 export * from './player-model';
 export * from './xpts';

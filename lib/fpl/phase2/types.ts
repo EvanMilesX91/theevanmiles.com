@@ -2,6 +2,53 @@ import type { PhaseOneSnapshot, Position, SourceHealth } from '../phase1';
 
 export type TacticalRole = 'goalkeeper' | 'defensive' | 'central' | 'advanced' | 'forward' | 'unknown';
 
+export type CommentarySignalKind =
+  | 'attacking_threat'
+  | 'creative_involvement'
+  | 'set_piece_duty'
+  | 'defensive_activity'
+  | 'advanced_role'
+  | 'availability_context';
+
+export interface CommentaryObservation {
+  playerId: number;
+  playerName: string;
+  teamId: number;
+  gameweek: number;
+  fixtureId: number;
+  opponent: string;
+  minute: number | null;
+  addedTime: number | null;
+  signal: CommentarySignalKind;
+  strength: number;
+  derivedSummary: string;
+  source: 'LiveScore commentary';
+  sourceUrl: string;
+  retrievedAt: string;
+}
+
+export interface CommentarySignalSummary {
+  kind: CommentarySignalKind;
+  observations: number;
+  gameweeks: number;
+  score: number;
+}
+
+export interface PlayerCommentaryInsight {
+  playerId: number;
+  playerName: string;
+  team: string;
+  sampleGameweeks: number[];
+  observations: number;
+  signals: CommentarySignalSummary[];
+  status: 'watch' | 'corroborated';
+  confidence: number;
+  headline: string;
+  evidence: string[];
+  sourceUrls: string[];
+  modelEffect: 'none' | 'confidence_only' | 'role_evidence';
+}
+
 export interface LineupObservation {
   playerId: number;
   gameweek: number;
@@ -188,6 +235,7 @@ export interface PlayerProjection {
   oneLineReason: string;
   shadowLineup?: ShadowLineupSignal | null;
   availabilityConsensus?: AvailabilityConsensus;
+  commentary?: PlayerCommentaryInsight | null;
 }
 
 export interface PhaseTwoSnapshot {
@@ -202,6 +250,7 @@ export interface PhaseTwoSnapshot {
   injuryImpacts: InjuryImpact[];
   projections: PlayerProjection[];
   roleChanges: PlayerProjection[];
+  commentaryInsights: PlayerCommentaryInsight[];
   shadowLineups: ShadowLineupSignal[];
   modelNotes: string[];
 }

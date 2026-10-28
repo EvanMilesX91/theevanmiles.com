@@ -10,7 +10,7 @@ import type { AvailabilityObservation, LineupObservation } from './types';
 const LIVE_SCORE_ROOT = 'https://www.livescore.com/en/football';
 const LIVE_SCORE_API = 'https://prod-cdn-public-api.lsmedia1.com/v1/api/app';
 
-interface LiveScoreEvent {
+export interface LiveScoreEvent {
   id?: string;
   startDateTimeString?: string;
   homeTeamName?: string;
@@ -57,7 +57,7 @@ function normalize(value: string): string {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function canonicalTeam(value: string): string {
+export function canonicalTeam(value: string): string {
   const team = normalize(value);
   const aliases: Record<string, string> = {
     'afc bournemouth': 'bournemouth',
@@ -71,7 +71,7 @@ function canonicalTeam(value: string): string {
   return aliases[team] ?? team;
 }
 
-function slug(value: string): string {
+export function liveScoreSlug(value: string): string {
   return normalize(value).replace(/\s+/g, '-');
 }
 
@@ -168,7 +168,7 @@ export function parseLiveScoreLineup(args: {
     const home = side.Tnb === 1;
     const teamId = home ? args.fixture.team_h : args.fixture.team_a;
     const formation = side.Fo?.join('-') ?? null;
-    const sourceUrl = `${LIVE_SCORE_ROOT}/england/premier-league/${slug(args.homeName)}-vs-${slug(args.awayName)}/${args.eventId}/lineups/`;
+    const sourceUrl = `${LIVE_SCORE_ROOT}/england/premier-league/${liveScoreSlug(args.homeName)}-vs-${liveScoreSlug(args.awayName)}/${args.eventId}/lineups/`;
     for (const source of side.Ps ?? []) {
       if (source.Pos === 10 || normalize(source.Pon ?? '') === 'coach') continue;
       const player = matchPlayer(source, teamId, args.bootstrap);
@@ -230,19 +230,16 @@ function eventMatchesFixture(event: LiveScoreEvent, fixture: OfficialFixture, te
     canonicalTeam(event.awayTeamName ?? '') === canonicalTeam(officialName(fixture.team_a, teams));
 }
 
-export async function fetchLiveScoreObservations(args: {
+export async function discoverLiveScoreFixtureEvents(args: {
   bootstrap: OfficialBootstrap;
   fixtures: OfficialFixture[];
-  currentGameweek: number;
+  targetGameweeks: number[];
   fetcher?: FetchLike;
-  now?: Date;
-}): Promise<{ observations: LineupObservation[]; availability: AvailabilityObservation[]; unresolved: string[]; matches: number }> {
+}): Promise<Array<{ fixture: OfficialFixture; event: LiveScoreEvent }>> {
   const fetcher = args.fetcher ?? fetch;
-  const completed = args.bootstrap.events.filter((event) => event.finished && event.id <= args.currentGameweek).map((event) => event.id).sort((a, b) => a - b);
-  const targetGameweeks = new Set(completed.slice(-2));
-  const fixtures = args.fixtures.filter((fixture) => fixture.finished && fixture.event !== null && targetGameweeks.has(fixture.event));
-  if (!fixtures.length) return { observations: [], availability: [], unresolved: [], matches: 0 };
-
+  const targets = new Set(args.targetGameweeks);
+  const fixtures = args.fixtures.filter((fixture) => fixture.finished && fixture.event !== null && targets.has(fixture.event));
+  if (!fixtures.length) return [];
   const resultsHtml = await text(`${LIVE_SCORE_ROOT}/england/premier-league/results/`, fetcher);
   const latestEvents = parseLiveScoreResults(resultsHtml).filter((event) => event.competitionId === '65' && event.id);
   if (!latestEvents.length) throw new Error('LiveScore results page returned no Premier League event identifiers.');
@@ -256,22 +253,38 @@ export async function fetchLiveScoreObservations(args: {
     }
   };
   collectTeams(latestEvents);
-  // The results page exposes the latest matchday. Team overviews then provide the preceding
-  // matches and reveal any remaining club IDs, without relying on hard-coded IDs.
   for (let round = 0; round < 2; round += 1) {
     const pending = [...teamRefs.values()].filter((team) => !visited.has(team.id));
     if (!pending.length) break;
     const resultPages = await Promise.all(pending.map(async (team) => {
       visited.add(team.id);
-      return parseLiveScoreResults(await text(`${LIVE_SCORE_ROOT}/team/${slug(team.name)}/${team.id}/overview/`, fetcher));
+      return parseLiveScoreResults(await text(`${LIVE_SCORE_ROOT}/team/${liveScoreSlug(team.name)}/${team.id}/overview/`, fetcher));
     }));
     const leagueEvents = resultPages.flat().filter((event) => event.competitionId === '65' && event.id);
     for (const event of leagueEvents) eventPool.set(event.id!, event);
     collectTeams(leagueEvents);
   }
-  const matched = fixtures.flatMap((fixture) => {
+  return fixtures.flatMap((fixture) => {
     const event = [...eventPool.values()].find((candidate) => eventMatchesFixture(candidate, fixture, args.bootstrap.teams));
     return event?.id ? [{ fixture, event }] : [];
+  });
+}
+
+export async function fetchLiveScoreObservations(args: {
+  bootstrap: OfficialBootstrap;
+  fixtures: OfficialFixture[];
+  currentGameweek: number;
+  fetcher?: FetchLike;
+  now?: Date;
+}): Promise<{ observations: LineupObservation[]; availability: AvailabilityObservation[]; unresolved: string[]; matches: number }> {
+  const fetcher = args.fetcher ?? fetch;
+  const completed = args.bootstrap.events.filter((event) => event.finished && event.id <= args.currentGameweek).map((event) => event.id).sort((a, b) => a - b);
+  const targetGameweeks = new Set(completed.slice(-2));
+  const matched = await discoverLiveScoreFixtureEvents({
+    bootstrap: args.bootstrap,
+    fixtures: args.fixtures,
+    targetGameweeks: [...targetGameweeks],
+    fetcher,
   });
   const retrievedAt = (args.now ?? new Date()).toISOString();
   const parsed = await Promise.all(matched.map(async ({ fixture, event }) => {

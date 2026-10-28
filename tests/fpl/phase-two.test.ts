@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MonitoredPlayer, OfficialBootstrap, OfficialFixture, OfficialPlayer } from '@/lib/fpl/phase1';
-import { assessRole, assessSustainability, buildAvailabilityConsensus, buildTeamRatings, calculateInjuryImpacts, parseForwardMinutes, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, parseShadowLineups, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
+import { aggregateCommentaryInsights, assessRole, assessSustainability, buildAvailabilityConsensus, buildTeamRatings, calculateInjuryImpacts, parseForwardMinutes, parseLiveScoreCommentary, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, parseShadowLineups, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
 import type { TeamRating } from '@/lib/fpl/phase2';
 
 const window = { gameweeks: 5, appearances: 5, startEquivalents: 5, minutes: 430, points: 25, pointsPerAppearance: 5, goals: 2, assists: 1, cleanSheets: 1, bonus: 3, defensiveContribution: 25, expectedGoals: 1.8, expectedAssists: 0.8, expectedGoalInvolvements: 2.6, expectedGoalInvolvementsPer90: 0.54 };
@@ -117,6 +117,54 @@ describe('Phase 2 modelling', () => {
     expect(result.unresolved).toEqual([]);
     expect(result.observations[0]).toMatchObject({ playerId: 10, gameweek: 8, status: 'starter', actualPosition: 'MID', formation: '4-3-3', confidence: 98 });
     expect(result.availability[0]).toMatchObject({ playerId: 11, status: 'injury', returnDate: '2026-11-30T00:00:00.000Z', returnLabel: 'Late November' });
+  });
+
+  it('turns commentary into derived context without retaining the source prose', () => {
+    const bootstrap = {
+      events: [],
+      teams: [{ id: 1, name: 'Alpha', short_name: 'ALP' }, { id: 2, name: 'Beta', short_name: 'BET' }],
+      elements: [
+        official({ id: 10, first_name: 'Anton', second_name: 'Stach', web_name: 'Stach', team: 1, corners_and_indirect_freekicks_order: 1 }),
+        official({ id: 11, first_name: 'Sean', second_name: 'Longstaff', web_name: 'Longstaff', team: 1 }),
+      ],
+    } satisfies OfficialBootstrap;
+    const fixture = { id: 88, event: 8, kickoff_time: null, team_h: 1, team_a: 2, team_h_difficulty: 2, team_a_difficulty: 4, finished: true } satisfies OfficialFixture;
+    const result = parseLiveScoreCommentary({
+      response: { Com: [
+        { Min: 90, MinEx: 4, Txt: '<b>Stach</b> delivers another dangerous corner into the box.' },
+        { Min: 90, MinEx: 5, Txt: '<b>Longstaff</b> has a shot saved after a late run.' },
+      ] },
+      fixture, eventId: 'event-1', homeName: 'Alpha', awayName: 'Beta', bootstrap, retrievedAt: '2026-10-28T00:00:00.000Z',
+    });
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ playerId: 10, signal: 'set_piece_duty', gameweek: 8 }),
+      expect.objectContaining({ playerId: 11, signal: 'attacking_threat', gameweek: 8 }),
+    ]));
+    expect(JSON.stringify(result)).not.toContain('dangerous corner into the box');
+  });
+
+  it('keeps one-match commentary on the watchlist and corroborates repeated or structured evidence', () => {
+    const bootstrap = {
+      events: [],
+      teams: [{ id: 1, name: 'Alpha', short_name: 'ALP' }, { id: 2, name: 'Beta', short_name: 'BET' }],
+      elements: [
+        official({ id: 10, first_name: 'Anton', second_name: 'Stach', web_name: 'Stach', team: 1, corners_and_indirect_freekicks_order: 1 }),
+        official({ id: 11, first_name: 'Sean', second_name: 'Longstaff', web_name: 'Longstaff', team: 1 }),
+      ],
+    } satisfies OfficialBootstrap;
+    const observation = (playerId: number, gameweek: number, signal: 'set_piece_duty' | 'attacking_threat') => ({
+      playerId, playerName: playerId === 10 ? 'Stach' : 'Longstaff', teamId: 1, gameweek, fixtureId: gameweek,
+      opponent: 'Beta', minute: 50, addedTime: null, signal, strength: 65,
+      derivedSummary: `${signal} noted in GW${gameweek}.`, source: 'LiveScore commentary' as const,
+      sourceUrl: 'https://example.test', retrievedAt: '2026-10-28T00:00:00.000Z',
+    });
+    const insights = aggregateCommentaryInsights({
+      observations: [observation(10, 7, 'set_piece_duty'), observation(11, 7, 'attacking_threat'), observation(11, 7, 'attacking_threat'), observation(11, 7, 'attacking_threat'), observation(11, 7, 'attacking_threat')],
+      bootstrap,
+      lineups: [],
+    });
+    expect(insights.find((row) => row.playerId === 10)).toMatchObject({ status: 'corroborated', modelEffect: 'confidence_only' });
+    expect(insights.find((row) => row.playerId === 11)).toMatchObject({ status: 'watch', modelEffect: 'none' });
   });
 
   it('keeps predicted lineups in shadow mode and surfaces contradictions', () => {

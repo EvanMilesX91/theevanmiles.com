@@ -2,6 +2,7 @@ import { fetchPhaseOneOfficialData, runPhaseOne, type FetchLike, type PhaseOneOf
 import { loadLineupObservations, assessRole } from './lineups';
 import { loadForwardMinutes } from './forward-minutes';
 import { loadShadowLineups } from './predicted-lineups';
+import { aggregateCommentaryInsights, loadCommentaryObservations } from './commentary';
 import { projectMinutes, assessSustainability } from './player-model';
 import { calculateInjuryImpacts, buildTeamRatings } from './team-model';
 import { projectPlayer } from './xpts';
@@ -102,7 +103,7 @@ export async function runPhaseTwo(options: RunPhaseTwoOptions = {}): Promise<Pha
   const persist = options.persist ?? process.env.VERCEL !== '1';
   const officialData = options.officialData ?? await fetchPhaseOneOfficialData(options.fetcher);
   const phaseOne = await runPhaseOne({ fetcher: options.fetcher, persist, root, ledger: options.ledger, officialData, now: options.now });
-  const [lineup, forwardMinutes, shadowLineups] = await Promise.all([
+  const [lineup, forwardMinutes, shadowLineups, commentary] = await Promise.all([
     loadLineupObservations({
       root,
       currentGameweek: officialData.currentGameweek,
@@ -114,11 +115,20 @@ export async function runPhaseTwo(options: RunPhaseTwoOptions = {}): Promise<Pha
     }),
     loadForwardMinutes({ nextGameweek: officialData.nextGameweek, fetcher: options.fetcher, now: options.now }),
     loadShadowLineups({ bootstrap: officialData.bootstrap, fetcher: options.fetcher, now: options.now }),
+    loadCommentaryObservations({
+      bootstrap: officialData.bootstrap,
+      fixtures: officialData.fixtures,
+      currentGameweek: officialData.currentGameweek,
+      fetcher: options.fetcher,
+      now: options.now,
+    }),
   ]);
   const officialById = new Map(officialData.bootstrap.elements.map((player) => [player.id, player]));
   const forwardById = new Map(forwardMinutes.signals.map((signal) => [signal.playerId, signal]));
   const availabilityById = new Map(lineup.availability.map((signal) => [signal.playerId, signal]));
   const shadowById = new Map(shadowLineups.signals.map((signal) => [signal.playerId, signal]));
+  const commentaryInsights = aggregateCommentaryInsights({ observations: commentary.observations, bootstrap: officialData.bootstrap, lineups: lineup.observations });
+  const commentaryById = new Map(commentaryInsights.map((insight) => [insight.playerId, insight]));
   const consensusById = new Map(officialData.bootstrap.elements.map((official) => [official.id, buildAvailabilityConsensus(official, availabilityById.get(official.id), shadowById.get(official.id))]));
   const confirmedIndependent = lineup.availability.filter((signal) => consensusById.get(signal.playerId)?.level === 'confirmed');
   const injuryImpacts = calculateInjuryImpacts(officialData.bootstrap, confirmedIndependent, options.now);
@@ -126,7 +136,11 @@ export async function runPhaseTwo(options: RunPhaseTwoOptions = {}): Promise<Pha
   const projections = phaseOne.players.map((player) => {
     const official = officialById.get(player.id);
     if (!official) throw new Error(`Missing official player ${player.id}.`);
-    const role = assessRole(player, lineup.observations, officialData.currentGameweek);
+    const assessedRole = assessRole(player, lineup.observations, officialData.currentGameweek);
+    const commentaryInsight = commentaryById.get(player.id) ?? null;
+    const role = commentaryInsight?.modelEffect === 'role_evidence'
+      ? { ...assessedRole, confidence: Math.min(94, assessedRole.confidence + 5), evidence: [...assessedRole.evidence, 'Repeated commentary role context agrees with confirmed-lineup positioning; confidence receives a capped five-point uplift.'] }
+      : assessedRole;
     const consensus = consensusById.get(player.id)!;
     const rawMinutes = projectMinutes(player, official, role, player.nextFixtures.length, Math.max(1, officialData.currentGameweek), forwardById.get(player.id), consensus.level === 'confirmed' ? availabilityById.get(player.id) : undefined, options.now);
     const shadowAdjusted = applyPromotedShadowLineup(rawMinutes, shadowById.get(player.id), options.learningAdjustment);
@@ -134,24 +148,27 @@ export async function runPhaseTwo(options: RunPhaseTwoOptions = {}): Promise<Pha
     const sustainability = assessSustainability(player, official);
     const projected = projectPlayer({ player, official, officialTeams: officialData.bootstrap.teams, teamRatings, minutes, role, sustainability });
     const calibrated = calibratePoints(projected, options.learningAdjustment);
-    const confidence = consensus.level === 'single_source' || consensus.level === 'conflict' ? Math.max(20, calibrated.confidence - 8) : calibrated.confidence;
-    return { ...calibrated, confidence, shadowLineup: shadowById.get(player.id) ?? null, availabilityConsensus: consensus };
+    const availabilityAdjusted = consensus.level === 'single_source' || consensus.level === 'conflict' ? Math.max(20, calibrated.confidence - 8) : calibrated.confidence;
+    const confidence = commentaryInsight?.status === 'corroborated' ? Math.min(92, availabilityAdjusted + 2) : availabilityAdjusted;
+    return { ...calibrated, confidence, shadowLineup: shadowById.get(player.id) ?? null, availabilityConsensus: consensus, commentary: commentaryInsight };
   }).sort((a, b) => b.xPts6 - a.xPts6);
   const snapshot: PhaseTwoSnapshot = {
     schemaVersion: 2, modelVersion: 'phase2-transparent-v2', generatedAt: (options.now ?? new Date()).toISOString(),
     currentGameweek: officialData.currentGameweek, nextGameweek: officialData.nextGameweek,
-    sourceHealth: [...officialData.sourceHealth, lineup.health, forwardMinutes.health, shadowLineups.health, {
+    sourceHealth: [...officialData.sourceHealth, lineup.health, commentary.health, forwardMinutes.health, shadowLineups.health, {
       key: 'availability_consensus', status: [...consensusById.values()].some((item) => item.level === 'conflict') ? 'degraded' : 'healthy',
       retrievedAt: (options.now ?? new Date()).toISOString(), records: [...consensusById.values()].filter((item) => item.level !== 'clear').length,
       message: `${[...consensusById.values()].filter((item) => item.level === 'confirmed').length} confirmed multi-source flags; ${[...consensusById.values()].filter((item) => item.level === 'single_source').length} single-source flags affect confidence only; ${[...consensusById.values()].filter((item) => item.level === 'conflict').length} conflicts are surfaced.`,
     }], phaseOne, teamRatings, injuryImpacts, projections,
     roleChanges: projections.filter((projection) => (projection.role.change === 'confirmed' || projection.role.change === 'possible') && (projection.role.latestGameweek ?? 0) >= officialData.currentGameweek - 2),
+    commentaryInsights,
     shadowLineups: shadowLineups.signals,
     modelNotes: [
       'xPts are transparent model estimates, not official FPL projections.',
       'Expected minutes combine official availability, season starts, last-five minutes and a capped independent benchmark; model disagreement lowers confidence rather than being hidden.',
       'Team ratings blend actual goals with official FPL strength priors, shrink small samples toward league average, and apply capped injury effects.',
       'Role changes require confirmed-lineup evidence: two matching starts for confirmed, one for possible.',
+      'LiveScore commentary is converted into derived context labels across the previous four completed Gameweeks. Raw text is not stored, single-match flags remain watchlist-only, and commentary never directly adds xPts.',
       'Predicted lineups run in shadow mode and cannot affect selection until at least four completed Gameweeks meet the promotion accuracy gate.',
       'Independent injury and predicted-lineup reports require source consensus before they can change expected minutes or team-strength injury multipliers; single-source reports only lower confidence.',
       'Ranges express model and minutes uncertainty; they are not calibrated betting intervals.',

@@ -10,13 +10,14 @@ import type { DashboardPlayer } from '@/lib/fpl/phase5';
 import type { PhaseSixSnapshot } from '@/lib/fpl/phase6';
 import styles from './FplDashboard.module.css';
 
-type Tab = 'overview' | 'squad' | 'transfers' | 'council' | 'data';
+type Tab = 'overview' | 'squad' | 'transfers' | 'council' | 'context' | 'data';
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Decision' },
   { id: 'squad', label: 'Squad' },
   { id: 'transfers', label: 'Transfers' },
   { id: 'council', label: 'Council' },
+  { id: 'context', label: 'Match Context' },
   { id: 'data', label: 'Data' },
 ];
 
@@ -96,8 +97,10 @@ function PlayerDrawer({ player, onClose }: { player: DashboardPlayer; onClose: (
             <div><dt>Return profile</dt><dd>{titleCase(player.sustainability)}</dd></div>
             <div><dt>Predicted XI shadow</dt><dd>{player.shadowLineupPrediction ? `${titleCase(player.shadowLineupPrediction)} · ${player.shadowLineupConfidence}%${player.shadowLineupContradiction ? ' conflict' : ''}` : 'No signal'}</dd></div>
             <div><dt>Availability consensus</dt><dd>{player.availabilityConsensus ? titleCase(player.availabilityConsensus.level) : 'No signal'}</dd></div>
+            <div><dt>Commentary context</dt><dd>{player.commentary ? `${titleCase(player.commentary.status)} · ${player.commentary.confidence}%` : 'No signal'}</dd></div>
           </dl>
           {player.availabilityConsensus && <p className={styles.caveat}>{player.availabilityConsensus.explanation}</p>}
+          {player.commentary && <><p className={styles.caveat}>{player.commentary.headline} {titleCase(player.commentary.modelEffect)}.</p><ul className={styles.notesList}>{player.commentary.evidence.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul>{player.commentary.sourceUrls?.[0] && <a className={styles.textButton} href={player.commentary.sourceUrls[0]} target="_blank" rel="noreferrer">Open supporting match commentary <ArrowRight size={15} /></a>}</>}
           <p className={styles.caveat}>{player.pricePressure.caveat}</p>
         </section>
       </aside>
@@ -174,6 +177,7 @@ export default function FplDashboard() {
   const healthySources = data.sourceHealth.filter((source) => source.status === 'healthy').length;
   const compareFirst = compareA ? playerById.get(compareA) : null;
   const compareSecond = compareB ? playerById.get(compareB) : null;
+  const commentaryInsights = data.commentaryInsights ?? [];
 
   return (
     <main className={styles.page}>
@@ -271,6 +275,24 @@ export default function FplDashboard() {
           </section>
           <section className={styles.comparePanel}><div><span>Player comparison</span><h3>Put two decisions side by side</h3></div><div className={styles.selectRow}><select value={compareA ?? ''} onChange={(event) => setCompareA(Number(event.target.value) || null)}><option value="">Select player A</option>{data.players.slice().sort((a, b) => a.name.localeCompare(b.name)).map((player) => <option value={player.id} key={player.id}>{player.name} · {player.team}</option>)}</select><span>VS</span><select value={compareB ?? ''} onChange={(event) => setCompareB(Number(event.target.value) || null)}><option value="">Select player B</option>{data.players.slice().sort((a, b) => a.name.localeCompare(b.name)).map((player) => <option value={player.id} key={player.id}>{player.name} · {player.team}</option>)}</select></div>{compareFirst && compareSecond && <div className={styles.compareResult}><div><strong>{compareFirst.name}</strong><span>{compareFirst.xPts3} xPts · {price(compareFirst.price)}</span><em>Council {compareFirst.council.score}</em></div><div className={styles.compareDelta}><span>3GW edge</span><strong>{signed(compareFirst.xPts3 - compareSecond.xPts3)}</strong><small>{price(Math.abs(compareFirst.price - compareSecond.price))} price gap</small></div><div><strong>{compareSecond.name}</strong><span>{compareSecond.xPts3} xPts · {price(compareSecond.price)}</span><em>Council {compareSecond.council.score}</em></div></div>}</section>
           <section><div className={styles.sectionHeading}><span>Notable omissions</span><h3>Why not them?</h3></div><div className={styles.omissionGrid}>{data.notableOmissions.map((omission) => <article key={omission.playerId}><div><span>{price(omission.price)} · {omission.xPts3} xPts</span><strong>{omission.playerName}</strong></div><b>{omission.councilScore}</b><p>{omission.whyExcluded}</p><small>{omission.whatWouldChange}</small></article>)}</div></section>
+        </>}
+
+        {tab === 'context' && <>
+          <section className={styles.councilIntro}><div><span>Previous four Gameweeks</span><h2>What the scoreline did not say.</h2><p>Live match commentary is reduced to player-level role, threat, creativity, set-piece, defensive and availability signals. Repeat evidence can raise confidence slightly; it never creates xPts by itself.</p></div><div><strong>{commentaryInsights.filter((insight) => insight.status === 'corroborated').length}</strong><span>corroborated signals</span></div></section>
+          <section className={styles.metricGrid}>
+            <article><Activity /><span>Players flagged</span><strong>{commentaryInsights.length}</strong><small>whole player pool</small></article>
+            <article><Check /><span>Corroborated</span><strong>{commentaryInsights.filter((insight) => insight.status === 'corroborated').length}</strong><small>repeat or structured support</small></article>
+            <article><Search /><span>Watchlist only</span><strong>{commentaryInsights.filter((insight) => insight.status === 'watch').length}</strong><small>no model adjustment</small></article>
+            <article><ShieldCheck /><span>Direct xPts weight</span><strong>0%</strong><small>context, not a shortcut</small></article>
+          </section>
+          <section className={styles.ownedGrid}>
+            {commentaryInsights.slice(0, 36).map((insight) => {
+              const player = playerById.get(insight.playerId);
+              return <button className={styles.playerTile} disabled={!player} onClick={() => player && setSelectedPlayer(player)} key={insight.playerId}><div><span>{insight.team} · {titleCase(insight.status)}</span><strong>{insight.playerName}</strong></div><div className={styles.tileScore}>{insight.confidence}</div><p>{insight.headline}</p><em>{insight.observations} observations · GW{insight.sampleGameweeks.join(', ')}</em><small>{insight.signals.slice(0, 3).map((signal) => `${titleCase(signal.kind)} ${signal.observations}`).join(' · ')}</small></button>;
+            })}
+          </section>
+          {!commentaryInsights.length && <section className={styles.panel}><div className={styles.panelHead}><div><span>Commentary enrichment</span><h3>No usable signals in the current stored snapshot</h3></div><AlertTriangle /></div><p>The core model remains available. Check the Data tab for the commentary source status, then run the local refresh to retry.</p></section>}
+          <section className={styles.panel}><div className={styles.panelHead}><div><span>Guardrails</span><h3>How context reaches a decision</h3></div><ShieldCheck /></div><ul className={styles.notesList}><li>One match creates a watch flag only.</li><li>A repeated signal across two Gameweeks, three separate observations, an official set-piece order or confirmed-lineup positioning is required for corroboration.</li><li>Corroborated context can add at most two projection-confidence points; role agreement can add five role-confidence points.</li><li>Raw commentary is not retained in model snapshots, and no commentary label directly increases projected points.</li></ul></section>
         </>}
 
         {tab === 'data' && <>
