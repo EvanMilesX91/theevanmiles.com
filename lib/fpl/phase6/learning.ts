@@ -14,10 +14,10 @@ export function deriveModelLearning(summary: CalibrationDashboardSummary, minimu
   const effectiveGameweeks = summary.effectiveGameweeks;
   const forwardGameweeks = summary.forwardEvaluatedGameweeks.length;
   const historicalGameweeks = summary.historicalEvaluatedGameweeks.length;
-  const active = effectiveGameweeks >= minimumGameweeks && Boolean(summary.aggregate);
+  const active = effectiveGameweeks >= minimumGameweeks && forwardGameweeks >= 3 && summary.challenger.status === 'promote' && Boolean(summary.forwardAggregate);
   const shadowAccuracy = summary.aggregate?.shadowLineupAccuracy ?? null;
   const shadowContradictions = summary.aggregate?.shadowLineupContradictions ?? 0;
-  const priceAccuracy = summary.aggregate?.priceDirectionalAccuracy ?? null;
+  const priceAccuracy = summary.priceModel.precision;
   return {
     active,
     evaluatedGameweeks,
@@ -25,14 +25,16 @@ export function deriveModelLearning(summary: CalibrationDashboardSummary, minimu
     forwardGameweeks,
     historicalGameweeks,
     minimumGameweeks,
-    pointsBiasCorrection: active ? clamp(summary.aggregate!.selectedXiBias, -0.75, 0.75) : 0,
-    minutesBiasCorrection: active ? clamp(summary.aggregate!.minutesBias, -8, 8) : 0,
-    priceDirectionalAccuracy: effectiveGameweeks >= minimumGameweeks ? priceAccuracy : null,
+    pointsBiasCorrection: active ? clamp(summary.forwardAggregate!.selectedXiBias, -0.75, 0.75) : 0,
+    minutesBiasCorrection: active ? clamp(summary.forwardAggregate!.minutesBias, -8, 8) : 0,
+    priceDirectionalAccuracy: summary.priceModel.status === 'calibrated' ? priceAccuracy : null,
+    priceRiseThreshold: summary.priceModel.riseThreshold,
+    priceFallThreshold: summary.priceModel.fallThreshold,
     shadowLineupPromoted: forwardGameweeks >= minimumGameweeks && shadowAccuracy !== null && shadowAccuracy >= 80 && shadowContradictions === 0,
     reason: active
-      ? `Applied capped corrections from ${effectiveGameweeks.toFixed(1)} effective Gameweeks (${forwardGameweeks} forward, ${historicalGameweeks} historical at half weight); positive bias is subtracted from future projections.`
-      : `Learning gate is ${effectiveGameweeks.toFixed(1)}/${minimumGameweeks} effective Gameweeks: ${forwardGameweeks} forward at full weight and ${historicalGameweeks} historical at half weight.`,
+      ? `Promoted capped corrections after the forward-only challenger beat the uncorrected model out of sample across ${forwardGameweeks} Gameweeks.`
+      : `Learning remains locked: ${effectiveGameweeks.toFixed(1)}/${minimumGameweeks} effective Gameweeks, ${forwardGameweeks} forward, and challenger status ${summary.challenger.status}. Historical/replay evidence is diagnostic only.`,
     shadowLineupPromotion: forwardGameweeks < minimumGameweeks || shadowAccuracy === null ? 'locked' : shadowAccuracy >= 80 && shadowContradictions === 0 ? 'eligible' : 'rejected',
-    priceModelStatus: effectiveGameweeks >= minimumGameweeks && priceAccuracy !== null ? 'calibrated' : 'collecting',
+    priceModelStatus: summary.priceModel.status,
   };
 }

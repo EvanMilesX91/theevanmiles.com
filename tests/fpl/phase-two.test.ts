@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MonitoredPlayer, OfficialBootstrap, OfficialFixture, OfficialPlayer } from '@/lib/fpl/phase1';
-import { assessRole, assessSustainability, buildTeamRatings, calculateInjuryImpacts, parseForwardMinutes, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, parseShadowLineups, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
+import { assessRole, assessSustainability, buildAvailabilityConsensus, buildTeamRatings, calculateInjuryImpacts, parseForwardMinutes, parseLiveScoreLineup, parseLiveScoreResults, parseLiveScoreTeamRefs, parseShadowLineups, projectMinutes, projectPlayer } from '@/lib/fpl/phase2';
 import type { TeamRating } from '@/lib/fpl/phase2';
 
 const window = { gameweeks: 5, appearances: 5, startEquivalents: 5, minutes: 430, points: 25, pointsPerAppearance: 5, goals: 2, assists: 1, cleanSheets: 1, bonus: 3, defensiveContribution: 25, expectedGoals: 1.8, expectedAssists: 0.8, expectedGoalInvolvements: 2.6, expectedGoalInvolvementsPer90: 0.54 };
@@ -14,6 +14,13 @@ function official(overrides: Partial<OfficialPlayer> = {}): OfficialPlayer {
 }
 
 describe('Phase 2 modelling', () => {
+  it('requires independent agreement before an external availability report changes minutes', () => {
+    const independent = { playerId: 1, teamId: 1, observedGameweek: 8, status: 'injury' as const, reason: 'Knock', returnDate: null, returnLabel: null, confidence: 80, source: 'LiveScore availability' as const, sourceUrl: 'https://example.test', retrievedAt: '2026-10-28T00:00:00Z' };
+    expect(buildAvailabilityConsensus(official(), independent).level).toBe('single_source');
+    expect(buildAvailabilityConsensus(official({ status: 'd', chance_of_playing_next_round: 50 }), independent)).toMatchObject({ level: 'confirmed', decisionEffect: 'minutes_and_team' });
+    expect(buildAvailabilityConsensus(official({ status: 'd' }), undefined, { playerId: 1, teamId: 1, prediction: 'starter', confidence: 70, listedStatus: 'a', contradiction: false, verifiedAt: '2026-10-28T00:00:00Z', source: 'Touchline Wire', sourceUrl: 'https://example.test' }).level).toBe('conflict');
+  });
+
   it('requires repeat lineup evidence before confirming an out-of-position role', () => {
     const observations = [4, 5].map((gameweek) => ({ playerId: 1, gameweek, fixtureId: gameweek, teamId: 1, formation: '4-3-3', status: 'starter' as const, actualPosition: 'MID', grid: '4:1', confidence: 95, source: 'confirmed', sourceUrl: null, retrievedAt: '2026-10-01T00:00:00Z' }));
     const result = assessRole(monitored(), observations, 6);

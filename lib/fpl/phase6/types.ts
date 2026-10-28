@@ -25,6 +25,7 @@ export interface AutomationMetadata {
   durationMs: number;
   checksum: string;
   backend: SnapshotBackend;
+  immutableSnapshots: number;
 }
 
 export interface OperationalAlert {
@@ -46,7 +47,7 @@ export interface ModelVersions {
   explainability: 'phase4-explainability-v1';
   dashboard: 'phase5-dashboard-v1';
   automation: 'phase6-automation-v1';
-  revision: '2026-10-28.1';
+  revision: '2026-10-28.2';
 }
 
 export type PhaseSixSnapshot = PhaseFiveSnapshot & {
@@ -61,4 +62,5 @@ export interface DashboardSnapshotStore {
   backend: SnapshotBackend;
   read(): Promise<StoredDashboardRecord | null>;
   write(record: StoredDashboardRecord): Promise<void>;
+  historyCount(): Promise<number>;
 }

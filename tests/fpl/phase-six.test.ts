@@ -36,6 +36,7 @@ class MemoryStore implements DashboardSnapshotStore {
   record: StoredDashboardRecord | null = null;
   read = async () => this.record;
   write = async (record: StoredDashboardRecord) => { this.record = record; };
+  historyCount = async () => this.record ? 1 : 0;
 }
 
 class MemoryCalibrationStore implements ProjectionCalibrationStore {
@@ -66,7 +67,7 @@ describe('Phase 6 automation', () => {
     });
 
     expect(runs).toBe(1);
-    expect(refreshed.automation).toMatchObject({ backend: 'memory', freshness: 'fresh', trigger: 'scheduled' });
+    expect(refreshed.automation).toMatchObject({ backend: 'memory', freshness: 'fresh', trigger: 'scheduled', immutableSnapshots: 1 });
     expect(refreshed.operations).toMatchObject({ hoursToDeadline: 5, deadlineMode: true });
     expect(refreshed.automation.checksum).toMatch(/^[a-f0-9]{16}$/);
     expect(store.record?.schemaVersion).toBe(6);
@@ -146,8 +147,9 @@ describe('Phase 6 automation', () => {
       effectiveGameweeks: 2,
     });
     expect(deriveModelLearning(warmStart)).toMatchObject({ active: false, effectiveGameweeks: 2, historicalGameweeks: 4, forwardGameweeks: 0, shadowLineupPromotion: 'locked' });
-    const active = deriveModelLearning(summarizeCalibration([...historical, evaluated(9, 'forward'), evaluated(10, 'forward')], 'memory'));
-    expect(active).toMatchObject({ active: true, effectiveGameweeks: 4, historicalGameweeks: 4, forwardGameweeks: 2, shadowLineupPromotion: 'locked' });
+    const stillLocked = deriveModelLearning(summarizeCalibration([...historical, evaluated(9, 'forward'), evaluated(10, 'forward')], 'memory'));
+    expect(stillLocked).toMatchObject({ active: false, effectiveGameweeks: 4, historicalGameweeks: 4, forwardGameweeks: 2, shadowLineupPromotion: 'locked' });
+    expect(stillLocked.reason).toContain('Historical/replay evidence is diagnostic only');
   });
 
   it('converts an archived pre-deadline squad into reduced-weight calibration evidence', () => {

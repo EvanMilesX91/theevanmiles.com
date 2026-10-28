@@ -6,7 +6,7 @@ import { buildPlayerCouncils } from './council';
 import { buildNotableOmissions, buildTransferComparisons } from './comparison';
 import { buildRedTeamReview } from './red-team';
 import { writePhaseFourSnapshot } from './store';
-import type { EvidenceStatement, FinalCommittee, PhaseFourSnapshot } from './types';
+import type { DecisionProbability, EvidenceStatement, FinalCommittee, PhaseFourSnapshot } from './types';
 
 export interface RunPhaseFourOptions {
   fetcher?: FetchLike;
@@ -26,6 +26,25 @@ function resultingIds(ownedIds: number[], moves: Array<{ outPlayerId: number; in
     ids.add(move.inPlayerId);
   }
   return ids;
+}
+
+function normalCdf(z: number): number {
+  const sign = z < 0 ? -1 : 1;
+  const x = Math.abs(z) / Math.sqrt(2);
+  const t = 1 / (1 + 0.3275911 * x);
+  const erf = sign * (1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x));
+  return 0.5 * (1 + erf);
+}
+
+export function buildDecisionProbability(scenario: { netGain1: number; netGain3: number; netGain6: number; confidence: number }): DecisionProbability {
+  const probability = (gain: number, horizon: number) => {
+    const uncertainty = 5.5 * Math.sqrt(horizon) * (1.25 - Math.min(100, Math.max(0, scenario.confidence)) / 200);
+    return Math.round(normalCdf(gain / Math.max(1, uncertainty)) * 100);
+  };
+  const beatRoll1 = probability(scenario.netGain1, 1);
+  const beatRoll3 = probability(scenario.netGain3, 3);
+  const beatRoll6 = probability(scenario.netGain6, 6);
+  return { beatRoll1, beatRoll3, beatRoll6, downsideRisk3: 100 - beatRoll3, method: 'normal_uncertainty_approximation_v1' };
 }
 
 export async function runPhaseFour(options: RunPhaseFourOptions = {}): Promise<PhaseFourSnapshot> {
@@ -54,10 +73,12 @@ export async function runPhaseFour(options: RunPhaseFourOptions = {}): Promise<P
   const decisionLine = staleLedger
     ? `WAIT: confirm the missing ledger state before acting on the provisional ${moves || 'roll'} scenario.`
     : action === 'transfer' ? `TRANSFER: ${moves}.` : 'ROLL: no transfer clears the net-gain and Red Team thresholds.';
+  const probability = buildDecisionProbability(primary);
   const evidenceChain: EvidenceStatement[] = [
     { kind: 'fact', statement: `Confirmed ledger next Gameweek: ${phaseThree.phaseTwo.phaseOne.ledger.nextGameweek}; official next Gameweek: ${officialData.nextGameweek}.` },
     { kind: 'data', statement: `The proposed XI has ${primary.lineup.xPts1BeforeCaptain} model xPts before captaincy and passes the legal-formation validator: ${primary.lineup.validation.pass}.` },
     { kind: 'model_estimate', statement: primary.moves.length ? `${moves} projects ${primary.netGain3} net points over three Gameweeks and ${primary.netGain6} over six after hits.` : 'The roll baseline has zero incremental model gain by definition.' },
+    { kind: 'model_estimate', statement: `Under the model's uncertainty approximation, this route has a ${probability.beatRoll3}% chance of beating the roll baseline over three Gameweeks (${probability.downsideRisk3}% downside risk).` },
     { kind: 'interpretation', statement: redTeam.strongestObjection },
     { kind: 'decision', statement: decisionLine },
   ];
@@ -65,10 +86,12 @@ export async function runPhaseFour(options: RunPhaseFourOptions = {}): Promise<P
     status: staleLedger ? 'blocked_pending_ledger' : 'executable', action,
     primaryScenario: primary, alternativeScenario: redTeam.alternativeScenario,
     confidence: staleLedger ? Math.min(committeeConfidence, 45) : committeeConfidence,
+    probability,
     decisionLine,
     rationale: [
       primary.explanation,
       `The selected XI averages ${committeeConfidence}% Council evidence confidence.`,
+      `The recommended route is estimated to beat rolling ${probability.beatRoll3}% of the time over three Gameweeks; this is uncertainty-aware, not a guarantee.`,
       `Red Team verdict: ${redTeam.verdict}; strongest objection: ${redTeam.strongestObjection}`,
     ],
     evidenceChain,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MonitoredPlayer, Position } from '@/lib/fpl/phase1';
 import type { DecisionPlayer, TransferScenario } from '@/lib/fpl/phase3';
-import { buildPlayerCouncils, buildRedTeamReview, comparePlayers } from '@/lib/fpl/phase4';
+import { buildDecisionProbability, buildPlayerCouncils, buildRedTeamReview, comparePlayers } from '@/lib/fpl/phase4';
 
 function player(id: number, name: string, position: Position, xPts1: number, price: number, confidence = 80, startProbability = 0.9): DecisionPlayer {
   return {
@@ -24,12 +24,19 @@ function monitored(players: DecisionPlayer[]): MonitoredPlayer[] {
 }
 
 function scenario(id: string, moves: TransferScenario['moves'], starterIds: number[]): TransferScenario {
-  return { id, kind: moves.length ? 'one_transfer' : 'roll', moves, bankAfter: 1, hitCost: 0, grossGain1: 1, netGain1: 1, grossGain3: 3, netGain3: 3, grossGain6: 6, netGain6: 6, decisionScore: 1, confidence: 75,
+  return { id, kind: moves.length ? 'one_transfer' : 'roll', moves, bankAfter: 1, hitCost: 0, grossGain1: 1, netGain1: 1, grossGain3: 3, netGain3: 3, grossGain6: 6, netGain6: 6, decisionScore: 1, beatRollProbability3: 62, downsideRisk3: 38, confidence: 75,
     lineup: { starterIds, benchIds: [], captainId: starterIds[0] ?? 0, viceCaptainId: starterIds[1] ?? 0, formation: '3-4-3', xPts1BeforeCaptain: 50, xPts1WithCaptain: 57, confidence: 75, captaincy: [], validation: { pass: true, errors: [] } },
     validation: { pass: true, errors: [] }, explanation: 'test' };
 }
 
 describe('Phase 4 explainability', () => {
+  it('turns net gains into calibrated-looking uncertainty probabilities without claiming certainty', () => {
+    expect(buildDecisionProbability({ netGain1: 0, netGain3: 0, netGain6: 0, confidence: 80 })).toMatchObject({ beatRoll1: 50, beatRoll3: 50, beatRoll6: 50, downsideRisk3: 50 });
+    const positive = buildDecisionProbability({ netGain1: 2, netGain3: 6, netGain6: 9, confidence: 75 });
+    expect(positive.beatRoll3).toBeGreaterThan(50);
+    expect(positive.downsideRisk3).toBe(100 - positive.beatRoll3);
+  });
+
   it('uses ten distinct lenses and surfaces upside-versus-minutes disagreement', () => {
     const upside = player(1, 'Upside', 'MID', 9, 6, 50, 0.1);
     upside.projection.minutes.appearanceProbability = 0.5;

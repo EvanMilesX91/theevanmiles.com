@@ -98,6 +98,8 @@ export interface TransferScenario {
   grossGain6: number;
   netGain6: number;
   decisionScore: number;
+  beatRollProbability3: number;
+  downsideRisk3: number;
   confidence: number;
   lineup: LineupDecision;
   validation: ValidationResult;

@@ -106,15 +106,21 @@ function scenario(args: { id: string; squad: DecisionPlayer[]; moves: TransferMo
   const confidence = args.moves.length
     ? Math.round(args.moves.reduce((sum, move) => sum + (args.squad.find((player) => player.projection.playerId === move.inPlayerId)?.projection.confidence ?? 0), 0) / args.moves.length)
     : lineup.confidence;
-  const decisionScore = net1 * 0.45 + (net3 / 3) * 0.35 + (net6 / 6) * 0.2;
+  const z = net3 / Math.max(1, 5.5 * Math.sqrt(3) * (1.25 - confidence / 200));
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const density = 0.3989423 * Math.exp(-z * z / 2);
+  const tail = density * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  const beatRollProbability3 = Math.round((z >= 0 ? 1 - tail : tail) * 100);
+  const rawDecisionScore = net1 * 0.45 + (net3 / 3) * 0.35 + (net6 / 6) * 0.2;
+  const decisionScore = rawDecisionScore * (0.5 + beatRollProbability3 / 100);
   const kind = args.moves.length === 0 ? 'roll' : hitCost > 0 ? 'hit' : args.moves.length === 1 ? 'one_transfer' : 'two_transfers';
   return {
     id: args.id, kind, moves: args.moves, bankAfter: round(args.bankAfter, 1), hitCost,
     grossGain1: round(gross1), netGain1: round(net1), grossGain3: round(gross3), netGain3: round(net3), grossGain6: round(gross6), netGain6: round(net6),
-    decisionScore: round(decisionScore), confidence, lineup, validation,
+    decisionScore: round(decisionScore), beatRollProbability3, downsideRisk3: 100 - beatRollProbability3, confidence, lineup, validation,
     explanation: args.moves.length === 0
       ? 'Keep the confirmed squad and preserve the free transfer.'
-      : `${args.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ')} projects ${round(net3)} net points over three Gameweeks after a ${hitCost}-point hit.`,
+      : `${args.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ')} projects ${round(net3)} net points over three Gameweeks after a ${hitCost}-point hit, with a ${beatRollProbability3}% modelled chance of beating the roll baseline.`,
   };
 }
 

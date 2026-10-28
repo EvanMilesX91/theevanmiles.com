@@ -33,6 +33,7 @@ export function presentStoredDashboard(
   backend: DashboardSnapshotStore['backend'],
   now = new Date(),
   calibration: CalibrationDashboardSummary = summarizeCalibration([], 'memory'),
+  immutableSnapshots = 0,
 ): PhaseSixSnapshot {
   const freshness = classifySnapshotFreshness(record.refreshedAt, now);
   return {
@@ -45,13 +46,14 @@ export function presentStoredDashboard(
       durationMs: record.durationMs,
       checksum: record.checksum,
       backend,
+      immutableSnapshots,
     },
     calibration,
     learning: deriveModelLearning(calibration),
     operations: buildOperationalSummary(record.snapshot, now),
     modelVersions: {
       projection: 'phase2-transparent-v2', decision: 'phase3-decision-v1', explainability: 'phase4-explainability-v1',
-      dashboard: 'phase5-dashboard-v1', automation: 'phase6-automation-v1', revision: '2026-10-28.1',
+      dashboard: 'phase5-dashboard-v1', automation: 'phase6-automation-v1', revision: '2026-10-28.2',
     },
   };
 }
@@ -82,6 +84,7 @@ export async function refreshAutomatedDashboard(options: RefreshAutomatedDashboa
     snapshot,
   };
   await options.store.write(record);
+  const immutableSnapshots = await options.store.historyCount();
   let calibration = summarizeCalibration([], 'memory');
   if (options.calibrationStore) {
     const result = await refreshProjectionCalibration({
@@ -93,12 +96,12 @@ export async function refreshAutomatedDashboard(options: RefreshAutomatedDashboa
     options.onCalibration?.(result);
     calibration = await loadCalibrationSummary(options.calibrationStore);
   }
-  return presentStoredDashboard(record, options.store.backend, now, calibration);
+  return presentStoredDashboard(record, options.store.backend, now, calibration, immutableSnapshots);
 }
 
 export async function loadAutomatedDashboard(store: DashboardSnapshotStore, now = new Date(), calibrationStore?: ProjectionCalibrationStore): Promise<PhaseSixSnapshot | null> {
   const record = await store.read();
   if (!record) return null;
   const calibration = calibrationStore ? await loadCalibrationSummary(calibrationStore) : summarizeCalibration([], 'memory');
-  return presentStoredDashboard(record, store.backend, now, calibration);
+  return presentStoredDashboard(record, store.backend, now, calibration, await store.historyCount());
 }

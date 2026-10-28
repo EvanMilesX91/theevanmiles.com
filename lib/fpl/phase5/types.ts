@@ -1,5 +1,5 @@
 import type { Position, SourceHealth } from '../phase1';
-import type { FixtureProjection } from '../phase2';
+import type { AvailabilityConsensus, FixtureProjection, InjuryImpact, TeamRating } from '../phase2';
 import type { LineupDecision, NewPlayerAssessment, PricePressure, TransferDecision, ValueAssessment } from '../phase3';
 import type { FinalCommittee, NotableOmission, PlayerComparison, PlayerCouncil, RedTeamReview } from '../phase4';
 
@@ -22,6 +22,7 @@ export interface DashboardPlayer {
   shadowLineupPrediction: 'starter' | 'bench' | null;
   shadowLineupConfidence: number | null;
   shadowLineupContradiction: boolean;
+  availabilityConsensus?: AvailabilityConsensus;
   rotationRisk: string;
   role: string;
   roleChange: string;
@@ -57,5 +58,7 @@ export interface PhaseFiveSnapshot {
   transferComparisons: PlayerComparison[];
   notableOmissions: NotableOmission[];
   players: DashboardPlayer[];
+  teamRatings: TeamRating[];
+  injuryImpacts: InjuryImpact[];
   modelNotes: string[];
 }

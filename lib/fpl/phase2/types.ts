@@ -55,6 +55,15 @@ export interface ShadowLineupSignal {
   sourceUrl: string;
 }
 
+export interface AvailabilityConsensus {
+  playerId: number;
+  level: 'clear' | 'single_source' | 'confirmed' | 'conflict';
+  flaggedSources: string[];
+  availableSources: string[];
+  decisionEffect: 'none' | 'confidence_only' | 'minutes_and_team';
+  explanation: string;
+}
+
 export interface ModelLearningAdjustment {
   active: boolean;
   evaluatedGameweeks: number;
@@ -64,6 +73,8 @@ export interface ModelLearningAdjustment {
   pointsBiasCorrection: number;
   minutesBiasCorrection: number;
   priceDirectionalAccuracy: number | null;
+  priceRiseThreshold: number;
+  priceFallThreshold: number;
   shadowLineupPromoted: boolean;
   reason: string;
 }
@@ -176,6 +187,7 @@ export interface PlayerProjection {
   confidence: number;
   oneLineReason: string;
   shadowLineup?: ShadowLineupSignal | null;
+  availabilityConsensus?: AvailabilityConsensus;
 }
 
 export interface PhaseTwoSnapshot {

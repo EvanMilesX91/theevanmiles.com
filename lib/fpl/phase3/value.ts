@@ -18,13 +18,15 @@ function replacementByPosition(players: PlayerProjection[]): Map<Position, Repla
   return output;
 }
 
-function pricePressure(player: PlayerProjection, official: OfficialPlayer, scale: number, calibratedAccuracy: number | null = null): PricePressure {
+function pricePressure(player: PlayerProjection, official: OfficialPlayer, scale: number, calibratedAccuracy: number | null = null, riseThreshold = 85, fallThreshold = -85): PricePressure {
   const pressure = round(clamp((official.transfers_in_event - official.transfers_out_event) / Math.max(1, scale) * 100, -100, 100), 1);
-  const direction = pressure >= 70 ? 'likely_rise' : pressure >= 35 ? 'rise_watch' : pressure <= -70 ? 'likely_fall' : pressure <= -35 ? 'fall_watch' : 'stable';
+  const watchRise = Math.max(20, riseThreshold - 20);
+  const watchFall = Math.min(-20, fallThreshold + 20);
+  const direction = pressure >= riseThreshold ? 'likely_rise' : pressure >= watchRise ? 'rise_watch' : pressure <= fallThreshold ? 'likely_fall' : pressure <= watchFall ? 'fall_watch' : 'stable';
   return {
     currentPrice: player.price, netTransfers: official.transfers_in_event - official.transfers_out_event, pressure, direction,
     confidence: calibratedAccuracy === null
-      ? direction === 'stable' ? 30 : Math.round(Math.min(60, 35 + Math.abs(pressure) * 0.25))
+      ? direction === 'stable' ? 25 : Math.round(Math.min(45, 25 + Math.abs(pressure) * 0.2))
       : Math.round(Math.min(85, (direction === 'stable' ? 30 : 35 + Math.abs(pressure) * 0.25) * 0.4 + calibratedAccuracy * 0.6)),
     urgency: direction === 'likely_rise' || direction === 'likely_fall' ? 'before_next_price_cycle' : direction === 'rise_watch' || direction === 'fall_watch' ? 'monitor' : 'none',
     source: 'official_transfer_activity_proxy',
@@ -40,7 +42,7 @@ function newPlayerAssessment(official: OfficialPlayer): NewPlayerAssessment {
   return { sample: 'unproven', priorReliance: round(450 / (official.minutes + 450)), confidenceCap: 55, treatment: 'The player remains in the pool, but no starting role is assumed without lineup or minutes evidence.' };
 }
 
-export function buildDecisionPlayers(projections: PlayerProjection[], officials: OfficialPlayer[], calibratedPriceAccuracy: number | null = null): DecisionPlayer[] {
+export function buildDecisionPlayers(projections: PlayerProjection[], officials: OfficialPlayer[], calibratedPriceAccuracy: number | null = null, priceRiseThreshold = 85, priceFallThreshold = -85): DecisionPlayer[] {
   const officialById = new Map(officials.map((player) => [player.id, player]));
   const replacements = replacementByPosition(projections);
   const transferMagnitudes = officials.map((player) => Math.abs(player.transfers_in_event - player.transfers_out_event)).sort((a, b) => a - b);
@@ -67,6 +69,6 @@ export function buildDecisionPlayers(projections: PlayerProjection[], officials:
         ? `${cheaper.playerName} saves £${saving.toFixed(1)}m for ${sacrificed >= 0 ? `${round(sacrificed)} fewer` : `${round(Math.abs(sacrificed))} more`} projected points over six Gameweeks.`
         : 'No reliable same-position option at least £0.5m cheaper is currently available.',
     };
-    return { projection, value, pricePressure: pricePressure(projection, official, scale, calibratedPriceAccuracy), newPlayer: newPlayerAssessment(official) };
+    return { projection, value, pricePressure: pricePressure(projection, official, scale, calibratedPriceAccuracy, priceRiseThreshold, priceFallThreshold), newPlayer: newPlayerAssessment(official) };
   }).sort((a, b) => b.projection.xPts6 - a.projection.xPts6);
 }

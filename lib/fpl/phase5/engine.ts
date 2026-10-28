@@ -33,6 +33,7 @@ export function buildDashboardPlayer(player: DecisionPlayer, council: PlayerCoun
     shadowLineupPrediction: projection.shadowLineup?.prediction ?? null,
     shadowLineupConfidence: projection.shadowLineup?.confidence ?? null,
     shadowLineupContradiction: projection.shadowLineup?.contradiction ?? false,
+    availabilityConsensus: projection.availabilityConsensus,
     rotationRisk: projection.minutes.rotationRisk, role: projection.role.tacticalRole,
     roleChange: projection.role.change, sustainability: projection.sustainability.label,
     oneLineReason: projection.oneLineReason, fixtures: projection.fixtures,
@@ -60,6 +61,8 @@ export async function runPhaseFive(options: RunPhaseFiveOptions = {}): Promise<P
     redTeam: phaseFour.redTeam,
     transferComparisons: phaseFour.transferComparisons,
     notableOmissions: phaseFour.notableOmissions,
+    teamRatings: phaseFour.phaseThree.phaseTwo.teamRatings,
+    injuryImpacts: phaseFour.phaseThree.phaseTwo.injuryImpacts,
     players: phaseFour.phaseThree.players.map((player) => {
       const council = councilById.get(player.projection.playerId);
       if (!council) throw new Error(`Council result missing for player ${player.projection.playerId}.`);

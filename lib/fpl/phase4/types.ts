@@ -81,12 +81,21 @@ export interface EvidenceStatement {
   statement: string;
 }
 
+export interface DecisionProbability {
+  beatRoll1: number;
+  beatRoll3: number;
+  beatRoll6: number;
+  downsideRisk3: number;
+  method: 'normal_uncertainty_approximation_v1';
+}
+
 export interface FinalCommittee {
   status: 'executable' | 'blocked_pending_ledger';
   action: 'roll' | 'transfer' | 'wait_for_ledger_confirmation';
   primaryScenario: TransferScenario;
   alternativeScenario: TransferScenario;
   confidence: number;
+  probability: DecisionProbability;
   decisionLine: string;
   rationale: string[];
   evidenceChain: EvidenceStatement[];
