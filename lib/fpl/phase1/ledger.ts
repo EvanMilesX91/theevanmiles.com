@@ -166,9 +166,13 @@ export function confirmGameweek(args: {
   next.lastConfirmedXi = [...record.starterIds];
   next.captainId = record.captainId;
   next.viceCaptainId = record.viceCaptainId;
+  if (record.chipUsed) next.chips[record.chipUsed] = 'used';
   next.freeTransfers = Math.min(5, next.freeTransfers + 1);
   next.confirmedGameweeks = [...next.confirmedGameweeks.filter((item) => item.gameweek !== record.gameweek), structuredClone(record)].sort((a, b) => a.gameweek - b.gameweek);
   next.updatedAt = record.confirmedAt;
+  if (record.gameweek === 19) {
+    next.chips = { wildcard: 'available', free_hit: 'available', triple_captain: 'available', bench_boost: 'available' };
+  }
   return next;
 }
 

@@ -132,6 +132,7 @@ export interface ConfirmedGameweek {
   benchIds: number[];
   captainId: number;
   viceCaptainId: number;
+  chipUsed?: 'wildcard' | 'free_hit' | 'bench_boost' | 'triple_captain' | null;
   confirmedAt: string;
   confirmationReference: string;
 }

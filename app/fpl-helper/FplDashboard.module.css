@@ -254,6 +254,51 @@
   background: var(--surface);
 }
 
+.chipDecision {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1.2rem;
+  align-items: center;
+  margin-bottom: 0.65rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line);
+  background: linear-gradient(105deg, rgba(4, 245, 255, 0.09), rgba(55, 0, 60, 0.76) 48%, rgba(0, 255, 135, 0.08));
+}
+.chipDecision > div:nth-child(2) > span { color: var(--green); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.chipDecision h3 { margin: 0.3rem 0; font-size: 1rem; font-weight: 500; }
+.chipDecision p { margin: 0; color: var(--muted); font-size: 0.62rem; line-height: 1.55; }
+
+.chipGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; margin-bottom: 0.65rem; }
+.chipCard { padding: 1.4rem; border: 1px solid var(--line); background: var(--surface); }
+.chipNow { border-color: var(--orange); background: linear-gradient(125deg, rgba(0, 255, 135, 0.14), var(--surface) 58%); }
+.chipCardHead { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.chipCardHead > div { display: flex; flex-direction: column; gap: 0.3rem; }
+.chipCardHead span { color: var(--muted); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.chipCardHead h3 { margin: 0; font-size: 1rem; font-weight: 500; }
+.chipCardHead > b { padding: 0.3rem 0.45rem; border: 1px solid currentColor; color: var(--green); font-size: 0.52rem; font-weight: 500; text-transform: uppercase; }
+.chipMetrics { display: grid; grid-template-columns: repeat(3, 1fr); margin: 1.2rem 0; border-block: 1px solid var(--line); }
+.chipMetrics > div { display: flex; flex-direction: column; gap: 0.28rem; padding: 0.8rem; border-right: 1px solid var(--line); }
+.chipMetrics > div:last-child { border-right: 0; }
+.chipMetrics span { color: var(--muted); font-size: 0.52rem; text-transform: uppercase; }
+.chipMetrics strong { font-size: 0.85rem; font-weight: 500; }
+.chipCard p { color: var(--muted); font-size: 0.62rem; line-height: 1.6; }
+.chipCard > small { display: block; margin-top: 0.8rem; color: #8e7a98; font-size: 0.52rem; line-height: 1.45; }
+.chipPlayers { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.chipPlayers span { padding: 0.3rem 0.45rem; border: 1px solid var(--line); color: var(--bone); font-size: 0.52rem; }
+.chipSquad { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.45rem; margin: 1rem 0; }
+.chipSquad button { display: flex; min-width: 0; flex-direction: column; gap: 0.28rem; padding: 0.75rem; border: 1px solid var(--line); background: rgba(22, 0, 29, 0.45); color: var(--bone); cursor: pointer; text-align: left; font: inherit; }
+.chipSquad button:hover { border-color: var(--orange); }
+.chipSquad span { overflow: hidden; color: var(--muted); font-size: 0.48rem; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.chipSquad strong { overflow: hidden; font-size: 0.63rem; text-overflow: ellipsis; white-space: nowrap; }
+.chipSquad small { color: var(--green); font-size: 0.52rem; }
+.opportunityList { margin-top: 1rem; }
+.opportunityList > div { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 0.75rem; align-items: start; padding: 0.8rem 0; border-top: 1px solid var(--line); }
+.opportunityList > div > b { color: var(--orange); font-size: 0.6rem; }
+.opportunityList > div > span { display: flex; flex-direction: column; gap: 0.3rem; }
+.opportunityList strong { font-size: 0.63rem; }
+.opportunityList small { color: var(--muted); font-size: 0.54rem; line-height: 1.5; }
+.opportunityList em { color: var(--green); font-size: 0.75rem; font-style: normal; }
+
 .panelHead { display: flex; justify-content: space-between; gap: 1rem; }
 .panelHead svg { color: var(--orange); }
 .panelHead h3,
@@ -574,9 +619,13 @@
   .heroMeta { min-width: 0; align-items: flex-start; }
   .tabs { top: 52px; }
   .decisionCard { grid-template-columns: auto 1fr; }
+  .chipDecision { grid-template-columns: auto 1fr; }
+  .chipDecision > button { grid-column: 2; justify-self: start; }
   .confidence { grid-column: 2; align-items: flex-start; }
   .twoColumn,
   .dataColumns { grid-template-columns: 1fr; }
+  .chipGrid { grid-template-columns: 1fr; }
+  .chipSquad { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dataColumns > .panel:last-child { grid-column: auto; }
   .evidenceChain { grid-template-columns: 1fr 1fr; }
   .squadHeader,
@@ -613,6 +662,7 @@
   .evidenceChain { grid-template-columns: 1fr; }
   .ownedGrid,
   .omissionGrid { grid-template-columns: 1fr; }
+  .chipSquad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pitchWrap { padding: 0.45rem; }
   .pitch { min-height: 560px; }
   .pitchPlayer { min-height: 54px; padding-inline: 0.2rem; }

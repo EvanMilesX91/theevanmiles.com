@@ -79,6 +79,7 @@ describe('Phase 2 modelling', () => {
   it('turns opponent strength into a fixture-level xPts difference', () => {
     const player = monitored({ position: 'MID', nextFixtures: [
       { gameweek: 8, opponent: 'EAS', home: true, difficulty: 2 },
+      { gameweek: 8, opponent: 'HRD', home: true, difficulty: 5 },
       { gameweek: 9, opponent: 'HRD', home: true, difficulty: 5 },
     ] });
     const rating = (teamId: number, team: string, teamShort: string, attack: number, defence: number): TeamRating => ({ teamId, team, teamShort, matches: 7, goalsForPerMatch: attack, goalsAgainstPerMatch: defence, recentGoalsForPerMatch: attack, recentGoalsAgainstPerMatch: defence, attackHome: attack, attackAway: attack, defenceHome: defence, defenceAway: defence, attackInjuryMultiplier: 1, defenceInjuryMultiplier: 1, confidence: 75 });
@@ -87,9 +88,10 @@ describe('Phase 2 modelling', () => {
     const sustainability = assessSustainability(player, official({ element_type: 3 }));
     const result = projectPlayer({ player, official: official({ element_type: 3 }), officialTeams: [
       { id: 1, name: 'Alpha', short_name: 'ALP' }, { id: 2, name: 'Easy', short_name: 'EAS' }, { id: 3, name: 'Hard', short_name: 'HRD' },
-    ], teamRatings: [rating(1, 'Alpha', 'ALP', 1.1, 0.9), rating(2, 'Easy', 'EAS', 0.7, 1.4), rating(3, 'Hard', 'HRD', 1.4, 0.7)], minutes, role, sustainability });
+    ], teamRatings: [rating(1, 'Alpha', 'ALP', 1.1, 0.9), rating(2, 'Easy', 'EAS', 0.7, 1.4), rating(3, 'Hard', 'HRD', 1.4, 0.7)], minutes, role, sustainability, nextGameweek: 8 });
     expect(result.fixtures[0].xPts).toBeGreaterThan(result.fixtures[1].xPts);
-    expect(result.xPts3).toBeCloseTo(result.fixtures[0].xPts + result.fixtures[1].xPts, 1);
+    expect(result.xPts1).toBeCloseTo(result.fixtures[0].xPts + result.fixtures[1].xPts, 1);
+    expect(result.xPts3).toBeCloseTo(result.fixtures[0].xPts + result.fixtures[1].xPts + result.fixtures[2].xPts, 1);
   });
 
   it('parses LiveScore team and result data from its public Next.js payload', () => {

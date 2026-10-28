@@ -115,6 +115,74 @@ export interface TransferDecision {
   alternatives: TransferScenario[];
 }
 
+export type ChipKey = 'wildcard' | 'free_hit' | 'bench_boost' | 'triple_captain';
+export type ChipAvailability = 'available' | 'used' | 'unknown';
+
+export interface ChipCalendarFlag {
+  gameweek: number;
+  kind: 'blank' | 'double' | 'blank_and_double';
+  blankTeams: string[];
+  doubleTeams: string[];
+  explanation: string;
+}
+
+export interface ChipOpportunity {
+  chip: ChipKey;
+  gameweek: number;
+  projectedGain: number;
+  projectedTotal: number;
+  quality: number;
+  confidence: number;
+  players: string[];
+  transfersRequired: number | null;
+  squad: {
+    formation: string;
+    bankAfter: number | null;
+    captainId: number;
+    viceCaptainId: number;
+    players: Array<{
+      id: number;
+      name: string;
+      team: string;
+      position: Position;
+      price: number;
+      xPts: number;
+      starter: boolean;
+    }>;
+  } | null;
+  explanation: string;
+  caveats: string[];
+}
+
+export interface ChipAssessment {
+  chip: ChipKey;
+  availability: ChipAvailability;
+  action: 'use_now' | 'hold' | 'used' | 'unknown';
+  bestGameweek: number | null;
+  currentGameweekGain: number | null;
+  confidence: number;
+  reason: string;
+  opportunities: ChipOpportunity[];
+}
+
+export interface ChipPlan {
+  currentHalf: 1 | 2;
+  expiresAfterGameweek: 19 | 38;
+  gameweeksRemaining: number;
+  recommendation: {
+    action: 'use_chip' | 'no_chip' | 'insufficient_ledger_data';
+    chip: ChipKey | null;
+    gameweek: number | null;
+    confidence: number;
+    headline: string;
+    reason: string;
+  };
+  assessments: ChipAssessment[];
+  calendarFlags: ChipCalendarFlag[];
+  ruleSourceUrl: string;
+  modelNotes: string[];
+}
+
 export interface PhaseThreeSnapshot {
   schemaVersion: 3;
   modelVersion: 'phase3-decision-v1';
@@ -126,6 +194,7 @@ export interface PhaseThreeSnapshot {
   players: DecisionPlayer[];
   ownedLineup: LineupDecision;
   transferDecision: TransferDecision;
+  chipPlan: ChipPlan;
   modelNotes: string[];
 }
 

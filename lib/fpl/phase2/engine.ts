@@ -81,7 +81,7 @@ function applyPromotedShadowLineup(minutes: MinutesProjection, signal: ShadowLin
   };
 }
 
-function calibratePoints(projection: PlayerProjection, adjustment?: ModelLearningAdjustment): PlayerProjection {
+function calibratePoints(projection: PlayerProjection, nextGameweek: number, adjustment?: ModelLearningAdjustment): PlayerProjection {
   if (!adjustment?.active || adjustment.pointsBiasCorrection === 0) return projection;
   const fixtures = projection.fixtures.map((fixture) => ({
     ...fixture,
@@ -90,11 +90,14 @@ function calibratePoints(projection: PlayerProjection, adjustment?: ModelLearnin
     ceiling: round(Math.max(0, fixture.ceiling - adjustment.pointsBiasCorrection)),
     explanation: `${fixture.explanation} Calibration bias correction ${adjustment.pointsBiasCorrection > 0 ? '-' : '+'}${Math.abs(adjustment.pointsBiasCorrection).toFixed(2)} points.`,
   }));
-  const sum = (count: number, key: 'xPts' | 'floor' | 'ceiling') => round(fixtures.slice(0, count).reduce((total, fixture) => total + fixture[key], 0));
-  const first = fixtures[0];
+  const sum = (gameweeks: number, key: 'xPts' | 'floor' | 'ceiling') => round(fixtures
+    .filter((fixture) => fixture.gameweek >= nextGameweek && fixture.gameweek < nextGameweek + gameweeks)
+    .reduce((total, fixture) => total + fixture[key], 0));
+  const nextFixtures = fixtures.filter((fixture) => fixture.gameweek === nextGameweek);
+  const first = nextFixtures[0];
   return {
     ...projection, fixtures, xPts1: sum(1, 'xPts'), xPts3: sum(3, 'xPts'), xPts6: sum(6, 'xPts'), floor1: sum(1, 'floor'), ceiling1: sum(1, 'ceiling'),
-    oneLineReason: first ? `${first.xPts} calibrated xPts in GW${first.gameweek}: ${first.expectedMinutes} expected minutes, ${projection.sustainability.label} returns, ${first.home ? 'home' : 'away'} vs ${first.opponent}.` : projection.oneLineReason,
+    oneLineReason: first ? `${sum(1, 'xPts')} calibrated xPts across ${nextFixtures.length} GW${nextGameweek} fixture${nextFixtures.length === 1 ? '' : 's'}; ${first.expectedMinutes} expected minutes per fixture and ${projection.sustainability.label} returns.` : projection.oneLineReason,
   };
 }
 
@@ -146,8 +149,8 @@ export async function runPhaseTwo(options: RunPhaseTwoOptions = {}): Promise<Pha
     const shadowAdjusted = applyPromotedShadowLineup(rawMinutes, shadowById.get(player.id), options.learningAdjustment);
     const minutes = calibrateMinutes(shadowAdjusted, player.nextFixtures.length, options.learningAdjustment);
     const sustainability = assessSustainability(player, official);
-    const projected = projectPlayer({ player, official, officialTeams: officialData.bootstrap.teams, teamRatings, minutes, role, sustainability });
-    const calibrated = calibratePoints(projected, options.learningAdjustment);
+    const projected = projectPlayer({ player, official, officialTeams: officialData.bootstrap.teams, teamRatings, minutes, role, sustainability, nextGameweek: officialData.nextGameweek });
+    const calibrated = calibratePoints(projected, officialData.nextGameweek, options.learningAdjustment);
     const availabilityAdjusted = consensus.level === 'single_source' || consensus.level === 'conflict' ? Math.max(20, calibrated.confidence - 8) : calibrated.confidence;
     const confidence = commentaryInsight?.status === 'corroborated' ? Math.min(92, availabilityAdjusted + 2) : availabilityAdjusted;
     return { ...calibrated, confidence, shadowLineup: shadowById.get(player.id) ?? null, availabilityConsensus: consensus, commentary: commentaryInsight };

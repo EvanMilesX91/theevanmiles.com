@@ -71,7 +71,6 @@ function upcomingFixturesFor(
   return fixtures
     .filter((fixture) => !fixture.finished && fixture.event !== null && fixture.event >= nextGameweek && (fixture.team_h === teamId || fixture.team_a === teamId))
     .sort((a, b) => (a.event ?? 99) - (b.event ?? 99))
-    .slice(0, 6)
     .map((fixture) => {
       const home = fixture.team_h === teamId;
       const opponentId = home ? fixture.team_a : fixture.team_h;

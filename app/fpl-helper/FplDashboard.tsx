@@ -3,19 +3,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3, Check, ChevronRight,
-  Clock3, Database, RefreshCw, Search, ShieldCheck, Sparkles, Target,
+  Clock3, Database, Layers3, RefreshCw, Search, ShieldCheck, Sparkles, Target,
   TrendingDown, TrendingUp, X,
 } from 'lucide-react';
 import type { DashboardPlayer } from '@/lib/fpl/phase5';
 import type { PhaseSixSnapshot } from '@/lib/fpl/phase6';
 import styles from './FplDashboard.module.css';
 
-type Tab = 'overview' | 'squad' | 'transfers' | 'council' | 'context' | 'data';
+type Tab = 'overview' | 'squad' | 'transfers' | 'chips' | 'council' | 'context' | 'data';
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Decision' },
   { id: 'squad', label: 'Squad' },
   { id: 'transfers', label: 'Transfers' },
+  { id: 'chips', label: 'Chips' },
   { id: 'council', label: 'Council' },
   { id: 'context', label: 'Match Context' },
   { id: 'data', label: 'Data' },
@@ -178,6 +179,8 @@ export default function FplDashboard() {
   const compareFirst = compareA ? playerById.get(compareA) : null;
   const compareSecond = compareB ? playerById.get(compareB) : null;
   const commentaryInsights = data.commentaryInsights ?? [];
+  const recommendedChipAssessment = data.chipPlan.assessments.find((item) => item.chip === data.chipPlan.recommendation.chip);
+  const recommendedChipOpportunity = recommendedChipAssessment?.opportunities.find((item) => item.gameweek === data.chipPlan.recommendation.gameweek);
 
   return (
     <main className={styles.page}>
@@ -233,6 +236,12 @@ export default function FplDashboard() {
             </article>
           </section>
 
+          <section className={styles.chipDecision}>
+            <div className={styles.decisionIcon}><Layers3 /></div>
+            <div><span>Chip planner</span><h3>{data.chipPlan.recommendation.headline}</h3><p>{data.chipPlan.recommendation.reason}</p></div>
+            <button className={styles.textButton} onClick={() => setTab('chips')}>Open the chip schedule <ArrowRight size={15} /></button>
+          </section>
+
           <section className={styles.panel}>
             <div className={styles.panelHead}><div><span>Evidence chain</span><h3>From source to decision</h3></div><Activity /></div>
             <div className={styles.evidenceChain}>{data.finalCommittee.evidenceChain.map((item, index) => <div key={item.kind}><b>{String(index + 1).padStart(2, '0')}</b><span>{titleCase(item.kind)}</span><p>{item.statement}</p></div>)}</div>
@@ -264,6 +273,41 @@ export default function FplDashboard() {
           </section>
           {data.transferComparisons.map((comparison) => <section className={styles.comparisonCard} key={`${comparison.selectedPlayerId}-${comparison.alternativePlayerId}`}><div className={styles.versus}><strong>{comparison.selectedPlayerName}</strong><span>instead of</span><strong>{comparison.alternativePlayerName}</strong></div><div className={styles.comparisonNumbers}><span>{signed(comparison.xPtsDifference3)} xPts / 3GW</span><span>{signed(comparison.priceDifference)}m price</span><span>{signed(comparison.councilDifference)} Council</span></div><p>{comparison.reason}</p><small>Decision flips if: {comparison.whatWouldChange}</small></section>)}
           <section className={styles.panel}><div className={styles.panelHead}><div><span>Red Team objections</span><h3>How this plan fails</h3></div><ShieldCheck /></div><div className={styles.objectionList}>{data.redTeam.objections.map((objection) => <article key={objection.question}><b className={styles[`severity_${objection.severity}`]}>{objection.severity}</b><div><strong>{objection.question}</strong><p>{objection.finding}</p><small>{objection.mitigation}</small></div></article>)}</div></section>
+        </>}
+
+        {tab === 'chips' && <>
+          <section className={styles.transferHero}>
+            <div><span>Half {data.chipPlan.currentHalf} chip call</span><h2>{data.chipPlan.recommendation.headline}</h2><p>{data.chipPlan.recommendation.reason}</p></div>
+            <div><span>Decision confidence</span><strong>{data.chipPlan.recommendation.confidence}%</strong><small>{data.chipPlan.gameweeksRemaining} deadline{data.chipPlan.gameweeksRemaining === 1 ? '' : 's'} before expiry</small></div>
+          </section>
+          <section className={styles.chipGrid}>
+            {data.chipPlan.assessments.map((assessment) => {
+              const best = assessment.opportunities.find((item) => item.gameweek === assessment.bestGameweek) ?? assessment.opportunities[0];
+              return <article className={`${styles.chipCard} ${assessment.action === 'use_now' ? styles.chipNow : ''}`} key={assessment.chip}>
+                <div className={styles.chipCardHead}><div><span>{titleCase(assessment.availability)}</span><h3>{titleCase(assessment.chip)}</h3></div><b>{titleCase(assessment.action)}</b></div>
+                <div className={styles.chipMetrics}><div><span>Best week</span><strong>{assessment.bestGameweek ? `GW${assessment.bestGameweek}` : '—'}</strong></div><div><span>Extra xPts</span><strong>{best ? signed(best.projectedGain) : '—'}</strong></div><div><span>Confidence</span><strong>{assessment.confidence}%</strong></div></div>
+                <p>{assessment.reason}</p>
+                {best && <><div className={styles.chipPlayers}>{best.players.slice(0, 5).map((player) => <span key={player}>{player}</span>)}</div><small>{best.caveats[0]}</small></>}
+              </article>;
+            })}
+          </section>
+          {data.chipPlan.recommendation.action === 'use_chip' && recommendedChipOpportunity?.squad && <section className={styles.panel}>
+            <div className={styles.panelHead}><div><span>Exact provisional setup</span><h3>{titleCase(data.chipPlan.recommendation.chip ?? '')} · {recommendedChipOpportunity.squad.formation} · {recommendedChipOpportunity.projectedTotal} xPts</h3></div><Target /></div>
+            <div className={styles.chipSquad}>{recommendedChipOpportunity.squad.players.map((player) => <button onClick={() => { const detail = playerById.get(player.id); if (detail) setSelectedPlayer(detail); }} key={player.id}><span>{player.starter ? 'XI' : 'Bench'} · {player.position} · {player.team}</span><strong>{player.name}{recommendedChipOpportunity.squad?.captainId === player.id ? ' (C)' : recommendedChipOpportunity.squad?.viceCaptainId === player.id ? ' (VC)' : ''}</strong><small>{price(player.price)} · {player.xPts} xPts</small></button>)}</div>
+            <p className={styles.caveat}>{recommendedChipOpportunity.transfersRequired ?? 0} squad change{recommendedChipOpportunity.transfersRequired === 1 ? '' : 's'} · {recommendedChipOpportunity.squad.bankAfter == null ? 'Current squad bank unchanged' : `${price(recommendedChipOpportunity.squad.bankAfter)} left in the bank`}. This remains provisional until the final team-news refresh, and it does not alter the ledger.</p>
+          </section>}
+          <section className={styles.twoColumn}>
+            <article className={styles.panel}>
+              <div className={styles.panelHead}><div><span>Opportunity calendar</span><h3>Current top windows</h3></div><Sparkles /></div>
+              <div className={styles.opportunityList}>{data.chipPlan.assessments.filter((item) => item.availability === 'available').flatMap((item) => item.opportunities.slice(0, 2)).sort((a, b) => a.gameweek - b.gameweek || b.quality - a.quality).map((opportunity) => <div key={`${opportunity.chip}-${opportunity.gameweek}`}><b>GW{opportunity.gameweek}</b><span><strong>{titleCase(opportunity.chip)}</strong><small>{opportunity.explanation}</small></span><em>{opportunity.quality}</em></div>)}</div>
+            </article>
+            <article className={styles.panel}>
+              <div className={styles.panelHead}><div><span>Blank & double scan</span><h3>{data.chipPlan.calendarFlags.length ? `${data.chipPlan.calendarFlags.length} exceptional Gameweek${data.chipPlan.calendarFlags.length === 1 ? '' : 's'} scheduled` : 'No blanks or doubles currently scheduled'}</h3></div><Layers3 /></div>
+              {data.chipPlan.calendarFlags.length ? <ul className={styles.notesList}>{data.chipPlan.calendarFlags.map((flag) => <li key={flag.gameweek}>{flag.explanation}</li>)}</ul> : <p>The official schedule is currently normal through GW{data.chipPlan.expiresAfterGameweek}. The scan reruns automatically after postponements or rearrangements.</p>}
+              <a className={styles.textButton} href={data.chipPlan.ruleSourceUrl} target="_blank" rel="noreferrer">Official 2026/27 chip rules <ArrowRight size={15} /></a>
+            </article>
+          </section>
+          <section className={styles.panel}><div className={styles.panelHead}><div><span>Method</span><h3>How each chip is valued</h3></div><ShieldCheck /></div><ul className={styles.notesList}>{data.chipPlan.modelNotes.map((note) => <li key={note}>{note}</li>)}</ul></section>
         </>}
 
         {tab === 'council' && <>

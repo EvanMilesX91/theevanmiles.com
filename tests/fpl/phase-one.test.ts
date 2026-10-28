@@ -172,6 +172,26 @@ describe('Phase 1 owner ledger', () => {
     expect(confirmed).toMatchObject({ lastConfirmedGameweek: 8, nextGameweek: 9, freeTransfers: 1, captainId: 411, viceCaptainId: 40 });
     expect(confirmed.confirmedGameweeks[0]).toMatchObject({ gameweek: 8, points: 48 });
   });
+
+  it('refreshes all four chips when the first half closes after Gameweek 19', () => {
+    const ledger = preGw8Ledger();
+    ledger.nextGameweek = 19;
+    ledger.lastConfirmedGameweek = 18;
+    ledger.chips = { wildcard: 'used', free_hit: 'used', bench_boost: 'used', triple_captain: 'used' };
+    const confirmed = confirmGameweek({ ledger, record: {
+      gameweek: 19,
+      points: 60,
+      starterIds: [1, 31, 204, 388, 229, 426, 13, 124, 290, 338, 411],
+      benchIds: [110, 165, 176, 441],
+      captainId: 411,
+      viceCaptainId: 426,
+      chipUsed: 'bench_boost',
+      confirmedAt: '2027-01-02T18:00:00.000Z',
+      confirmationReference: 'Explicit Gameweek 19 confirmation.',
+    } });
+    expect(confirmed.nextGameweek).toBe(20);
+    expect(confirmed.chips).toEqual({ wildcard: 'available', free_hit: 'available', triple_captain: 'available', bench_boost: 'available' });
+  });
 });
 
 describe('Phase 1 rolling features', () => {

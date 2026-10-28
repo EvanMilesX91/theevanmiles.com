@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { MonitoredPlayer, OfficialPlayer, Position, SquadLedger } from '@/lib/fpl/phase1';
+import type { MonitoredPlayer, OfficialFixture, OfficialPlayer, OfficialTeam, Position, SquadLedger } from '@/lib/fpl/phase1';
 import type { PlayerProjection } from '@/lib/fpl/phase2';
-import { buildDecisionPlayers, optimizeLineup, optimizeTransfers, validateSquad } from '@/lib/fpl/phase3';
+import { buildDecisionPlayers, optimizeLineup, optimizeTransfers, planChips, validateSquad } from '@/lib/fpl/phase3';
 import type { DecisionPlayer } from '@/lib/fpl/phase3';
 
 function projection(id: number, position: Position, teamId: number, points: number, price = 5): PlayerProjection {
@@ -68,5 +68,24 @@ describe('Phase 3 decision layer', () => {
     expect(result.newPlayer.priorReliance).toBeGreaterThan(0.9);
     expect(result.pricePressure.source).toBe('official_transfer_activity_proxy');
     expect(result.pricePressure.caveat).toContain('not an official forecast');
+  });
+
+  it('schedules available chips into unique Gameweeks and respects the current half-season expiry', () => {
+    const owned = squad();
+    const ledger: SquadLedger = {
+      schemaVersion: 1, managerName: 'Test', teamName: 'Test', lastConfirmedGameweek: 7, nextGameweek: 8, bank: 0, freeTransfers: 1,
+      squad: owned.map((player) => ({ elementId: player.projection.playerId, purchasePrice: player.projection.price, acquiredGameweek: 1 })),
+      lastConfirmedXi: [], captainId: null, viceCaptainId: null,
+      chips: { wildcard: 'available', free_hit: 'available', bench_boost: 'available', triple_captain: 'used' },
+      confirmedTransfers: [], confirmedGameweeks: [], updatedAt: '2026-01-01T00:00:00Z',
+    };
+    const teams: OfficialTeam[] = Array.from({ length: 8 }, (_, index) => ({ id: index + 1, name: `Team ${index + 1}`, short_name: `T${index + 1}` }));
+    const fixtures: OfficialFixture[] = Array.from({ length: 12 }, (_, offset) => offset + 8).flatMap((gameweek) => [1, 3, 5, 7].map((home, index) => ({ id: gameweek * 10 + index, event: gameweek, kickoff_time: null, team_h: home, team_a: home + 1, team_h_difficulty: 3, team_a_difficulty: 3, finished: false })));
+    const plan = planChips({ players: owned, ledger, monitored: owned.map((player) => ({ id: player.projection.playerId, sellingPrice: player.projection.price })) as MonitoredPlayer[], fixtures, teams, nextGameweek: 8, ledgerStale: false, normalTransferGain6: 0 });
+    expect(plan.currentHalf).toBe(1);
+    expect(plan.expiresAfterGameweek).toBe(19);
+    expect(plan.assessments.find((item) => item.chip === 'triple_captain')?.action).toBe('used');
+    const scheduled = plan.assessments.filter((item) => item.availability === 'available').map((item) => item.bestGameweek).filter((item): item is number => item !== null);
+    expect(new Set(scheduled).size).toBe(scheduled.length);
   });
 });

@@ -20,7 +20,7 @@ export function isLedgerStale(confirmedNextGameweek: number, officialNextGamewee
   return confirmedNextGameweek < officialNextGameweek;
 }
 
-export function buildDashboardPlayer(player: DecisionPlayer, council: PlayerCouncil): DashboardPlayer {
+export function buildDashboardPlayer(player: DecisionPlayer, council: PlayerCouncil, nextGameweek?: number): DashboardPlayer {
   const projection = player.projection;
   return {
     id: projection.playerId, name: projection.playerName, team: projection.team, position: projection.position,
@@ -37,7 +37,7 @@ export function buildDashboardPlayer(player: DecisionPlayer, council: PlayerCoun
     commentary: projection.commentary ?? null,
     rotationRisk: projection.minutes.rotationRisk, role: projection.role.tacticalRole,
     roleChange: projection.role.change, sustainability: projection.sustainability.label,
-    oneLineReason: projection.oneLineReason, fixtures: projection.fixtures,
+    oneLineReason: projection.oneLineReason, fixtures: nextGameweek == null ? projection.fixtures : projection.fixtures.filter((fixture) => fixture.gameweek >= nextGameweek && fixture.gameweek < nextGameweek + 6),
     value: player.value, pricePressure: player.pricePressure, newPlayer: player.newPlayer, council,
   };
 }
@@ -54,10 +54,11 @@ export async function runPhaseFive(options: RunPhaseFiveOptions = {}): Promise<P
     sourceHealth: phaseFour.sourceHealth,
     ledger: {
       managerName: ledger.managerName, teamName: ledger.teamName, nextGameweek: ledger.nextGameweek,
-      bank: ledger.bank, freeTransfers: ledger.freeTransfers, stale: isLedgerStale(ledger.nextGameweek, officialData.nextGameweek),
+      bank: ledger.bank, freeTransfers: ledger.freeTransfers, stale: isLedgerStale(ledger.nextGameweek, officialData.nextGameweek), chips: ledger.chips,
     },
     lineup: phaseFour.finalCommittee.primaryScenario.lineup,
     transferDecision: phaseFour.phaseThree.transferDecision,
+    chipPlan: phaseFour.phaseThree.chipPlan,
     finalCommittee: phaseFour.finalCommittee,
     redTeam: phaseFour.redTeam,
     transferComparisons: phaseFour.transferComparisons,
@@ -68,7 +69,7 @@ export async function runPhaseFive(options: RunPhaseFiveOptions = {}): Promise<P
     players: phaseFour.phaseThree.players.map((player) => {
       const council = councilById.get(player.projection.playerId);
       if (!council) throw new Error(`Council result missing for player ${player.projection.playerId}.`);
-      return buildDashboardPlayer(player, council);
+      return buildDashboardPlayer(player, council, phaseFour.nextGameweek);
     }),
     modelNotes: phaseFour.modelNotes,
   };

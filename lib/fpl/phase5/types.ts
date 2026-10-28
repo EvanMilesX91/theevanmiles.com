@@ -1,6 +1,6 @@
 import type { Position, SourceHealth } from '../phase1';
 import type { AvailabilityConsensus, FixtureProjection, InjuryImpact, PlayerCommentaryInsight, TeamRating } from '../phase2';
-import type { LineupDecision, NewPlayerAssessment, PricePressure, TransferDecision, ValueAssessment } from '../phase3';
+import type { ChipPlan, LineupDecision, NewPlayerAssessment, PricePressure, TransferDecision, ValueAssessment } from '../phase3';
 import type { FinalCommittee, NotableOmission, PlayerComparison, PlayerCouncil, RedTeamReview } from '../phase4';
 
 export interface DashboardPlayer {
@@ -51,9 +51,11 @@ export interface PhaseFiveSnapshot {
     bank: number;
     freeTransfers: number;
     stale: boolean;
+    chips: Record<string, 'available' | 'used' | 'unknown'>;
   };
   lineup: LineupDecision;
   transferDecision: TransferDecision;
+  chipPlan: ChipPlan;
   finalCommittee: FinalCommittee;
   redTeam: RedTeamReview;
   transferComparisons: PlayerComparison[];

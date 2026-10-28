@@ -12,19 +12,20 @@ interface ProjectionInput {
   minutes: MinutesProjection;
   role: RoleAssessment;
   sustainability: SustainablePerformance;
+  nextGameweek: number;
 }
 
 export function projectPlayer(input: ProjectionInput): PlayerProjection {
-  const { player, official, officialTeams, teamRatings, minutes, role, sustainability } = input;
+  const { player, official, officialTeams, teamRatings, minutes, role, sustainability, nextGameweek } = input;
   const own = teamRatings.find((team) => team.team === player.club);
   const goalPoints = player.position === 'FWD' ? 4 : player.position === 'MID' ? 5 : 6;
   const seasonMinutes = Math.max(1, official.minutes);
   const saves90 = (official.saves ?? 0) * 90 / seasonMinutes;
   const cards90 = ((official.yellow_cards ?? 0) + (official.red_cards ?? 0) * 3 + (official.own_goals ?? 0) * 2 + (official.penalties_missed ?? 0) * 2) * 90 / seasonMinutes;
-  const fixtures = player.nextFixtures.slice(0, 6).map((fixture, fixtureIndex): FixtureProjection => {
+  const fixtures = player.nextFixtures.map((fixture): FixtureProjection => {
     const opponentTeam = officialTeams.find((team) => team.name === fixture.opponent);
     const opponent = teamRatings.find((team) => team.teamId === opponentTeam?.id || team.teamShort === fixture.opponent || team.team === fixture.opponent);
-    const isNextFixture = fixtureIndex === 0;
+    const isNextFixture = fixture.gameweek === nextGameweek;
     const expectedMinutes = isNextFixture ? minutes.expectedMinutesPerFixture : (minutes.futureExpectedMinutesPerFixture ?? minutes.expectedMinutesPerFixture);
     const startProbability = isNextFixture ? minutes.startProbability : (minutes.futureStartProbability ?? minutes.startProbability);
     const appearanceProbability = isNextFixture ? minutes.appearanceProbability : (minutes.futureAppearanceProbability ?? minutes.appearanceProbability);
@@ -54,12 +55,15 @@ export function projectPlayer(input: ProjectionInput): PlayerProjection {
       explanation: `${round(expectedMinutes)} expected minutes; ${fixture.home ? 'home' : 'away'} to ${fixture.opponent}; opponent-adjusted attack and clean-sheet probabilities applied.`,
     };
   });
-  const sum = (count: number, key: 'xPts' | 'floor' | 'ceiling') => round(fixtures.slice(0, count).reduce((total, fixture) => total + fixture[key], 0));
+  const sum = (gameweeks: number, key: 'xPts' | 'floor' | 'ceiling') => round(fixtures
+    .filter((fixture) => fixture.gameweek >= nextGameweek && fixture.gameweek < nextGameweek + gameweeks)
+    .reduce((total, fixture) => total + fixture[key], 0));
   const confidence = Math.round(clamp(minutes.confidence * 0.45 + sustainability.confidence * 0.3 + (own?.confidence ?? 45) * 0.2 + (role.change === 'insufficient_data' ? 25 : role.confidence) * 0.05, 20, 92));
-  const first = fixtures[0];
+  const nextGameweekFixtures = fixtures.filter((fixture) => fixture.gameweek === nextGameweek);
+  const first = nextGameweekFixtures[0];
   const oneLineReason = first
-    ? `${first.xPts} xPts in GW${first.gameweek}: ${minutes.expectedMinutesPerFixture} expected minutes, ${sustainability.label} returns, ${first.home ? 'home' : 'away'} vs ${first.opponent}.`
-    : 'No scheduled fixture is available in the next six Gameweeks.';
+    ? `${sum(1, 'xPts')} xPts across ${nextGameweekFixtures.length} GW${nextGameweek} fixture${nextGameweekFixtures.length === 1 ? '' : 's'}: ${minutes.expectedMinutesPerFixture} expected minutes per fixture and ${sustainability.label} returns.`
+    : `No scheduled fixture in GW${nextGameweek}; later fixtures remain in the planning horizon.`;
   return {
     playerId: player.id, playerName: player.name, teamId: official.team, team: player.club, position: player.position, price: player.price, owned: player.owned,
     minutes, role, sustainability, fixtures, xPts1: sum(1, 'xPts'), xPts3: sum(3, 'xPts'), xPts6: sum(6, 'xPts'), floor1: sum(1, 'floor'), ceiling1: sum(1, 'ceiling'), confidence, oneLineReason, shadowLineup: null,
