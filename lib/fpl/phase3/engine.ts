@@ -2,6 +2,7 @@ import { fetchPhaseOneOfficialData, type FetchLike, type PhaseOneOfficialData, t
 import { runPhaseTwo, type ModelLearningAdjustment } from '../phase2';
 import { optimizeLineup, optimizeTransfers } from './optimizer';
 import { planChips } from './chips';
+import { verifyPublicEntry } from './entry-sync';
 import { writePhaseThreeSnapshot } from './store';
 import type { PhaseThreeSnapshot, TransferDecision } from './types';
 import { buildDecisionPlayers } from './value';
@@ -15,6 +16,7 @@ export interface RunPhaseThreeOptions {
   now?: Date;
   lineupUrl?: string;
   learningAdjustment?: ModelLearningAdjustment;
+  entryId?: number | null;
 }
 
 export async function runPhaseThree(options: RunPhaseThreeOptions = {}): Promise<PhaseThreeSnapshot> {
@@ -41,6 +43,7 @@ export async function runPhaseThree(options: RunPhaseThreeOptions = {}): Promise
     bestScenario: worthwhile ? best : optimized.baseline,
     alternatives: optimized.scenarios.slice(0, 5),
   };
+  const entryVerification = await verifyPublicEntry({ ledger: phaseTwo.phaseOne.ledger, fetcher: options.fetcher, entryId: options.entryId });
   const chipPlan = planChips({
     players,
     ledger: phaseTwo.phaseOne.ledger,
@@ -49,7 +52,9 @@ export async function runPhaseThree(options: RunPhaseThreeOptions = {}): Promise
     teams: officialData.bootstrap.teams,
     nextGameweek: officialData.nextGameweek,
     ledgerStale,
-    normalTransferGain6: transferDecision.bestScenario.netGain6,
+    now: options.now ?? new Date(),
+    deadlineTime: officialData.bootstrap.events.find((event) => event.id === officialData.nextGameweek)?.deadline_time ?? null,
+    entryVerification,
   });
   const priceSourceHealth = {
     key: 'price_pressure_model', status: options.learningAdjustment?.priceDirectionalAccuracy != null && options.learningAdjustment.priceDirectionalAccuracy >= 60 ? 'healthy' as const : 'degraded' as const, retrievedAt: new Date().toISOString(), records: players.length,

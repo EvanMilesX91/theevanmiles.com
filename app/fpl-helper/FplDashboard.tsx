@@ -278,25 +278,29 @@ export default function FplDashboard() {
         {tab === 'chips' && <>
           <section className={styles.transferHero}>
             <div><span>Half {data.chipPlan.currentHalf} chip call</span><h2>{data.chipPlan.recommendation.headline}</h2><p>{data.chipPlan.recommendation.reason}</p></div>
-            <div><span>Decision confidence</span><strong>{data.chipPlan.recommendation.confidence}%</strong><small>{data.chipPlan.gameweeksRemaining} deadline{data.chipPlan.gameweeksRemaining === 1 ? '' : 's'} before expiry</small></div>
+            <div><span>Decision probability</span><strong>{data.chipPlan.recommendation.confidence}%</strong><small>{data.chipPlan.recommendation.inputConfidence}% input confidence · {data.chipPlan.gameweeksRemaining} deadline{data.chipPlan.gameweeksRemaining === 1 ? '' : 's'} before expiry</small></div>
           </section>
           <section className={styles.chipGrid}>
             {data.chipPlan.assessments.map((assessment) => {
               const best = assessment.opportunities.find((item) => item.gameweek === assessment.bestGameweek) ?? assessment.opportunities[0];
               return <article className={`${styles.chipCard} ${assessment.action === 'use_now' ? styles.chipNow : ''}`} key={assessment.chip}>
                 <div className={styles.chipCardHead}><div><span>{titleCase(assessment.availability)}</span><h3>{titleCase(assessment.chip)}</h3></div><b>{titleCase(assessment.action)}</b></div>
-                <div className={styles.chipMetrics}><div><span>Best week</span><strong>{assessment.bestGameweek ? `GW${assessment.bestGameweek}` : '—'}</strong></div><div><span>Extra xPts</span><strong>{best ? signed(best.projectedGain) : '—'}</strong></div><div><span>Confidence</span><strong>{assessment.confidence}%</strong></div></div>
+                <div className={styles.chipMetrics}><div><span>Best week</span><strong>{assessment.bestGameweek ? `GW${assessment.bestGameweek}` : '—'}</strong></div><div><span>Extra xPts</span><strong>{best ? signed(best.projectedGain) : '—'}</strong></div><div><span>Use-now probability</span><strong>{assessment.probabilityUseNow == null ? '—' : `${assessment.probabilityUseNow}%`}</strong></div></div>
                 <p>{assessment.reason}</p>
-                {best && <><div className={styles.chipPlayers}>{best.players.slice(0, 5).map((player) => <span key={player}>{player}</span>)}</div><small>{best.caveats[0]}</small></>}
+                {best && <><div className={styles.chipPlayers}>{best.players.slice(0, 5).map((player) => <span key={player}>{player}</span>)}</div><small>p10–p90: {signed(best.outcomeRange.p10)} to {signed(best.outcomeRange.p90)} · {assessment.confidence}% input confidence · {best.caveats[0]}</small></>}
               </article>;
             })}
           </section>
-          {data.chipPlan.recommendation.action === 'use_chip' && recommendedChipOpportunity?.squad && <section className={styles.panel}>
+          {(data.chipPlan.recommendation.action === 'use_chip' || data.chipPlan.recommendation.action === 'wait_for_final_refresh') && recommendedChipOpportunity?.squad && <section className={styles.panel}>
             <div className={styles.panelHead}><div><span>Exact provisional setup</span><h3>{titleCase(data.chipPlan.recommendation.chip ?? '')} · {recommendedChipOpportunity.squad.formation} · {recommendedChipOpportunity.projectedTotal} xPts</h3></div><Target /></div>
             <div className={styles.chipSquad}>{recommendedChipOpportunity.squad.players.map((player) => <button onClick={() => { const detail = playerById.get(player.id); if (detail) setSelectedPlayer(detail); }} key={player.id}><span>{player.starter ? 'XI' : 'Bench'} · {player.position} · {player.team}</span><strong>{player.name}{recommendedChipOpportunity.squad?.captainId === player.id ? ' (C)' : recommendedChipOpportunity.squad?.viceCaptainId === player.id ? ' (VC)' : ''}</strong><small>{price(player.price)} · {player.xPts} xPts</small></button>)}</div>
             <p className={styles.caveat}>{recommendedChipOpportunity.transfersRequired ?? 0} squad change{recommendedChipOpportunity.transfersRequired === 1 ? '' : 's'} · {recommendedChipOpportunity.squad.bankAfter == null ? 'Current squad bank unchanged' : `${price(recommendedChipOpportunity.squad.bankAfter)} left in the bank`}. This remains provisional until the final team-news refresh, and it does not alter the ledger.</p>
           </section>}
           <section className={styles.twoColumn}>
+            <article className={styles.panel}>
+              <div className={styles.panelHead}><div><span>Combined strategy</span><h3>Non-colliding chip sequence</h3></div><Target /></div>
+              <div className={styles.opportunityList}>{data.chipPlan.sequence.map((step) => <div key={`${step.chip}-${step.gameweek}`}><b>GW{step.gameweek}</b><span><strong>{titleCase(step.chip)}</strong><small>{step.reason}</small></span><em>{step.quality}</em></div>)}</div>
+            </article>
             <article className={styles.panel}>
               <div className={styles.panelHead}><div><span>Opportunity calendar</span><h3>Current top windows</h3></div><Sparkles /></div>
               <div className={styles.opportunityList}>{data.chipPlan.assessments.filter((item) => item.availability === 'available').flatMap((item) => item.opportunities.slice(0, 2)).sort((a, b) => a.gameweek - b.gameweek || b.quality - a.quality).map((opportunity) => <div key={`${opportunity.chip}-${opportunity.gameweek}`}><b>GW{opportunity.gameweek}</b><span><strong>{titleCase(opportunity.chip)}</strong><small>{opportunity.explanation}</small></span><em>{opportunity.quality}</em></div>)}</div>
@@ -307,6 +311,11 @@ export default function FplDashboard() {
               <a className={styles.textButton} href={data.chipPlan.ruleSourceUrl} target="_blank" rel="noreferrer">Official 2026/27 chip rules <ArrowRight size={15} /></a>
             </article>
           </section>
+          <section className={styles.twoColumn}>
+            <article className={styles.panel}><div className={styles.panelHead}><div><span>Activation gate</span><h3>{titleCase(data.chipPlan.activationGate.status)}</h3></div><ShieldCheck /></div><p>{data.chipPlan.activationGate.reason}</p><small>{data.chipPlan.activationGate.hoursToDeadline == null ? 'Deadline time unavailable' : `${data.chipPlan.activationGate.hoursToDeadline} hours to deadline`} · {data.chipPlan.activationGate.irreversible ? 'Irreversible after activation' : 'Cancelable before the deadline'}</small></article>
+            <article className={styles.panel}><div className={styles.panelHead}><div><span>Ledger cross-check</span><h3>{titleCase(data.chipPlan.entryVerification.status)}</h3></div><ShieldCheck /></div><p>{data.chipPlan.entryVerification.message}</p><small>This read-only check never records transfers or chips.</small></article>
+          </section>
+          <section className={styles.panel}><div className={styles.panelHead}><div><span>Fixture uncertainty</span><h3>{titleCase(data.chipPlan.calendarUncertainty.level)} · {data.chipPlan.calendarUncertainty.unassignedFixtures} unassigned</h3></div><Layers3 /></div><p>{data.chipPlan.calendarUncertainty.explanation}</p></section>
           <section className={styles.panel}><div className={styles.panelHead}><div><span>Method</span><h3>How each chip is valued</h3></div><ShieldCheck /></div><ul className={styles.notesList}>{data.chipPlan.modelNotes.map((note) => <li key={note}>{note}</li>)}</ul></section>
         </>}
 
@@ -351,6 +360,7 @@ export default function FplDashboard() {
               <div><span>XI total</span><strong>{data.calibration.aggregate ? `${data.calibration.aggregate.projectedWithCaptain} / ${data.calibration.aggregate.actualWithCaptain}` : '—'}</strong><small>projected / actual</small></div>
               <div><span>Price calls</span><strong>{data.calibration.priceModel.precision != null ? `${data.calibration.priceModel.precision.toFixed(1)}%` : '—'}</strong><small>{data.calibration.priceModel.status} · ±{data.calibration.priceModel.riseThreshold} threshold</small></div>
               <div><span>Predicted XI</span><strong>{data.calibration.aggregate?.shadowLineupAccuracy != null ? `${data.calibration.aggregate.shadowLineupAccuracy.toFixed(1)}%` : '—'}</strong><small>60+ minute proxy</small></div>
+              <div><span>Chip calls</span><strong>{data.calibration.chipModel?.meanAbsoluteError != null ? data.calibration.chipModel.meanAbsoluteError.toFixed(2) : '—'}</strong><small>{data.calibration.chipModel?.evaluatedCalls ?? 0} evaluated · forward-only MAE</small></div>
             </div>
             <div className={styles.calibrationFoot}><span>{data.calibration.trackedGameweeks} forecast{data.calibration.trackedGameweeks === 1 ? '' : 's'} tracked</span><span>{data.calibration.historicalEvaluatedGameweeks.length} historical · {data.calibration.forwardEvaluatedGameweeks.length} forward</span><span>{data.calibration.priceSnapshots} price snapshot{data.calibration.priceSnapshots === 1 ? '' : 's'}</span><span>{data.calibration.backend} storage</span>{data.calibration.latestEvaluation && <span>Latest · GW{data.calibration.latestEvaluation.gameweek}</span>}</div>
           </section>

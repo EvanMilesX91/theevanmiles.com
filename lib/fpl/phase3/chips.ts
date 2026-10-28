@@ -1,5 +1,6 @@
 import type { MonitoredPlayer, OfficialFixture, OfficialTeam, Position, SquadLedger } from '../phase1';
 import { optimizeLineup, validateSquad } from './optimizer';
+import { simulateNormalTransferPath, type TransferPath } from './chip-simulation';
 import type {
   ChipAssessment,
   ChipAvailability,
@@ -18,6 +19,30 @@ const QUALITY_GATE: Record<ChipKey, number> = { wildcard: 70, free_hit: 75, benc
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+function riskRange(gain: number, confidence: number, distance: number, chip: ChipKey) {
+  const base = { wildcard: 8, free_hit: 5, bench_boost: 4.5, triple_captain: 4 }[chip];
+  const sigma = base * (1.35 - confidence / 200) + distance * 0.45;
+  const downsideProbability = Math.round(100 / (1 + Math.exp((gain / Math.max(1, sigma)) * 1.7)));
+  return { outcomeRange: { p10: round(gain - sigma * 1.282), p50: round(gain), p90: round(gain + sigma * 1.282) }, downsideProbability };
+}
+
+function mulberry32(seed: number) { return () => { let value = seed += 0x6D2B79F5; value = Math.imul(value ^ value >>> 15, value | 1); value ^= value + Math.imul(value ^ value >>> 7, value | 61); return ((value ^ value >>> 14) >>> 0) / 4294967296; }; }
+function normal(random: () => number) { return Math.sqrt(-2 * Math.log(Math.max(1e-9, random()))) * Math.cos(2 * Math.PI * random()); }
+function useNowProbability(current: ChipOpportunity | undefined, future: ChipOpportunity | undefined): { probability: number | null; regret: number | null } {
+  if (!current) return { probability: null, regret: null };
+  if (!future || future.gameweek === current.gameweek) return { probability: 100 - current.downsideProbability, regret: 0 };
+  const random = mulberry32(current.gameweek * 1009 + future.gameweek * 917 + CHIP_KEYS.indexOf(current.chip) * 7919);
+  const currentSigma = Math.max(1, (current.outcomeRange.p90 - current.outcomeRange.p10) / 2.564);
+  const futureSigma = Math.max(1, (future.outcomeRange.p90 - future.outcomeRange.p10) / 2.564);
+  let wins = 0; let regret = 0;
+  for (let sample = 0; sample < 2_000; sample += 1) {
+    const now = current.projectedGain + normal(random) * currentSigma;
+    const later = future.projectedGain + normal(random) * futureSigma;
+    if (now >= later) wins += 1; else regret += later - now;
+  }
+  return { probability: Math.round(wins / 20), regret: round(regret / 2_000) };
+}
 
 function fixtureValue(player: DecisionPlayer, gameweek: number, key: 'xPts' | 'floor' | 'ceiling' = 'xPts'): number {
   return player.projection.fixtures.filter((fixture) => fixture.gameweek === gameweek).reduce((sum, fixture) => sum + fixture[key], 0);
@@ -169,9 +194,11 @@ function tripleCaptainOpportunity(squad: DecisionPlayer[], gameweek: number, nex
   const captain = squad.find((player) => player.projection.playerId === lineup.captainId);
   const gain = captain ? fixtureValue(captain, gameweek) : 0;
   const ceiling = captain ? fixtureValue(captain, gameweek, 'ceiling') : 0;
+  const confidence = confidenceFor(captain ? [captain] : [], gameweek, nextGameweek);
   return {
     chip: 'triple_captain', gameweek, projectedGain: round(gain), projectedTotal: round(lineup.xPts1WithCaptain + gain),
-    quality: Math.round(clamp(gain / 12 * 82 + ceiling / 16 * 18, 0, 100)), confidence: confidenceFor(captain ? [captain] : [], gameweek, nextGameweek),
+    quality: Math.round(clamp(gain / 12 * 82 + ceiling / 16 * 18, 0, 100)), confidence,
+    ...riskRange(gain, confidence, gameweek - nextGameweek, 'triple_captain'),
     players: captain ? [captain.projection.playerName] : [], transfersRequired: null, squad: squadSelection(squad, gameweek),
     explanation: captain ? `${captain.projection.playerName} projects ${round(gain)} points before captain multipliers; Triple Captain adds one extra copy of that score.` : 'No legal captain candidate is available.',
     caveats: ['The gain is the extra captain score above normal double captaincy.', 'Late availability and predicted-lineup news can materially change a one-player chip.'],
@@ -183,9 +210,11 @@ function benchBoostOpportunity(squad: DecisionPlayer[], gameweek: number, nextGa
   const bench = lineup.benchIds.map((id) => squad.find((player) => player.projection.playerId === id)).filter((player): player is DecisionPlayer => Boolean(player));
   const gain = bench.reduce((sum, player) => sum + fixtureValue(player, gameweek), 0);
   const appearance = bench.length ? bench.reduce((sum, player) => sum + player.projection.minutes.appearanceProbability, 0) / bench.length : 0;
+  const confidence = confidenceFor(bench, gameweek, nextGameweek);
   return {
     chip: 'bench_boost', gameweek, projectedGain: round(gain), projectedTotal: round(lineup.xPts1WithCaptain + gain),
-    quality: Math.round(clamp(gain / 16 * 85 + appearance * 15, 0, 100)), confidence: confidenceFor(bench, gameweek, nextGameweek),
+    quality: Math.round(clamp(gain / 16 * 85 + appearance * 15, 0, 100)), confidence,
+    ...riskRange(gain, confidence, gameweek - nextGameweek, 'bench_boost'),
     players: bench.map((player) => player.projection.playerName), transfersRequired: null, squad: squadSelection(squad, gameweek),
     explanation: `The optimized bench projects ${round(gain)} points from ${bench.length} players, with ${Math.round(appearance * 100)}% average appearance probability.`,
     caveats: ['This uses the currently owned squad; future transfers or a preceding Wildcard can improve the bench.', 'Bench order is irrelevant when Bench Boost is active.'],
@@ -199,9 +228,11 @@ function freeHitOpportunity(args: { players: DecisionPlayer[]; squad: DecisionPl
   const gain = optimizedLineup.xPts1WithCaptain - baseline.xPts1WithCaptain;
   const starters = optimized ? optimizedLineup.starterIds.map((id) => optimized.find((player) => player.projection.playerId === id)).filter((player): player is DecisionPlayer => Boolean(player)) : [];
   const calendarBonus = args.flag ? Math.min(15, args.flag.blankTeams.length * 2 + args.flag.doubleTeams.length * 3) : 0;
+  const confidence = confidenceFor(starters, args.gameweek, args.nextGameweek);
   return {
     chip: 'free_hit', gameweek: args.gameweek, projectedGain: round(gain), projectedTotal: round(optimizedLineup.xPts1WithCaptain),
-    quality: Math.round(clamp(gain / 15 * 85 + calendarBonus, 0, 100)), confidence: confidenceFor(starters, args.gameweek, args.nextGameweek),
+    quality: Math.round(clamp(gain / 15 * 85 + calendarBonus, 0, 100)), confidence,
+    ...riskRange(gain, confidence, args.gameweek - args.nextGameweek, 'free_hit'),
     players: starters.sort((a, b) => fixtureValue(b, args.gameweek) - fixtureValue(a, args.gameweek)).slice(0, 5).map((player) => player.projection.playerName),
     transfersRequired: optimized ? optimized.filter((player) => !args.squad.some((owned) => owned.projection.playerId === player.projection.playerId)).length : null,
     squad: squadSelection(optimized ?? args.squad, args.gameweek, args.budget),
@@ -210,23 +241,28 @@ function freeHitOpportunity(args: { players: DecisionPlayer[]; squad: DecisionPl
   };
 }
 
-function wildcardOpportunity(args: { players: DecisionPlayer[]; squad: DecisionPlayer[]; budget: number; gameweek: number; end: number; nextGameweek: number; normalTransferGain6: number }): ChipOpportunity {
+function wildcardOpportunity(args: { players: DecisionPlayer[]; squad: DecisionPlayer[]; budget: number; gameweek: number; end: number; nextGameweek: number; monitored: MonitoredPlayer[]; ledger: SquadLedger }): ChipOpportunity {
   const horizonEnd = Math.min(args.end, args.gameweek + 5);
-  const baseline = scoreWindow(args.squad, args.gameweek, horizonEnd);
-  const optimized = optimizeChipSquad(args.players, args.budget, args.gameweek, horizonEnd);
+  const initial: TransferPath = { squad: args.squad, bank: args.ledger.bank, freeTransfers: args.ledger.freeTransfers, projectedPoints: 0, hitCost: 0, weeks: [] };
+  const prefix = simulateNormalTransferPath({ players: args.players, initial, monitored: args.monitored, ledger: args.ledger, start: args.nextGameweek, end: args.gameweek - 1 });
+  const baselineRoute = simulateNormalTransferPath({ players: args.players, initial: prefix, monitored: args.monitored, ledger: args.ledger, start: args.gameweek, end: horizonEnd });
+  const baseline = baselineRoute.projectedPoints - prefix.projectedPoints;
+  const liveBudget = round(prefix.bank + prefix.squad.reduce((sum, player) => sum + player.projection.price, 0), 1);
+  const optimized = optimizeChipSquad(args.players, liveBudget, args.gameweek, horizonEnd);
   const optimizedScore = optimized ? scoreWindow(optimized, args.gameweek, horizonEnd) : baseline;
-  const transfersRequired = optimized ? optimized.filter((player) => !args.squad.some((owned) => owned.projection.playerId === player.projection.playerId)).length : 0;
-  const normalRouteCredit = Math.max(0, args.normalTransferGain6) + Math.min(18, Math.max(0, args.gameweek - args.nextGameweek) * 3);
-  const gain = Math.max(0, optimizedScore - baseline - normalRouteCredit);
-  const selected = optimized ?? args.squad;
+  const transfersRequired = optimized ? optimized.filter((player) => !prefix.squad.some((owned) => owned.projection.playerId === player.projection.playerId)).length : 0;
+  const gain = optimizedScore - baseline;
+  const selected = optimized ?? prefix.squad;
   const keyPlayers = [...selected].sort((a, b) => windowValue(b, args.gameweek, horizonEnd) - windowValue(a, args.gameweek, horizonEnd)).slice(0, 5);
+  const confidence = confidenceFor(keyPlayers, args.gameweek, args.nextGameweek);
   return {
     chip: 'wildcard', gameweek: args.gameweek, projectedGain: round(gain), projectedTotal: round(optimizedScore),
-    quality: Math.round(clamp(30 + gain / 2 + Math.min(25, transfersRequired * 2), 0, 100)), confidence: confidenceFor(keyPlayers, args.gameweek, args.nextGameweek),
+    quality: Math.round(clamp(25 + gain * 2 + Math.min(22, transfersRequired * 1.8), 0, 100)), confidence,
+    ...riskRange(gain, confidence, args.gameweek - args.nextGameweek, 'wildcard'),
     players: keyPlayers.map((player) => player.projection.playerName), transfersRequired,
-    squad: squadSelection(selected, args.gameweek, args.budget),
-    explanation: `The best legal rebuild projects ${round(optimizedScore)} points over GW${args.gameweek}–${horizonEnd}, an estimated ${round(gain)}-point edge after crediting a normal transfer route.`,
-    caveats: ['This is a six-Gameweek planning estimate, not a claim that every suggested future transfer would remain optimal.', 'The Wildcard is permanent and cannot be cancelled once transfer confirmation activates it.'],
+    squad: squadSelection(selected, args.gameweek, liveBudget),
+    explanation: `The legal rebuild projects ${round(optimizedScore)} points over GW${args.gameweek}–${horizonEnd}, versus ${round(baseline)} from a simulated weekly route that tracks free transfers, bank and hits: a ${round(gain)}-point edge.`,
+    caveats: ['The comparison now simulates legal transfers week by week; future prices and newly reported injuries still cannot be known.', 'The Wildcard is permanent and cannot be cancelled once transfer confirmation activates it.'],
   };
 }
 
@@ -235,7 +271,10 @@ function assignUniqueGameweeks(available: Array<{ chip: ChipKey; opportunities: 
   let best = new Map<ChipKey, ChipOpportunity>();
   const search = (index: number, used: Set<number>, score: number, selected: Map<ChipKey, ChipOpportunity>) => {
     if (index === available.length) {
-      if (score > bestScore) { bestScore = score; best = new Map(selected); }
+      const wildcard = selected.get('wildcard');
+      const benchBoost = selected.get('bench_boost');
+      const sequenceBonus = wildcard && benchBoost && benchBoost.gameweek > wildcard.gameweek && benchBoost.gameweek - wildcard.gameweek <= 2 ? 8 : 0;
+      if (score + sequenceBonus > bestScore) { bestScore = score + sequenceBonus; best = new Map(selected); }
       return;
     }
     const item = available[index];
@@ -259,8 +298,13 @@ export function planChips(args: {
   teams: OfficialTeam[];
   nextGameweek: number;
   ledgerStale: boolean;
-  normalTransferGain6: number;
+  now?: Date;
+  deadlineTime?: string | null;
+  entryVerification?: ChipPlan['entryVerification'];
+  normalTransferGain6?: number;
 }): ChipPlan {
+  const now = args.now ?? new Date();
+  const entryVerification = args.entryVerification ?? { status: 'not_configured' as const, entryId: null, verifiedGameweek: null, squadMatches: null, chipsUsed: [], mismatches: [], message: 'Public-entry cross-check is not configured.', sourceUrl: null };
   const currentHalf = args.nextGameweek <= 19 ? 1 : 2;
   const expiresAfterGameweek = currentHalf === 1 ? 19 : 38;
   const gameweeksRemaining = Math.max(0, expiresAfterGameweek - args.nextGameweek + 1);
@@ -268,6 +312,10 @@ export function planChips(args: {
   const squad = args.ledger.squad.map((entry) => byId.get(entry.elementId)).filter((player): player is DecisionPlayer => Boolean(player));
   const budget = squadBudget(args.ledger, args.monitored);
   const flags = calendarFlags(args.fixtures, args.teams, args.nextGameweek, expiresAfterGameweek);
+  const teamNames = new Map(args.teams.map((team) => [team.id, team.short_name]));
+  const unassigned = args.fixtures.filter((fixture) => fixture.event == null && !fixture.finished);
+  const affectedTeams = [...new Set(unassigned.flatMap((fixture) => [teamNames.get(fixture.team_h), teamNames.get(fixture.team_a)]).filter((team): team is string => Boolean(team)))].sort();
+  const uncertaintyLevel = unassigned.length === 0 ? 'low' as const : unassigned.length <= 2 ? 'medium' as const : 'high' as const;
   const flagByGameweek = new Map(flags.map((flag) => [flag.gameweek, flag]));
   const opportunities = new Map<ChipKey, ChipOpportunity[]>(CHIP_KEYS.map((chip) => [chip, []]));
 
@@ -276,24 +324,39 @@ export function planChips(args: {
       opportunities.get('triple_captain')!.push(tripleCaptainOpportunity(squad, gameweek, args.nextGameweek));
       opportunities.get('bench_boost')!.push(benchBoostOpportunity(squad, gameweek, args.nextGameweek));
       opportunities.get('free_hit')!.push(freeHitOpportunity({ players: args.players, squad, budget, gameweek, nextGameweek: args.nextGameweek, flag: flagByGameweek.get(gameweek) }));
-      opportunities.get('wildcard')!.push(wildcardOpportunity({ players: args.players, squad, budget, gameweek, end: expiresAfterGameweek, nextGameweek: args.nextGameweek, normalTransferGain6: args.normalTransferGain6 }));
+      opportunities.get('wildcard')!.push(wildcardOpportunity({ players: args.players, squad, budget, gameweek, end: expiresAfterGameweek, nextGameweek: args.nextGameweek, monitored: args.monitored, ledger: args.ledger }));
     }
   }
 
   const available = CHIP_KEYS.filter((chip) => normalizeChipStatus(args.ledger, chip) === 'available').map((chip) => ({ chip, opportunities: opportunities.get(chip) ?? [] }));
-  const schedule = assignUniqueGameweeks(available, args.nextGameweek);
+  let schedule = assignUniqueGameweeks(available, args.nextGameweek);
+  const plannedWildcard = schedule.get('wildcard');
+  if (plannedWildcard && normalizeChipStatus(args.ledger, 'bench_boost') === 'available') {
+    const wildcardSquad = optimizeChipSquad(args.players, budget, plannedWildcard.gameweek, Math.min(expiresAfterGameweek, plannedWildcard.gameweek + 5));
+    if (wildcardSquad) for (const gameweek of [plannedWildcard.gameweek + 1, plannedWildcard.gameweek + 2].filter((item) => item <= expiresAfterGameweek)) {
+      const prepared = benchBoostOpportunity(wildcardSquad, gameweek, args.nextGameweek);
+      prepared.explanation = `A GW${plannedWildcard.gameweek} Wildcard-prepared bench projects ${prepared.projectedGain} points in GW${gameweek}.`;
+      prepared.caveats = ['This Bench Boost projection uses the provisional Wildcard squad, so it changes if the rebuild changes.', ...prepared.caveats.slice(1)];
+      const list = opportunities.get('bench_boost') ?? [];
+      const index = list.findIndex((item) => item.gameweek === gameweek);
+      if (index >= 0 && prepared.projectedGain > list[index].projectedGain) list[index] = prepared;
+    }
+    schedule = assignUniqueGameweeks(available, args.nextGameweek);
+  }
   const scarcity = available.length >= gameweeksRemaining;
   const assessments: ChipAssessment[] = CHIP_KEYS.map((chip) => {
     const availability = normalizeChipStatus(args.ledger, chip);
     const all = (opportunities.get(chip) ?? []).sort((a, b) => b.quality - a.quality || a.gameweek - b.gameweek);
     const scheduled = schedule.get(chip) ?? all[0];
     const current = all.find((item) => item.gameweek === args.nextGameweek);
-    if (availability === 'used') return { chip, availability, action: 'used', bestGameweek: null, currentGameweekGain: null, confidence: 100, reason: 'This chip is recorded as used in the current half-season window.', opportunities: [] };
-    if (availability === 'unknown') return { chip, availability, action: 'unknown', bestGameweek: null, currentGameweekGain: current?.projectedGain ?? null, confidence: 20, reason: 'The ledger does not confirm whether this chip remains available.', opportunities: all.slice(0, 3) };
-    const useNow = scheduled?.gameweek === args.nextGameweek && (scheduled.quality >= QUALITY_GATE[chip] || scarcity);
+    if (availability === 'used') return { chip, availability, action: 'used', bestGameweek: null, currentGameweekGain: null, confidence: 100, probabilityUseNow: null, expectedRegret: null, reason: 'This chip is recorded as used in the current half-season window.', opportunities: [] };
+    if (availability === 'unknown') return { chip, availability, action: 'unknown', bestGameweek: null, currentGameweekGain: current?.projectedGain ?? null, confidence: 20, probabilityUseNow: null, expectedRegret: null, reason: 'The ledger does not confirm whether this chip remains available.', opportunities: all.slice(0, 3) };
+    const future = all.filter((item) => item.gameweek !== args.nextGameweek)[0];
+    const probability = useNowProbability(current, future);
+    const useNow = scheduled?.gameweek === args.nextGameweek && (scheduled.quality >= QUALITY_GATE[chip] || scarcity) && (probability.probability ?? 0) >= 60;
     return {
       chip, availability, action: useNow ? 'use_now' : 'hold', bestGameweek: scheduled?.gameweek ?? null,
-      currentGameweekGain: current?.projectedGain ?? null, confidence: scheduled?.confidence ?? 0,
+      currentGameweekGain: current?.projectedGain ?? null, confidence: scheduled?.confidence ?? 0, probabilityUseNow: probability.probability, expectedRegret: probability.regret,
       reason: useNow
         ? `${scheduled.explanation} The uniquely scheduled chip plan rates this as ${scarcity ? 'necessary because every remaining deadline is needed' : 'strong enough to use now'}.`
         : scheduled ? `Hold for GW${scheduled.gameweek}, currently the best non-colliding opportunity in this half-season window (${scheduled.projectedGain} projected extra points).` : 'No usable opportunity could be calculated.',
@@ -301,19 +364,43 @@ export function planChips(args: {
     };
   });
 
-  const now = assessments.filter((item) => item.action === 'use_now').map((assessment) => ({ assessment, opportunity: (opportunities.get(assessment.chip) ?? []).find((item) => item.gameweek === args.nextGameweek) })).filter((item): item is { assessment: ChipAssessment; opportunity: ChipOpportunity } => Boolean(item.opportunity)).sort((a, b) => b.opportunity.quality - a.opportunity.quality);
-  const selected = now[0];
+  const useNowCandidates = assessments.filter((item) => item.action === 'use_now').map((assessment) => ({ assessment, opportunity: (opportunities.get(assessment.chip) ?? []).find((item) => item.gameweek === args.nextGameweek) })).filter((item): item is { assessment: ChipAssessment; opportunity: ChipOpportunity } => Boolean(item.opportunity)).sort((a, b) => b.opportunity.quality - a.opportunity.quality);
+  const selected = useNowCandidates[0];
+  const deadline = args.deadlineTime ? new Date(args.deadlineTime) : null;
+  const hoursToDeadline = deadline && Number.isFinite(deadline.getTime()) ? round((deadline.getTime() - now.getTime()) / 3_600_000, 1) : null;
+  const gateStatus = args.ledgerStale ? 'blocked_stale_ledger' as const
+    : entryVerification.status === 'mismatch' ? 'blocked_entry_mismatch' as const
+      : hoursToDeadline != null && hoursToDeadline > 8 ? 'wait_for_final_refresh' as const : 'open' as const;
+  const candidateProbability = selected?.assessment.probabilityUseNow ?? 0;
   const recommendation = args.ledgerStale
-    ? { action: 'insufficient_ledger_data' as const, chip: null, gameweek: null, confidence: 0, headline: 'Confirm the squad before deciding a chip', reason: 'Chip gains depend on the exact owned squad, bank and remaining-chip ledger.' }
+    ? { action: 'insufficient_ledger_data' as const, chip: null, gameweek: null, confidence: 0, inputConfidence: 0, headline: 'Confirm the squad before deciding a chip', reason: 'Chip gains depend on the exact owned squad, bank and remaining-chip ledger.' }
+    : entryVerification.status === 'mismatch'
+      ? { action: 'insufficient_ledger_data' as const, chip: null, gameweek: null, confidence: 0, inputConfidence: 0, headline: 'Resolve the public-entry mismatch first', reason: entryVerification.message }
     : selected
-      ? { action: 'use_chip' as const, chip: selected.assessment.chip, gameweek: args.nextGameweek, confidence: selected.opportunity.confidence, headline: `Use ${selected.assessment.chip.replaceAll('_', ' ')} in GW${args.nextGameweek}`, reason: selected.assessment.reason }
-      : { action: 'no_chip' as const, chip: null, gameweek: args.nextGameweek, confidence: Math.round(assessments.filter((item) => item.availability === 'available').reduce((sum, item) => sum + item.confidence, 0) / Math.max(1, assessments.filter((item) => item.availability === 'available').length)), headline: `Use no chip in GW${args.nextGameweek}`, reason: 'No available chip clears its deployment threshold after comparing every remaining Gameweek and preventing two chips from being scheduled in the same week.' };
+      ? gateStatus === 'wait_for_final_refresh'
+        ? { action: 'wait_for_final_refresh' as const, chip: selected.assessment.chip, gameweek: args.nextGameweek, confidence: candidateProbability, inputConfidence: selected.opportunity.confidence, headline: `Provisional ${selected.assessment.chip.replaceAll('_', ' ')} plan for GW${args.nextGameweek}`, reason: `${selected.assessment.reason} Do not activate it before the final refresh window.` }
+        : { action: 'use_chip' as const, chip: selected.assessment.chip, gameweek: args.nextGameweek, confidence: candidateProbability, inputConfidence: selected.opportunity.confidence, headline: `Use ${selected.assessment.chip.replaceAll('_', ' ')} in GW${args.nextGameweek}`, reason: selected.assessment.reason }
+      : { action: 'no_chip' as const, chip: null, gameweek: args.nextGameweek, confidence: Math.round(assessments.filter((item) => item.availability === 'available').reduce((sum, item) => sum + (100 - (item.probabilityUseNow ?? 50)), 0) / Math.max(1, assessments.filter((item) => item.availability === 'available').length)), inputConfidence: Math.round(assessments.filter((item) => item.availability === 'available').reduce((sum, item) => sum + item.confidence, 0) / Math.max(1, assessments.filter((item) => item.availability === 'available').length)), headline: `Use no chip in GW${args.nextGameweek}`, reason: 'No available chip clears both its quality gate and a 60% simulated probability of being better now than its strongest later window.' };
+
+  const sequence = [...schedule.values()].sort((a, b) => a.gameweek - b.gameweek).map((opportunity) => ({
+    chip: opportunity.chip, gameweek: opportunity.gameweek, projectedGain: opportunity.projectedGain, quality: opportunity.quality,
+    reason: opportunity.chip === 'bench_boost' && schedule.get('wildcard') && opportunity.gameweek > schedule.get('wildcard')!.gameweek && opportunity.gameweek - schedule.get('wildcard')!.gameweek <= 2
+      ? 'Sequenced after the Wildcard so the permanent rebuild can prepare a playing bench.' : opportunity.explanation,
+  }));
 
   return {
-    currentHalf, expiresAfterGameweek, gameweeksRemaining, recommendation, assessments, calendarFlags: flags, ruleSourceUrl: CHIP_RULES_URL,
+    currentHalf, expiresAfterGameweek, gameweeksRemaining, recommendation, assessments, sequence,
+    activationGate: {
+      status: gateStatus, hoursToDeadline, irreversible: recommendation.chip === 'wildcard' || recommendation.chip === 'free_hit',
+      reason: gateStatus === 'blocked_stale_ledger' ? 'The confirmed ledger is stale.' : gateStatus === 'blocked_entry_mismatch' ? entryVerification.message : gateStatus === 'wait_for_final_refresh' ? `Wait until the final eight hours before the deadline; ${hoursToDeadline} hours remain.` : 'The ledger checks pass and the recommendation is inside the final decision window.',
+    },
+    calendarUncertainty: { unassignedFixtures: unassigned.length, affectedTeams, level: uncertaintyLevel, explanation: unassigned.length ? `${unassigned.length} unfinished fixture${unassigned.length === 1 ? '' : 's'} currently lack an assigned Gameweek, affecting ${affectedTeams.join(', ')}. Future chip windows may move.` : 'Every unfinished fixture currently has an official Gameweek assignment; rearrangements are still possible.' },
+    entryVerification, calendarFlags: flags, ruleSourceUrl: CHIP_RULES_URL,
     modelNotes: [
       'The 2026/27 rules provide one Wildcard, Free Hit, Bench Boost and Triple Captain in each half of the season; first-half chips expire after GW19 and only one chip can be used per Gameweek.',
-      'Triple Captain values the extra captain score; Bench Boost values the optimized current bench; Free Hit compares a one-week full rebuild; Wildcard compares a permanent six-Gameweek rebuild after crediting the best normal transfer route.',
+      'Triple Captain values the extra captain score; Bench Boost values the optimized current bench; Free Hit compares a one-week full rebuild; Wildcard compares a permanent six-Gameweek rebuild with a legal week-by-week transfer path that tracks free transfers, bank and hits.',
+      'Decision probability is a deterministic 2,000-draw uncertainty simulation. Input confidence remains separate, and the displayed p10–p90 range shows plausible model error rather than guaranteed outcomes.',
+      'The scheduler evaluates the chips together, prevents collisions and rewards a Bench Boost prepared one or two deadlines after a Wildcard.',
       'Blank and Double Gameweeks are detected from the current official fixture schedule. Postponements can change that schedule, so distant recommendations lose confidence automatically.',
       'When two windows are within roughly two quality points, the current Gameweek wins the scheduling tie because its team news and price inputs are more reliable.',
       'Chip recommendations never alter the ledger. A chip is only marked used after explicit confirmation.',

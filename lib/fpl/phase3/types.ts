@@ -133,6 +133,8 @@ export interface ChipOpportunity {
   projectedTotal: number;
   quality: number;
   confidence: number;
+  outcomeRange: { p10: number; p50: number; p90: number };
+  downsideProbability: number;
   players: string[];
   transfersRequired: number | null;
   squad: {
@@ -161,6 +163,8 @@ export interface ChipAssessment {
   bestGameweek: number | null;
   currentGameweekGain: number | null;
   confidence: number;
+  probabilityUseNow: number | null;
+  expectedRegret: number | null;
   reason: string;
   opportunities: ChipOpportunity[];
 }
@@ -170,12 +174,42 @@ export interface ChipPlan {
   expiresAfterGameweek: 19 | 38;
   gameweeksRemaining: number;
   recommendation: {
-    action: 'use_chip' | 'no_chip' | 'insufficient_ledger_data';
+    action: 'use_chip' | 'no_chip' | 'wait_for_final_refresh' | 'insufficient_ledger_data';
     chip: ChipKey | null;
     gameweek: number | null;
     confidence: number;
+    inputConfidence: number;
     headline: string;
     reason: string;
+  };
+  sequence: Array<{
+    chip: ChipKey;
+    gameweek: number;
+    projectedGain: number;
+    quality: number;
+    reason: string;
+  }>;
+  activationGate: {
+    status: 'open' | 'wait_for_final_refresh' | 'blocked_stale_ledger' | 'blocked_entry_mismatch';
+    hoursToDeadline: number | null;
+    irreversible: boolean;
+    reason: string;
+  };
+  calendarUncertainty: {
+    unassignedFixtures: number;
+    affectedTeams: string[];
+    level: 'low' | 'medium' | 'high';
+    explanation: string;
+  };
+  entryVerification: {
+    status: 'not_configured' | 'matched' | 'mismatch' | 'unavailable';
+    entryId: number | null;
+    verifiedGameweek: number | null;
+    squadMatches: boolean | null;
+    chipsUsed: string[];
+    mismatches: string[];
+    message: string;
+    sourceUrl: string | null;
   };
   assessments: ChipAssessment[];
   calendarFlags: ChipCalendarFlag[];

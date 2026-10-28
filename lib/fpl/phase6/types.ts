@@ -47,7 +47,7 @@ export interface ModelVersions {
   explainability: 'phase4-explainability-v1';
   dashboard: 'phase5-dashboard-v1';
   automation: 'phase6-automation-v1';
-  revision: '2026-10-28.4';
+  revision: '2026-10-28.5';
 }
 
 export type PhaseSixSnapshot = PhaseFiveSnapshot & {

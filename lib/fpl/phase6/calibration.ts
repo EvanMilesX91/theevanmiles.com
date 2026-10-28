@@ -47,6 +47,28 @@ export interface CalibrationDecisionForecast {
   alternative: CalibrationScenarioForecast;
 }
 
+export interface CalibrationChipForecast {
+  action: 'use_chip' | 'no_chip' | 'wait_for_final_refresh' | 'insufficient_ledger_data';
+  chip: 'wildcard' | 'free_hit' | 'bench_boost' | 'triple_captain' | null;
+  projectedGain: number | null;
+  decisionProbability: number;
+  inputConfidence: number;
+  starterIds: number[];
+  benchIds: number[];
+  captainId: number;
+  baselineStarterIds: number[];
+  baselineCaptainId: number;
+}
+
+export interface ChipDecisionAudit {
+  chip: CalibrationChipForecast['chip'];
+  projectedGain: number | null;
+  actualImmediateGain: number;
+  absoluteError: number | null;
+  complete: boolean;
+  note: string;
+}
+
 export interface TeamImpactForecast {
   teamId: number;
   team: string;
@@ -150,6 +172,7 @@ export interface CalibrationEvaluation {
   playerResults: CalibrationPlayerResult[];
   decision?: DecisionAudit;
   injuryImpact?: TeamImpactEvaluation;
+  chip?: ChipDecisionAudit;
 }
 
 export interface ProjectionCalibrationRecord {
@@ -164,6 +187,7 @@ export interface ProjectionCalibrationRecord {
   ledgerStale: boolean;
   players: CalibrationPlayerForecast[];
   decision?: CalibrationDecisionForecast;
+  chip?: CalibrationChipForecast;
   teamImpacts?: TeamImpactForecast[];
   priceSnapshots?: PriceCalibrationSnapshot[];
   evaluation: CalibrationEvaluation | null;
@@ -258,6 +282,13 @@ export interface CalibrationDashboardSummary {
   injuryImpact: TeamImpactEvaluation | null;
   aggregate: CalibrationAggregate | null;
   forwardAggregate: CalibrationAggregate | null;
+  chipModel: {
+    status: 'collecting' | 'measured';
+    evaluatedCalls: number;
+    meanAbsoluteError: number | null;
+    directionalAccuracy: number | null;
+    note: string;
+  };
 }
 
 interface OfficialEvent {
@@ -396,6 +427,14 @@ export function summarizeCalibration(
     diagnosis: `${minuteMisses} major misses came with a 25+ minute error; the remainder are more likely finishing, bonus or clean-sheet variance.`,
     lessons: [segments[0] ? `Worst current segment: ${segments[0].dimension}=${segments[0].value} (${segments[0].meanAbsoluteError} MAE).` : 'More observations are needed for segmented lessons.', challenger.status === 'promote' ? 'The forward-only challenger has earned promotion.' : 'Automatic learning remains locked until the forward-only challenger wins out of sample.'],
   } : null;
+  const chipRows = forwardEvaluated.map((record) => record.evaluation?.chip).filter((row): row is ChipDecisionAudit => Boolean(row));
+  const completedChipRows = chipRows.filter((row) => row.complete && row.absoluteError != null);
+  const chipModel: CalibrationDashboardSummary['chipModel'] = {
+    status: completedChipRows.length ? 'measured' : 'collecting', evaluatedCalls: chipRows.length,
+    meanAbsoluteError: completedChipRows.length ? round(completedChipRows.reduce((sum, row) => sum + (row.absoluteError ?? 0), 0) / completedChipRows.length) : null,
+    directionalAccuracy: completedChipRows.length ? round(completedChipRows.filter((row) => ((row.projectedGain ?? 0) >= 0) === (row.actualImmediateGain >= 0)).length / completedChipRows.length * 100, 1) : null,
+    note: 'Chip calibration is forward-only. Wildcard audits remain one-Gameweek partial observations until a full six-Gameweek outcome evaluator has matured.',
+  };
   return {
     status: evaluated.length ? 'measured' : 'collecting',
     backend,
@@ -421,6 +460,7 @@ export function summarizeCalibration(
     injuryImpact,
     aggregate,
     forwardAggregate,
+    chipModel,
   };
 }
 
@@ -532,6 +572,10 @@ function scenarioForecast(scenario: PhaseFiveSnapshot['finalCommittee']['primary
 export function createCalibrationForecast(snapshot: PhaseFiveSnapshot, capturedAt = new Date()): ProjectionCalibrationRecord {
   const starters = new Set(snapshot.lineup.starterIds);
   const priceSnapshot = createPriceCalibrationSnapshot(snapshot, capturedAt);
+  const chipPlan = (snapshot as Partial<PhaseFiveSnapshot>).chipPlan;
+  const chipAssessment = chipPlan?.assessments.find((assessment) => assessment.chip === chipPlan.recommendation.chip);
+  const chipOpportunity = chipAssessment?.opportunities.find((opportunity) => opportunity.gameweek === snapshot.nextGameweek);
+  const chipSquad = chipOpportunity?.squad;
   return {
     schemaVersion: 1,
     gameweek: snapshot.nextGameweek,
@@ -570,6 +614,18 @@ export function createCalibrationForecast(snapshot: PhaseFiveSnapshot, capturedA
       baseline: scenarioForecast(snapshot.transferDecision.baseline),
       primary: scenarioForecast(snapshot.finalCommittee.primaryScenario),
       alternative: scenarioForecast(snapshot.finalCommittee.alternativeScenario),
+    } : undefined,
+    chip: chipPlan ? {
+      action: chipPlan.recommendation.action,
+      chip: chipPlan.recommendation.chip,
+      projectedGain: chipOpportunity?.projectedGain ?? null,
+      decisionProbability: chipPlan.recommendation.confidence,
+      inputConfidence: chipPlan.recommendation.inputConfidence,
+      starterIds: chipSquad?.players.filter((player) => player.starter).map((player) => player.id) ?? snapshot.lineup.starterIds,
+      benchIds: chipSquad?.players.filter((player) => !player.starter).map((player) => player.id) ?? snapshot.lineup.benchIds,
+      captainId: chipSquad?.captainId ?? snapshot.lineup.captainId,
+      baselineStarterIds: snapshot.lineup.starterIds,
+      baselineCaptainId: snapshot.lineup.captainId,
     } : undefined,
     teamImpacts: (snapshot.teamRatings ?? []).map((team) => ({
       teamId: team.teamId, team: team.team,
@@ -645,6 +701,18 @@ export function evaluateCalibrationRecord(
     netValue: 0,
   } : undefined;
   if (injuryImpact) injuryImpact.netValue = round((injuryImpact.attackBaselineMae - injuryImpact.attackAdjustedMae + injuryImpact.defenceBaselineMae - injuryImpact.defenceAdjustedMae) / 2);
+  let chip: ChipDecisionAudit | undefined;
+  if (record.chip?.chip) {
+    const actualPoints = (ids: number[]) => ids.reduce((sum, id) => sum + (actual.get(id)?.points ?? 0), 0);
+    const baseline = actualPoints(record.chip.baselineStarterIds) + (actual.get(record.chip.baselineCaptainId)?.points ?? 0);
+    let actualImmediateGain = 0;
+    if (record.chip.chip === 'triple_captain') actualImmediateGain = actual.get(record.chip.captainId)?.points ?? 0;
+    else if (record.chip.chip === 'bench_boost') actualImmediateGain = actualPoints(record.chip.benchIds);
+    else actualImmediateGain = actualPoints(record.chip.starterIds) + (actual.get(record.chip.captainId)?.points ?? 0) - baseline;
+    const complete = record.chip.chip !== 'wildcard';
+    chip = { chip: record.chip.chip, projectedGain: record.chip.projectedGain, actualImmediateGain, absoluteError: record.chip.projectedGain == null ? null : round(Math.abs(record.chip.projectedGain - actualImmediateGain)), complete,
+      note: complete ? 'Immediate chip value compared with the frozen pre-deadline forecast.' : 'Wildcard value shown here is a partial one-Gameweek observation; the decision horizon is six Gameweeks.' };
+  }
   return {
     ...record,
     evaluation: {
@@ -659,6 +727,7 @@ export function evaluateCalibrationRecord(
       playerResults,
       decision,
       injuryImpact,
+      chip,
     },
   };
 }
@@ -696,7 +765,13 @@ export async function refreshProjectionCalibration(options: {
     forecastReplaced = Boolean(existingForecast);
   }
 
-  const currentForecast = byGameweek.get(options.snapshot.nextGameweek);
+  let currentForecast = byGameweek.get(options.snapshot.nextGameweek);
+  if (currentForecast && !currentForecast.chip && options.snapshot.chipPlan) {
+    const chip = createCalibrationForecast(options.snapshot, now).chip;
+    currentForecast = { ...currentForecast, chip };
+    await options.store.write(currentForecast);
+    byGameweek.set(currentForecast.gameweek, currentForecast);
+  }
   if (currentForecast) {
     const snapshots = currentForecast.priceSnapshots ?? [];
     const lastCaptured = snapshots.at(-1)?.capturedAt;

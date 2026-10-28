@@ -53,7 +53,7 @@ export function presentStoredDashboard(
     operations: buildOperationalSummary(record.snapshot, now),
     modelVersions: {
       projection: 'phase2-transparent-v2', decision: 'phase3-decision-v1', explainability: 'phase4-explainability-v1',
-      dashboard: 'phase5-dashboard-v1', automation: 'phase6-automation-v1', revision: '2026-10-28.4',
+      dashboard: 'phase5-dashboard-v1', automation: 'phase6-automation-v1', revision: '2026-10-28.5',
     },
   };
 }
