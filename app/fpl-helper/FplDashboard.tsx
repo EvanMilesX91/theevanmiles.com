@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3, Check, ChevronRight,
   Clock3, Database, Layers3, RefreshCw, Search, ShieldCheck, Sparkles, Target,
@@ -188,7 +189,10 @@ export default function FplDashboard() {
       <div className={styles.shell}>
         <header className={styles.hero}>
           <div>
-            <div className={styles.kicker}><span>EM / FPL</span><i />GW{data.nextGameweek} decision room</div>
+            <div className={styles.brandStrip}>
+              <Image className={styles.appIcon} src="/fpl/icon-192.png" alt="FPL Decision Room" width={72} height={72} priority />
+              <div className={styles.kicker}><span>EM / FPL</span><i />GW{data.nextGameweek} decision room</div>
+            </div>
             <h1>Build the edge.<br /><em>Explain every call.</em></h1>
             <p>Whole-pool projections, a legal optimizer, ten independent decision lenses and a Red Team that is paid to disagree.</p>
           </div>
