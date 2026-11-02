@@ -1,0 +1,25 @@
+tunnel: 11052118-3c11-494c-9ce1-2b8a9ab2dcc2
+credentials-file: /etc/cloudflared/credentials.json
+# QUIC was repeatedly losing every edge connection on this host, briefly
+# producing Cloudflare 1033 responses. HTTP/2 uses the more reliable TCP path.
+protocol: http2
+ingress:
+  - hostname: theevanmiles.com
+    path: "^/greenhouse(?:/.*)?$"
+    service: http://greenhouse:3101
+    originRequest:
+      httpHostHeader: theevanmiles.com
+  - hostname: www.theevanmiles.com
+    path: "^/greenhouse(?:/.*)?$"
+    service: http://greenhouse:3101
+    originRequest:
+      httpHostHeader: www.theevanmiles.com
+  - hostname: theevanmiles.com
+    service: http://web:3000
+    originRequest:
+      httpHostHeader: theevanmiles.com
+  - hostname: www.theevanmiles.com
+    service: http://web:3000
+    originRequest:
+      httpHostHeader: www.theevanmiles.com
+  - service: http_status:404
