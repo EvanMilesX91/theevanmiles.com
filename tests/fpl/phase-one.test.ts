@@ -115,12 +115,29 @@ function monitored(overrides: Partial<MonitoredPlayer> & Pick<MonitoredPlayer, '
 
 function preGw8Ledger() {
   const ledger = structuredClone(DEFAULT_OWNER_LEDGER);
-  const index = ledger.squad.findIndex((player) => player.elementId === 40);
-  ledger.squad[index] = { elementId: 426, purchasePrice: 12, acquiredGameweek: 1 };
+  ledger.squad = [
+    { elementId: 1, purchasePrice: 6, acquiredGameweek: 1 },
+    { elementId: 110, purchasePrice: 4.5, acquiredGameweek: 1 },
+    { elementId: 388, purchasePrice: 6, acquiredGameweek: 1 },
+    { elementId: 204, purchasePrice: 4.5, acquiredGameweek: 1 },
+    { elementId: 229, purchasePrice: 6, acquiredGameweek: 1 },
+    { elementId: 31, purchasePrice: 4.5, acquiredGameweek: 1 },
+    { elementId: 176, purchasePrice: 4, acquiredGameweek: 7 },
+    { elementId: 426, purchasePrice: 12, acquiredGameweek: 1 },
+    { elementId: 13, purchasePrice: 7.5, acquiredGameweek: 1 },
+    { elementId: 124, purchasePrice: 6.1, acquiredGameweek: 7 },
+    { elementId: 290, purchasePrice: 4.5, acquiredGameweek: 1 },
+    { elementId: 338, purchasePrice: 5.5, acquiredGameweek: 1 },
+    { elementId: 411, purchasePrice: 15.5, acquiredGameweek: 1 },
+    { elementId: 165, purchasePrice: 7.7, acquiredGameweek: 4 },
+    { elementId: 441, purchasePrice: 4.5, acquiredGameweek: 1 },
+  ];
+  ledger.lastConfirmedXi = [1, 31, 204, 388, 229, 426, 13, 124, 290, 338, 411];
   ledger.lastConfirmedGameweek = 7;
   ledger.nextGameweek = 8;
   ledger.bank = 0.9;
   ledger.freeTransfers = 1;
+  ledger.chips = { wildcard: 'available', free_hit: 'available', triple_captain: 'used', bench_boost: 'available' };
   ledger.confirmedTransfers = [];
   ledger.confirmedGameweeks = [];
   return ledger;
@@ -212,7 +229,7 @@ describe('Phase 1 rolling features', () => {
   });
 
   it('keeps an unavailable owned player in the monitored pool', () => {
-    const unavailable = officialPlayer({ id: 441, web_name: 'Obi', element_type: 4, now_cost: 45, status: 'u', can_select: false, removed: true });
+    const unavailable = officialPlayer({ id: 249, web_name: 'Barry', element_type: 4, now_cost: 56, status: 'u', can_select: false, removed: true });
     const records = buildMonitoredPlayers({
       bootstrap: {
         events: [],
@@ -222,10 +239,10 @@ describe('Phase 1 rolling features', () => {
       fixtures: [],
       eventLives: [],
       ledger: DEFAULT_OWNER_LEDGER,
-      nextGameweek: 9,
+      nextGameweek: 10,
     });
     expect(records).toHaveLength(1);
-    expect(records[0]).toMatchObject({ id: 441, owned: true, eligible: false });
+    expect(records[0]).toMatchObject({ id: 249, owned: true, eligible: false });
   });
 });
 
