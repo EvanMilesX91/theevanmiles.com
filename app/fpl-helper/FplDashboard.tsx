@@ -15,11 +15,11 @@ type Tab = 'overview' | 'squad' | 'transfers' | 'chips' | 'council' | 'context' 
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Decision' },
-  { id: 'squad', label: 'Squad' },
+  { id: 'squad', label: 'Team' },
   { id: 'transfers', label: 'Transfers' },
   { id: 'chips', label: 'Chips' },
-  { id: 'council', label: 'Council' },
-  { id: 'context', label: 'Match Context' },
+  { id: 'council', label: 'Players' },
+  { id: 'context', label: 'Match notes' },
   { id: 'data', label: 'Data' },
 ];
 
@@ -36,8 +36,8 @@ function LoadingState() {
   return (
     <div className={styles.loadingShell}>
       <div className={styles.loaderMark}><span /><span /><span /></div>
-      <p>Compiling the decision room</p>
-      <span>Refreshing prices, projections, Council and Red Team…</span>
+      <p>Loading your FPL plan</p>
+      <span>Refreshing prices, projections and team news…</span>
     </div>
   );
 }
@@ -191,10 +191,10 @@ export default function FplDashboard() {
           <div>
             <div className={styles.brandStrip}>
               <Image className={styles.appIcon} src="/fpl/icon-192.png" alt="FPL Decision Room" width={72} height={72} priority />
-              <div className={styles.kicker}><span>EM / FPL</span><i />GW{data.nextGameweek} decision room</div>
+              <div className={styles.kicker}><span>Gameweek {data.nextGameweek}</span><i />Decision room</div>
             </div>
-            <h1>Build the edge.<br /><em>Explain every call.</em></h1>
-            <p>Whole-pool projections, a legal optimizer, ten independent decision lenses and a Red Team that is paid to disagree.</p>
+            <h1>FPL Decision Room</h1>
+            <p>Your team, transfer plan, captain and chip strategy in one place.</p>
           </div>
           <div className={styles.heroMeta}>
             <div><StatusDot status={data.ledger.stale ? 'degraded' : 'healthy'} /><span>{data.ledger.stale ? 'Ledger needs confirmation' : 'Decision state current'}</span></div>
@@ -248,7 +248,7 @@ export default function FplDashboard() {
 
           <section className={styles.panel}>
             <div className={styles.panelHead}><div><span>Evidence chain</span><h3>From source to decision</h3></div><Activity /></div>
-            <div className={styles.evidenceChain}>{data.finalCommittee.evidenceChain.map((item, index) => <div key={item.kind}><b>{String(index + 1).padStart(2, '0')}</b><span>{titleCase(item.kind)}</span><p>{item.statement}</p></div>)}</div>
+            <div className={styles.evidenceChain}>{data.finalCommittee.evidenceChain.map((item, index) => <div key={`${item.kind}-${index}`}><b>{String(index + 1).padStart(2, '0')}</b><span>{titleCase(item.kind)}</span><p>{item.statement}</p></div>)}</div>
           </section>
         </>}
 
@@ -373,7 +373,7 @@ export default function FplDashboard() {
           <section className={styles.dataColumns}><article className={styles.panel}><div className={styles.panelHead}><div><span>Automation</span><h3>{titleCase(data.automation.freshness)} snapshot</h3></div><RefreshCw /></div><dl className={styles.detailList}><div><dt>Last refresh</dt><dd>{new Date(data.automation.refreshedAt).toLocaleString('en-IE', { dateStyle: 'medium', timeStyle: 'short' })}</dd></div><div><dt>Trigger</dt><dd>{titleCase(data.automation.trigger)}</dd></div><div><dt>Backend</dt><dd>{titleCase(data.automation.backend)}</dd></div><div><dt>Immutable history</dt><dd>{data.automation.immutableSnapshots} snapshots</dd></div><div><dt>Pipeline duration</dt><dd>{(data.automation.durationMs / 1000).toFixed(1)}s</dd></div><div><dt>Deadline mode</dt><dd>{data.operations.deadlineMode ? 'Active' : 'Standby'}</dd></div><div><dt>Hours to deadline</dt><dd>{data.operations.hoursToDeadline == null ? 'Unknown' : data.operations.hoursToDeadline.toFixed(1)}</dd></div><div><dt>Checksum</dt><dd>{data.automation.checksum}</dd></div></dl></article><article className={styles.panel}><div className={styles.panelHead}><div><span>Model learning</span><h3>{data.learning.active ? 'Calibrated corrections active' : 'Promotion gate locked'}</h3></div><Activity /></div><dl className={styles.detailList}><div><dt>Effective evidence</dt><dd>{data.learning.effectiveGameweeks.toFixed(1)}/{data.learning.minimumGameweeks}</dd></div><div><dt>Evaluations</dt><dd>{data.learning.forwardGameweeks} forward · {data.learning.historicalGameweeks} replay/historical</dd></div><div><dt>Challenger</dt><dd>{titleCase(data.calibration.challenger.status)} · forward only</dd></div><div><dt>Points correction</dt><dd>{signed(-data.learning.pointsBiasCorrection)}</dd></div><div><dt>Minutes correction</dt><dd>{signed(-data.learning.minutesBiasCorrection)}</dd></div><div><dt>Predicted XI</dt><dd>{titleCase(data.learning.shadowLineupPromotion)} · forward only</dd></div><div><dt>Price model</dt><dd>{titleCase(data.learning.priceModelStatus)}</dd></div><div><dt>Projection version</dt><dd>{data.modelVersions.projection}</dd></div></dl><p className={styles.caveat}>{data.learning.reason}</p></article><article className={styles.panel}><div className={styles.panelHead}><div><span>Ledger</span><h3>{data.ledger.teamName}</h3></div><Database /></div><dl className={styles.detailList}><div><dt>Manager</dt><dd>{data.ledger.managerName}</dd></div><div><dt>Confirmed next GW</dt><dd>{data.ledger.nextGameweek}</dd></div><div><dt>Official next GW</dt><dd>{data.nextGameweek}</dd></div><div><dt>Bank</dt><dd>{price(data.ledger.bank)}</dd></div><div><dt>Free transfers</dt><dd>{data.ledger.freeTransfers}</dd></div></dl></article><article className={styles.panel}><div className={styles.panelHead}><div><span>Operational alerts</span><h3>{data.operations.alerts.length ? `${data.operations.alerts.length} item${data.operations.alerts.length === 1 ? '' : 's'} need context` : 'All clear'}</h3></div><ShieldCheck /></div><ul className={styles.notesList}>{data.operations.alerts.length ? data.operations.alerts.map((alert) => <li key={alert.key}><b>{alert.severity}</b> · {alert.message}</li>) : <li>No failed sources, stale ledger or deadline warnings.</li>}</ul></article><article className={styles.panel}><div className={styles.panelHead}><div><span>Model notes</span><h3>Known boundaries</h3></div><AlertTriangle /></div><ul className={styles.notesList}>{data.modelNotes.map((note) => <li key={note}>{note}</li>)}</ul></article></section>
         </>}
 
-        <footer className={styles.footer}><span>FPL DECISION ENGINE / PHASE 6 · {data.modelVersions.revision}</span><span>Daily + deadline mode · facts ≠ estimates ≠ decisions</span></footer>
+        <footer className={styles.footer}><span>Model {data.modelVersions.revision}</span><span>Updated daily and before each deadline</span></footer>
       </div>
       {selectedPlayer && <PlayerDrawer player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />}
     </main>

@@ -1,14 +1,25 @@
 import type { Metadata, Viewport } from 'next';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { ADMIN_COOKIE, adminAuthenticated } from '@/lib/admin/auth';
 import FplDashboard from './FplDashboard';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'FPL Decision Room | Evan Miles',
-  description: 'An automated, explainable Fantasy Premier League decision engine.',
+  title: 'FPL Decision Room',
+  description: 'Your Fantasy Premier League team, transfer plan, captain and chip strategy in one place.',
+  authors: [],
+  creator: 'FPL Decision Room',
+  keywords: ['Fantasy Premier League', 'FPL', 'FPL decision tool'],
+  openGraph: {
+    title: 'FPL Decision Room',
+    description: 'Your Fantasy Premier League team, transfer plan, captain and chip strategy in one place.',
+    siteName: 'FPL Decision Room',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'FPL Decision Room',
+    description: 'Your Fantasy Premier League team, transfer plan, captain and chip strategy in one place.',
+  },
   manifest: '/fpl/manifest.webmanifest',
   icons: {
     icon: [
@@ -37,11 +48,6 @@ export const viewport: Viewport = {
   themeColor: '#37003c',
 };
 
-export default async function FplHelperPage() {
-  const cookieStore = await cookies();
-  if (!adminAuthenticated(cookieStore.get(ADMIN_COOKIE)?.value)) {
-    redirect('/admin?next=%2Ffpl-helper');
-  }
-
+export default function FplHelperPage() {
   return <FplDashboard />;
 }

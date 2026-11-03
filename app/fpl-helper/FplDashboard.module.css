@@ -712,3 +712,361 @@
   .spinning { animation: none; }
   .pitchPlayer { transition: none; }
 }
+
+/* Simple, decision-first interface */
+.page {
+  --ink: #171219;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --bone: #171219;
+  --muted: #6f6872;
+  --line: #e3dfe5;
+  --orange: #37003c;
+  --orange-soft: #f4edf5;
+  --green: #008f58;
+  min-height: 100vh;
+  overflow: clip;
+  padding: 1.5rem 0 3rem;
+  background: #f6f5f7;
+  color: var(--bone);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+}
+
+.ambientOne,
+.ambientTwo,
+.gridNoise { display: none; }
+
+.shell { width: min(1180px, calc(100% - 2rem)); }
+
+.hero {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2rem;
+  align-items: center;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.brandStrip { gap: 0.9rem; margin-bottom: 0.8rem; }
+.appIcon {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 13px;
+  box-shadow: none;
+}
+
+.kicker,
+.eyebrow,
+.sectionLabel,
+.sectionHeading > span,
+.panelHead span,
+.squadHeader span,
+.transferHero > div > span,
+.councilIntro > div > span,
+.dataIntro span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.kicker { gap: 0.55rem; margin: 0; }
+.kicker span { color: var(--orange); }
+.kicker i { width: 1.5rem; background: var(--line); }
+.hero h1 {
+  max-width: none;
+  margin: 0;
+  font-family: inherit;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+.hero h1 em { color: inherit; }
+.hero > div:first-child > p {
+  max-width: 620px;
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+.heroMeta { min-width: 235px; }
+.heroMeta > div { font-size: 0.82rem; }
+.heroMeta button,
+.errorState button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--bone);
+}
+.heroMeta button:hover,
+.errorState button:hover { border-color: var(--orange); color: var(--orange); }
+.heroMeta small { color: var(--muted); font-size: 0.72rem; }
+
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  gap: 0.35rem;
+  margin: 1rem 0 1.25rem;
+  padding: 0.55rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 3px 14px rgba(55, 0, 60, 0.05);
+}
+.tabs button {
+  min-width: max-content;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.tabs button:hover { color: var(--orange); }
+.tabs .activeTab { background: var(--orange); color: #fff !important; -webkit-text-fill-color: #fff; }
+
+.inlineError {
+  border: 1px solid #efd58d;
+  border-radius: 10px;
+  background: #fff8e3;
+  color: #755700;
+}
+
+.decisionCard,
+.chipDecision,
+.transferHero,
+.councilIntro,
+.dataIntro,
+.panel,
+.metricGrid article,
+.chipCard,
+.benchPanel,
+.playerTile,
+.scenario,
+.comparisonCard,
+.searchBox,
+.councilTable,
+.comparePanel,
+.omissionGrid article,
+.sourceList,
+.calibrationPanel {
+  border-color: var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--bone);
+  box-shadow: none;
+}
+
+.decisionCard,
+.chipDecision {
+  padding: 1.25rem;
+  border-left: 4px solid var(--green);
+  background: #fff;
+}
+.waitDecision { border-left-color: #c68b00; }
+.decisionIcon { border-radius: 10px; color: var(--orange); }
+.decisionCard span,
+.chipDecision > div:nth-child(2) > span {
+  color: var(--orange);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.decisionCard h2 { font-size: clamp(1.15rem, 3vw, 1.7rem); line-height: 1.25; }
+.decisionCard p,
+.chipDecision p { color: var(--muted); font-size: 0.84rem; line-height: 1.55; }
+.confidence strong { font-size: 2rem; }
+
+.metricGrid { gap: 0.75rem; margin: 0.75rem 0; }
+.metricGrid article { min-height: 125px; padding: 1rem; }
+.metricGrid svg,
+.panelHead svg { color: var(--orange); }
+.metricGrid span,
+.metricGrid small { color: var(--muted); font-size: 0.75rem; }
+.metricGrid strong { font-size: 1.45rem; }
+
+.twoColumn,
+.dataColumns { gap: 0.75rem; }
+.panel { padding: 1.25rem; }
+.panelHead { margin-bottom: 1rem; }
+.panelHead h3,
+.sectionHeading h3,
+.squadHeader h2,
+.transferHero h2,
+.councilIntro h2,
+.dataIntro h2,
+.comparePanel h3,
+.calibrationHead h3 { font-family: inherit; letter-spacing: -0.02em; }
+.panel > p { color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+.panel small { color: var(--muted); }
+.gainGrid,
+.playerStats { border-color: var(--line); }
+.gainGrid > div,
+.playerStats > div { border-color: var(--line); }
+.playerStats span,
+.gainGrid span,
+.chipMetrics span,
+.captainBlock > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: none;
+}
+
+.textButton { color: var(--orange); }
+.chipNow { border-color: #bca6bf; background: #faf7fb; }
+.chipCardHead span,
+.chipCard p,
+.chipCard > small,
+.opportunityList small { color: var(--muted); }
+.chipCardHead > b { color: var(--green); }
+.chipPlayers span { color: var(--bone); }
+.chipSquad button {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: #faf9fa;
+  color: var(--bone);
+}
+.chipSquad span { color: var(--muted); }
+.chipSquad small,
+.opportunityList em { color: var(--green); }
+
+.transferHero { padding: 1.5rem; }
+.transferHero p { color: var(--muted); font-size: 0.85rem; }
+.scenario { min-height: 260px; }
+.scenarioRank { color: #eee9ef; }
+.scenario > span,
+.comparisonNumbers,
+.tileScore,
+.benchPanel > button > b,
+.evidenceChain b,
+.omissionGrid article > b,
+.compareDelta strong { color: var(--orange); }
+.scenario p,
+.comparisonCard p,
+.comparisonCard small,
+.playerTile p,
+.playerTile span,
+.playerTile small,
+.benchPanel button small,
+.evidenceChain p,
+.omissionGrid article span,
+.omissionGrid article small { color: var(--muted); }
+
+.squadLayout { gap: 0.75rem; }
+.pitchWrap { border-color: var(--line); border-radius: 12px; background: #fff; }
+.pitch {
+  border-radius: 10px;
+  background: linear-gradient(180deg, #07985e 0%, #087a50 100%);
+}
+.pitchPlayer {
+  border: 1px solid rgba(255,255,255,0.45);
+  border-radius: 8px;
+  background: rgba(55, 0, 60, 0.9);
+  color: #fff;
+}
+.pitchPlayer small { color: #fff; opacity: 0.8; }
+.playerBadges b { background: #fff; color: var(--orange); }
+.benchPanel > button,
+.playerTile,
+.councilTable > button { color: var(--bone); }
+.benchPanel > button { border-color: var(--line); }
+.playerTile:hover,
+.benchPanel > button:hover,
+.councilTable > button:hover { border-color: #bca6bf; background: #faf7fb; }
+
+.councilIntro,
+.dataIntro { padding: 1.5rem; }
+.councilIntro > div:last-child strong { color: var(--orange); }
+.searchBox { margin-top: 0.75rem; }
+.searchBox input,
+.selectRow select {
+  color: var(--bone);
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+.searchBox input::placeholder { color: #918a94; }
+.selectRow select { border-color: var(--line); border-radius: 8px; background: #fff; }
+.tableHead { color: var(--muted); font-size: 0.7rem; text-transform: none; }
+.councilTable > button { border-color: var(--line); }
+.verdict_strong_buy,
+.verdict_buy { color: var(--green); }
+.verdict_neutral { color: var(--muted); }
+
+.sourceList article { border-color: var(--line); }
+.sourceList article p,
+.sourceList article > span,
+.calibrationHead p,
+.calibrationMetrics span,
+.calibrationMetrics small,
+.calibrationFoot,
+.detailList dt,
+.notesList li,
+.caveat { color: var(--muted); }
+.calibrationPanel { background: #fff; }
+.calibrationMetrics > div { border-color: var(--line); }
+.calibrationMetrics strong { color: var(--bone); }
+.calibrationFoot { text-transform: none; }
+
+.footer {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0;
+}
+
+.drawerBackdrop { background: rgba(23, 18, 25, 0.45); backdrop-filter: blur(3px); }
+.drawer {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--bone);
+  box-shadow: -12px 0 40px rgba(55, 0, 60, 0.12);
+}
+.closeButton { border-color: var(--line); border-radius: 8px; color: var(--bone); }
+.drawerHeading p,
+.scoreOrb span,
+.lensRow span,
+.fixtureStrip span,
+.conLine { color: var(--muted); }
+.drawerReason { background: var(--orange-soft); }
+.lensScore,
+.fixtureStrip em,
+.scoreOrb strong { color: var(--orange); }
+
+.loadingShell {
+  --bone: #171219;
+  --muted: #6f6872;
+  --orange: #37003c;
+  min-height: 100vh;
+  background: #f6f5f7;
+  color: var(--bone);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.loadingShell > span { color: var(--muted); }
+.loaderMark span { background: var(--orange); }
+
+@media (max-width: 760px) {
+  .page { padding-top: 0.75rem; }
+  .shell { width: min(100% - 1rem, 1180px); }
+  .hero { grid-template-columns: 1fr; gap: 1rem; padding: 1rem; }
+  .heroMeta { min-width: 0; }
+  .tabs { top: 0; margin-top: 0.75rem; }
+}
+
+@media (max-width: 520px) {
+  .appIcon { width: 3rem; height: 3rem; }
+  .hero h1 { font-size: 2rem; }
+  .metricGrid article { min-height: 110px; }
+  .decisionCard,
+  .chipDecision,
+  .panel,
+  .transferHero,
+  .councilIntro,
+  .dataIntro { padding: 1rem; }
+}

@@ -1,5 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin/auth';
+import { NextResponse } from 'next/server';
 import {
   createDashboardSnapshotStore,
   createProjectionCalibrationStore,
@@ -31,15 +30,12 @@ async function getSnapshot(): Promise<PhaseSixSnapshot> {
   return inFlight;
 }
 
-export async function GET(request: NextRequest) {
-  const authError = requireAdmin(request);
-  if (authError) return authError;
-
+export async function GET() {
   try {
     const snapshot = await getSnapshot();
     return NextResponse.json(snapshot, {
       headers: {
-        'Cache-Control': 'private, no-store',
+        'Cache-Control': 'no-store',
         'X-FPL-Snapshot-Age-Minutes': String(snapshot.automation.ageMinutes),
         'X-FPL-Snapshot-Freshness': snapshot.automation.freshness,
       },
