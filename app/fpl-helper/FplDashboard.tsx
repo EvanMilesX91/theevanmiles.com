@@ -27,6 +27,15 @@ const pct = (value: number) => `${Math.round(value * 100)}%`;
 const price = (value: number) => `£${value.toFixed(1)}m`;
 const signed = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
 const titleCase = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const plainText = (value: string) => value
+  .replaceAll('Council', 'rating')
+  .replaceAll('council', 'rating')
+  .replaceAll('xPts', 'expected points')
+  .replaceAll('Ledger', 'Saved team')
+  .replaceAll('ledger', 'saved team')
+  .replaceAll('roll baseline', 'saving the transfer')
+  .replaceAll('Provisional', 'Current')
+  .replaceAll('provisional', 'current');
 
 function StatusDot({ status }: { status: string }) {
   return <span className={`${styles.statusDot} ${styles[`status_${status}`] ?? ''}`} aria-hidden="true" />;
@@ -50,7 +59,7 @@ function PlayerDrawer({ player, onClose }: { player: DashboardPlayer; onClose: (
         <div className={styles.eyebrow}>{player.position} · {player.team}</div>
         <div className={styles.drawerHeading}>
           <div><h2>{player.name}</h2><p>{price(player.price)} · {player.expectedMinutes} expected minutes</p></div>
-          <div className={styles.scoreOrb}><strong>{player.council.score}</strong><span>Council</span></div>
+          <div className={styles.scoreOrb}><strong>{player.council.score}</strong><span>Rating</span></div>
         </div>
         <div className={styles.playerStats}>
           <div><span>GW xPts</span><strong>{player.xPts1}</strong></div>
@@ -58,7 +67,7 @@ function PlayerDrawer({ player, onClose }: { player: DashboardPlayer; onClose: (
           <div><span>6 GW</span><strong>{player.xPts6}</strong></div>
           <div><span>Confidence</span><strong>{player.confidence}%</strong></div>
         </div>
-        <p className={styles.drawerReason}>{player.oneLineReason}</p>
+        <p className={styles.drawerReason}>{plainText(player.oneLineReason)}</p>
         {player.council.disagreement && <div className={styles.disagreement}><AlertTriangle size={16} /><span>{player.council.disagreementSummary}</span></div>}
 
         <section className={styles.drawerSection}>
@@ -70,7 +79,7 @@ function PlayerDrawer({ player, onClose }: { player: DashboardPlayer; onClose: (
           {player.council.against.map((reason) => <p className={styles.conLine} key={reason}><X size={14} />{reason}</p>)}
         </section>
         <section className={styles.drawerSection}>
-          <div className={styles.sectionLabel}>Council lenses</div>
+          <div className={styles.sectionLabel}>How the rating is built</div>
           <div className={styles.lensList}>
             {player.council.opinions.map((opinion) => (
               <div className={`${styles.lensRow} ${!opinion.applicable ? styles.notApplicable : ''}`} key={opinion.key}>
@@ -91,15 +100,15 @@ function PlayerDrawer({ player, onClose }: { player: DashboardPlayer; onClose: (
         <section className={styles.drawerSection}>
           <div className={styles.sectionLabel}>Value & risk</div>
           <dl className={styles.detailList}>
-            <div><dt>Value above replacement</dt><dd>{signed(player.value.valueAboveReplacement6)}</dd></div>
-            <div><dt>Six-GW xPts / £m</dt><dd>{player.value.xPtsPerMillion6}</dd></div>
+            <div><dt>Points above a basic alternative</dt><dd>{signed(player.value.valueAboveReplacement6)}</dd></div>
+            <div><dt>Six-week points per £1m</dt><dd>{player.value.xPtsPerMillion6}</dd></div>
             <div><dt>Start probability</dt><dd>{pct(player.startProbability)}</dd></div>
             <div><dt>Price pressure</dt><dd>{titleCase(player.pricePressure.direction)}</dd></div>
-            <div><dt>Role evidence</dt><dd>{titleCase(player.roleChange)}</dd></div>
-            <div><dt>Return profile</dt><dd>{titleCase(player.sustainability)}</dd></div>
-            <div><dt>Predicted XI shadow</dt><dd>{player.shadowLineupPrediction ? `${titleCase(player.shadowLineupPrediction)} · ${player.shadowLineupConfidence}%${player.shadowLineupContradiction ? ' conflict' : ''}` : 'No signal'}</dd></div>
-            <div><dt>Availability consensus</dt><dd>{player.availabilityConsensus ? titleCase(player.availabilityConsensus.level) : 'No signal'}</dd></div>
-            <div><dt>Commentary context</dt><dd>{player.commentary ? `${titleCase(player.commentary.status)} · ${player.commentary.confidence}%` : 'No signal'}</dd></div>
+            <div><dt>Role change</dt><dd>{titleCase(player.roleChange)}</dd></div>
+            <div><dt>Form quality</dt><dd>{titleCase(player.sustainability)}</dd></div>
+            <div><dt>Predicted lineup</dt><dd>{player.shadowLineupPrediction ? `${titleCase(player.shadowLineupPrediction)} · ${player.shadowLineupConfidence}%${player.shadowLineupContradiction ? ' conflict' : ''}` : 'No signal'}</dd></div>
+            <div><dt>Chance of playing</dt><dd>{player.availabilityConsensus ? titleCase(player.availabilityConsensus.level) : 'No signal'}</dd></div>
+            <div><dt>Match report notes</dt><dd>{player.commentary ? `${titleCase(player.commentary.status)} · ${player.commentary.confidence}%` : 'No signal'}</dd></div>
           </dl>
           {player.availabilityConsensus && <p className={styles.caveat}>{player.availabilityConsensus.explanation}</p>}
           {player.commentary && <><p className={styles.caveat}>{player.commentary.headline} {titleCase(player.commentary.modelEffect)}.</p><ul className={styles.notesList}>{player.commentary.evidence.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul>{player.commentary.sourceUrls?.[0] && <a className={styles.textButton} href={player.commentary.sourceUrls[0]} target="_blank" rel="noreferrer">Open supporting match commentary <ArrowRight size={15} /></a>}</>}
@@ -182,6 +191,40 @@ export default function FplDashboard() {
   const commentaryInsights = data.commentaryInsights ?? [];
   const recommendedChipAssessment = data.chipPlan.assessments.find((item) => item.chip === data.chipPlan.recommendation.chip);
   const recommendedChipOpportunity = recommendedChipAssessment?.opportunities.find((item) => item.gameweek === data.chipPlan.recommendation.gameweek);
+  const transferNames = primary.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join(' + ');
+  const beatRollChance = data.finalCommittee.probability?.beatRoll3 ?? 50;
+  const simpleDecision = data.ledger.stale
+    ? `Update your saved team for GW${data.ledger.nextGameweek}`
+    : transferNames
+      ? `Make this transfer: ${transferNames}`
+      : 'Save your transfer this week';
+  const simpleDecisionReason = data.ledger.stale
+    ? `The app only knows your team up to GW${data.ledger.nextGameweek - 1}. Update what you did in GW${data.ledger.nextGameweek} before using this advice.`
+    : transferNames
+      ? `This move is expected to add ${primary.netGain3.toFixed(1)} points over the next three gameweeks.`
+      : 'No available move is expected to improve the team enough, so keeping the transfer is best.';
+  const simpleRiskVerdict = data.redTeam.verdict === 'block' ? 'Do not make the move yet' : data.redTeam.verdict === 'challenge' ? 'There is a serious risk to check' : 'The plan looks good, but check the risk';
+  const chipName = data.chipPlan.recommendation.chip ? titleCase(data.chipPlan.recommendation.chip) : 'a chip';
+  const simpleChipTitle = data.ledger.stale
+    ? 'Update your team before choosing a chip'
+    : data.chipPlan.recommendation.action === 'no_chip'
+      ? 'Do not use a chip this week'
+      : data.chipPlan.recommendation.action === 'wait_for_final_refresh'
+        ? `Wait for team news before using ${chipName}`
+        : `Use ${chipName}${data.chipPlan.recommendation.gameweek ? ` in GW${data.chipPlan.recommendation.gameweek}` : ''}`;
+  const simpleChipReason = data.ledger.stale
+    ? 'Chip advice depends on the exact 15 players you own.'
+    : recommendedChipOpportunity
+      ? `The best current option is GW${recommendedChipOpportunity.gameweek}, with an estimated gain of ${recommendedChipOpportunity.projectedGain.toFixed(1)} points.`
+      : 'No chip is expected to add enough points this week.';
+  const simpleEvidence = [
+    { label: 'Saved team', statement: data.ledger.stale ? `Saved through GW${data.ledger.nextGameweek - 1}; FPL is now preparing GW${data.nextGameweek}.` : `Your saved team is up to date for GW${data.nextGameweek}.` },
+    { label: 'Starting team', statement: `The suggested ${data.lineup.formation} team is valid and is expected to score ${data.lineup.xPts1WithCaptain} points with the captain included.` },
+    { label: 'Transfer value', statement: transferNames ? `${transferNames} is expected to add ${primary.netGain3.toFixed(1)} points over three gameweeks and ${primary.netGain6.toFixed(1)} over six.` : 'Saving the transfer is currently better than the available moves.' },
+    { label: 'Chance of success', statement: `The model gives this plan a ${beatRollChance}% chance of beating a saved transfer over the next three gameweeks.` },
+    { label: 'Main risk', statement: data.ledger.stale ? 'The saved team is out of date, so the transfer advice could be based on players you no longer own.' : plainText(data.redTeam.strongestObjection) },
+    { label: 'Recommendation', statement: simpleDecision },
+  ];
 
   return (
     <main className={styles.page}>
@@ -197,9 +240,9 @@ export default function FplDashboard() {
             <p>Your team, transfer plan, captain and chip strategy in one place.</p>
           </div>
           <div className={styles.heroMeta}>
-            <div><StatusDot status={data.ledger.stale ? 'degraded' : 'healthy'} /><span>{data.ledger.stale ? 'Ledger needs confirmation' : 'Decision state current'}</span></div>
+            <div><StatusDot status={data.ledger.stale ? 'degraded' : 'healthy'} /><span>{data.ledger.stale ? `Team update needed for GW${data.ledger.nextGameweek}` : 'Team is up to date'}</span></div>
             <button onClick={load} disabled={loading}><RefreshCw size={15} className={loading ? styles.spinning : ''} /> Refresh</button>
-            <small>Snapshot {new Date(data.automation.refreshedAt).toLocaleString('en-IE', { dateStyle: 'medium', timeStyle: 'short' })}</small>
+            <small>Updated {new Date(data.automation.refreshedAt).toLocaleString('en-IE', { dateStyle: 'medium', timeStyle: 'short' })}</small>
           </div>
         </header>
 
@@ -212,48 +255,48 @@ export default function FplDashboard() {
         {tab === 'overview' && <>
           <section className={`${styles.decisionCard} ${data.finalCommittee.status === 'blocked_pending_ledger' ? styles.waitDecision : styles.goDecision}`}>
             <div className={styles.decisionIcon}>{data.finalCommittee.status === 'blocked_pending_ledger' ? <Clock3 /> : <Sparkles />}</div>
-            <div><span>Final Committee</span><h2>{data.finalCommittee.decisionLine}</h2><p>{data.finalCommittee.rationale[2]}</p></div>
-            <div className={styles.confidence}><strong>{data.finalCommittee.confidence}</strong><span>confidence</span><small>{data.finalCommittee.probability?.beatRoll3 ?? 50}% beat roll / 3GW</small></div>
+            <div><span>This week&apos;s plan</span><h2>{simpleDecision}</h2><p>{simpleDecisionReason}</p></div>
+            <div className={styles.confidence}><strong>{data.finalCommittee.confidence}%</strong><span>Confidence</span><small>{beatRollChance}% chance of beating a saved transfer</small></div>
           </section>
 
           <section className={styles.metricGrid}>
-            <article><Target /><span>Projected XI</span><strong>{data.lineup.xPts1WithCaptain}</strong><small>GW{data.nextGameweek} incl. captain</small></article>
-            <article><BarChart3 /><span>Formation</span><strong>{data.lineup.formation}</strong><small>{data.lineup.validation.pass ? 'Rule check passed' : 'Validation issue'}</small></article>
-            <article><Sparkles /><span>Captain</span><strong>{captain?.name ?? '—'}</strong><small>VC · {vice?.name ?? '—'}</small></article>
-            <article><Database /><span>Source health</span><strong>{healthySources}/{data.sourceHealth.length}</strong><small>healthy inputs</small></article>
+            <article><Target /><span>Expected points</span><strong>{data.lineup.xPts1WithCaptain}</strong><small>Captain included</small></article>
+            <article><BarChart3 /><span>Team shape</span><strong>{data.lineup.formation}</strong><small>{data.lineup.validation.pass ? 'Valid FPL team' : 'Team needs fixing'}</small></article>
+            <article><Sparkles /><span>Captain</span><strong>{captain?.name ?? '—'}</strong><small>Vice-captain: {vice?.name ?? '—'}</small></article>
+            <article><Database /><span>Data ready</span><strong>{healthySources}/{data.sourceHealth.length}</strong><small>Sources working</small></article>
           </section>
 
           <section className={styles.twoColumn}>
             <article className={styles.panel}>
-              <div className={styles.panelHead}><div><span>Provisional action</span><h3>{primary.moves.length ? primary.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join(' + ') : 'Roll the transfer'}</h3></div><TrendingUp /></div>
+              <div className={styles.panelHead}><div><span>Suggested transfer</span><h3>{transferNames || 'Save the transfer'}</h3></div><TrendingUp /></div>
               <div className={styles.gainGrid}>
-                <div><span>GW1 gain</span><strong>{signed(primary.netGain1)}</strong></div><div><span>3 GW gain</span><strong>{signed(primary.netGain3)}</strong></div><div><span>6 GW gain</span><strong>{signed(primary.netGain6)}</strong></div>
+                <div><span>This week</span><strong>{signed(primary.netGain1)}</strong></div><div><span>Next 3 weeks</span><strong>{signed(primary.netGain3)}</strong></div><div><span>Next 6 weeks</span><strong>{signed(primary.netGain6)}</strong></div>
               </div>
-              <p>{data.transferDecision.reason}</p>
-              <button className={styles.textButton} onClick={() => setTab('transfers')}>Interrogate the transfer <ArrowRight size={15} /></button>
+              <p>{simpleDecisionReason}</p>
+              <button className={styles.textButton} onClick={() => setTab('transfers')}>See transfer options <ArrowRight size={15} /></button>
             </article>
             <article className={styles.panel}>
-              <div className={styles.panelHead}><div><span>Red Team</span><h3>{titleCase(data.redTeam.verdict)}</h3></div><ShieldCheck /></div>
-              <p className={styles.redTeamLead}>{data.redTeam.strongestObjection}</p>
-              <div className={styles.altRoute}><span>Alternative route</span><strong>{data.redTeam.alternativeScenario.moves.length ? data.redTeam.alternativeScenario.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ') : 'Roll'}</strong></div>
-              <button className={styles.textButton} onClick={() => setTab('transfers')}>Read the challenge <ArrowRight size={15} /></button>
+              <div className={styles.panelHead}><div><span>Risk check</span><h3>{simpleRiskVerdict}</h3></div><ShieldCheck /></div>
+              <p className={styles.redTeamLead}>{data.ledger.stale ? 'The saved team is out of date, so wait before making a transfer.' : plainText(data.redTeam.strongestObjection)}</p>
+              <div className={styles.altRoute}><span>Other option</span><strong>{data.redTeam.alternativeScenario.moves.length ? data.redTeam.alternativeScenario.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ') : 'Save the transfer'}</strong></div>
+              <button className={styles.textButton} onClick={() => setTab('transfers')}>See the risks <ArrowRight size={15} /></button>
             </article>
           </section>
 
           <section className={styles.chipDecision}>
             <div className={styles.decisionIcon}><Layers3 /></div>
-            <div><span>Chip planner</span><h3>{data.chipPlan.recommendation.headline}</h3><p>{data.chipPlan.recommendation.reason}</p></div>
-            <button className={styles.textButton} onClick={() => setTab('chips')}>Open the chip schedule <ArrowRight size={15} /></button>
+            <div><span>Chip plan</span><h3>{simpleChipTitle}</h3><p>{simpleChipReason}</p></div>
+            <button className={styles.textButton} onClick={() => setTab('chips')}>See chip plan <ArrowRight size={15} /></button>
           </section>
 
           <section className={styles.panel}>
-            <div className={styles.panelHead}><div><span>Evidence chain</span><h3>From source to decision</h3></div><Activity /></div>
-            <div className={styles.evidenceChain}>{data.finalCommittee.evidenceChain.map((item, index) => <div key={`${item.kind}-${index}`}><b>{String(index + 1).padStart(2, '0')}</b><span>{titleCase(item.kind)}</span><p>{item.statement}</p></div>)}</div>
+            <div className={styles.panelHead}><div><span>Why this is the plan</span><h3>The important points</h3></div><Activity /></div>
+            <div className={styles.evidenceChain}>{simpleEvidence.map((item, index) => <div key={item.label}><b>{String(index + 1).padStart(2, '0')}</b><span>{item.label}</span><p>{item.statement}</p></div>)}</div>
           </section>
         </>}
 
         {tab === 'squad' && <>
-          <section className={styles.squadHeader}><div><span>Optimized XI</span><h2>{data.lineup.formation} · {data.lineup.xPts1WithCaptain} xPts</h2></div><p>Tap any player to inspect the evidence behind their selection.</p></section>
+          <section className={styles.squadHeader}><div><span>Best starting team</span><h2>{data.lineup.formation} · {data.lineup.xPts1WithCaptain} expected points</h2></div><p>Tap a player to see why they were picked.</p></section>
           <section className={styles.squadLayout}>
             <Pitch data={data} playerById={playerById} onPlayer={setSelectedPlayer} />
             <aside className={styles.benchPanel}>
@@ -262,27 +305,27 @@ export default function FplDashboard() {
               <div className={styles.captainBlock}><span>Captaincy shortlist</span>{data.lineup.captaincy.slice(0, 4).map((candidate, index) => <div key={candidate.playerId}><b>{index + 1}</b><strong>{candidate.playerName}</strong><span>{candidate.relativeScore}</span></div>)}</div>
             </aside>
           </section>
-          <section className={styles.ownedGrid}>{owned.sort((a, b) => b.council.score - a.council.score).map((player) => <button className={styles.playerTile} onClick={() => setSelectedPlayer(player)} key={player.id}><div><span>{player.position} · {player.team}</span><strong>{player.name}</strong></div><div className={styles.tileScore}>{player.council.score}</div><p>{player.oneLineReason}</p>{player.council.disagreement && <em><AlertTriangle size={13} /> Council disagreement</em>}</button>)}</section>
+          <section className={styles.ownedGrid}>{owned.sort((a, b) => b.council.score - a.council.score).map((player) => <button className={styles.playerTile} onClick={() => setSelectedPlayer(player)} key={player.id}><div><span>{player.position} · {player.team}</span><strong>{player.name}</strong></div><div className={styles.tileScore}>{player.council.score}</div><p>{plainText(player.oneLineReason)}</p>{player.council.disagreement && <em><AlertTriangle size={13} /> Mixed rating</em>}</button>)}</section>
         </>}
 
         {tab === 'transfers' && <>
           <section className={styles.transferHero}>
-            <div><span>Transfer state</span><h2>{titleCase(data.transferDecision.action)}</h2><p>{data.transferDecision.reason}</p></div>
-            <div><span>Bank after primary</span><strong>{price(primary.bankAfter)}</strong><small>{primary.hitCost ? `-${primary.hitCost} hit` : 'No hit'}</small></div>
+            <div><span>Transfer plan</span><h2>{data.ledger.stale ? 'Update your team first' : transferNames ? 'Make a transfer' : 'Save the transfer'}</h2><p>{simpleDecisionReason}</p></div>
+            <div><span>Money left</span><strong>{price(primary.bankAfter)}</strong><small>{primary.hitCost ? `Costs ${primary.hitCost} points` : 'No points cost'}</small></div>
           </section>
           <section className={styles.scenarioGrid}>
             {[primary, data.redTeam.alternativeScenario, data.transferDecision.baseline].filter((item, index, all) => all.findIndex((other) => other.id === item.id) === index).map((scenario, index) => (
-              <article className={styles.scenario} key={scenario.id}><div className={styles.scenarioRank}>0{index + 1}</div><span>{index === 0 ? 'Primary model route' : index === 1 ? 'Red Team route' : 'Roll baseline'}</span><h3>{scenario.moves.length ? scenario.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ') : 'No transfer'}</h3><div className={styles.scenarioNumbers}><div><span>3 GW</span><strong>{signed(scenario.netGain3)}</strong></div><div><span>6 GW</span><strong>{signed(scenario.netGain6)}</strong></div><div><span>Bank</span><strong>{price(scenario.bankAfter)}</strong></div></div><p>{scenario.explanation}</p></article>
+              <article className={styles.scenario} key={scenario.id}><div className={styles.scenarioRank}>0{index + 1}</div><span>{index === 0 ? 'Best option' : index === 1 ? 'Other option' : 'Save the transfer'}</span><h3>{scenario.moves.length ? scenario.moves.map((move) => `${move.outPlayerName} → ${move.inPlayerName}`).join('; ') : 'No transfer'}</h3><div className={styles.scenarioNumbers}><div><span>Next 3 weeks</span><strong>{signed(scenario.netGain3)}</strong></div><div><span>Next 6 weeks</span><strong>{signed(scenario.netGain6)}</strong></div><div><span>Money left</span><strong>{price(scenario.bankAfter)}</strong></div></div><p>{scenario.moves.length ? `Expected to add ${scenario.netGain3.toFixed(1)} points over the next three gameweeks.` : 'Keep the free transfer for another week.'}</p></article>
             ))}
           </section>
-          {data.transferComparisons.map((comparison) => <section className={styles.comparisonCard} key={`${comparison.selectedPlayerId}-${comparison.alternativePlayerId}`}><div className={styles.versus}><strong>{comparison.selectedPlayerName}</strong><span>instead of</span><strong>{comparison.alternativePlayerName}</strong></div><div className={styles.comparisonNumbers}><span>{signed(comparison.xPtsDifference3)} xPts / 3GW</span><span>{signed(comparison.priceDifference)}m price</span><span>{signed(comparison.councilDifference)} Council</span></div><p>{comparison.reason}</p><small>Decision flips if: {comparison.whatWouldChange}</small></section>)}
-          <section className={styles.panel}><div className={styles.panelHead}><div><span>Red Team objections</span><h3>How this plan fails</h3></div><ShieldCheck /></div><div className={styles.objectionList}>{data.redTeam.objections.map((objection) => <article key={objection.question}><b className={styles[`severity_${objection.severity}`]}>{objection.severity}</b><div><strong>{objection.question}</strong><p>{objection.finding}</p><small>{objection.mitigation}</small></div></article>)}</div></section>
+          {data.transferComparisons.map((comparison) => <section className={styles.comparisonCard} key={`${comparison.selectedPlayerId}-${comparison.alternativePlayerId}`}><div className={styles.versus}><strong>{comparison.selectedPlayerName}</strong><span>instead of</span><strong>{comparison.alternativePlayerName}</strong></div><div className={styles.comparisonNumbers}><span>{signed(comparison.xPtsDifference3)} points / 3 weeks</span><span>{signed(comparison.priceDifference)}m price</span><span>{signed(comparison.councilDifference)} rating</span></div><p>{plainText(comparison.reason)}</p><small>This changes if: {plainText(comparison.whatWouldChange)}</small></section>)}
+          <section className={styles.panel}><div className={styles.panelHead}><div><span>Risk checks</span><h3>What could go wrong</h3></div><ShieldCheck /></div><div className={styles.objectionList}>{data.redTeam.objections.map((objection) => <article key={objection.question}><b className={styles[`severity_${objection.severity}`]}>{objection.severity}</b><div><strong>{objection.question}</strong><p>{objection.finding}</p><small>{objection.mitigation}</small></div></article>)}</div></section>
         </>}
 
         {tab === 'chips' && <>
           <section className={styles.transferHero}>
-            <div><span>Half {data.chipPlan.currentHalf} chip call</span><h2>{data.chipPlan.recommendation.headline}</h2><p>{data.chipPlan.recommendation.reason}</p></div>
-            <div><span>Decision probability</span><strong>{data.chipPlan.recommendation.confidence}%</strong><small>{data.chipPlan.recommendation.inputConfidence}% input confidence · {data.chipPlan.gameweeksRemaining} deadline{data.chipPlan.gameweeksRemaining === 1 ? '' : 's'} before expiry</small></div>
+            <div><span>Chip decision</span><h2>{simpleChipTitle}</h2><p>{simpleChipReason}</p></div>
+            <div><span>Confidence</span><strong>{data.chipPlan.recommendation.confidence}%</strong><small>{data.chipPlan.recommendation.inputConfidence}% data confidence · {data.chipPlan.gameweeksRemaining} deadline{data.chipPlan.gameweeksRemaining === 1 ? '' : 's'} left</small></div>
           </section>
           <section className={styles.chipGrid}>
             {data.chipPlan.assessments.map((assessment) => {
@@ -302,32 +345,32 @@ export default function FplDashboard() {
           </section>}
           <section className={styles.twoColumn}>
             <article className={styles.panel}>
-              <div className={styles.panelHead}><div><span>Combined strategy</span><h3>Non-colliding chip sequence</h3></div><Target /></div>
+              <div className={styles.panelHead}><div><span>Chip order</span><h3>Best order to use your chips</h3></div><Target /></div>
               <div className={styles.opportunityList}>{data.chipPlan.sequence.map((step) => <div key={`${step.chip}-${step.gameweek}`}><b>GW{step.gameweek}</b><span><strong>{titleCase(step.chip)}</strong><small>{step.reason}</small></span><em>{step.quality}</em></div>)}</div>
             </article>
             <article className={styles.panel}>
-              <div className={styles.panelHead}><div><span>Opportunity calendar</span><h3>Current top windows</h3></div><Sparkles /></div>
+              <div className={styles.panelHead}><div><span>Best weeks</span><h3>Best options right now</h3></div><Sparkles /></div>
               <div className={styles.opportunityList}>{data.chipPlan.assessments.filter((item) => item.availability === 'available').flatMap((item) => item.opportunities.slice(0, 2)).sort((a, b) => a.gameweek - b.gameweek || b.quality - a.quality).map((opportunity) => <div key={`${opportunity.chip}-${opportunity.gameweek}`}><b>GW{opportunity.gameweek}</b><span><strong>{titleCase(opportunity.chip)}</strong><small>{opportunity.explanation}</small></span><em>{opportunity.quality}</em></div>)}</div>
             </article>
             <article className={styles.panel}>
-              <div className={styles.panelHead}><div><span>Blank & double scan</span><h3>{data.chipPlan.calendarFlags.length ? `${data.chipPlan.calendarFlags.length} exceptional Gameweek${data.chipPlan.calendarFlags.length === 1 ? '' : 's'} scheduled` : 'No blanks or doubles currently scheduled'}</h3></div><Layers3 /></div>
+              <div className={styles.panelHead}><div><span>Blank and double gameweeks</span><h3>{data.chipPlan.calendarFlags.length ? `${data.chipPlan.calendarFlags.length} unusual Gameweek${data.chipPlan.calendarFlags.length === 1 ? '' : 's'} scheduled` : 'No blanks or doubles currently scheduled'}</h3></div><Layers3 /></div>
               {data.chipPlan.calendarFlags.length ? <ul className={styles.notesList}>{data.chipPlan.calendarFlags.map((flag) => <li key={flag.gameweek}>{flag.explanation}</li>)}</ul> : <p>The official schedule is currently normal through GW{data.chipPlan.expiresAfterGameweek}. The scan reruns automatically after postponements or rearrangements.</p>}
               <a className={styles.textButton} href={data.chipPlan.ruleSourceUrl} target="_blank" rel="noreferrer">Official 2026/27 chip rules <ArrowRight size={15} /></a>
             </article>
           </section>
           <section className={styles.twoColumn}>
-            <article className={styles.panel}><div className={styles.panelHead}><div><span>Activation gate</span><h3>{titleCase(data.chipPlan.activationGate.status)}</h3></div><ShieldCheck /></div><p>{data.chipPlan.activationGate.reason}</p><small>{data.chipPlan.activationGate.hoursToDeadline == null ? 'Deadline time unavailable' : `${data.chipPlan.activationGate.hoursToDeadline} hours to deadline`} · {data.chipPlan.activationGate.irreversible ? 'Irreversible after activation' : 'Cancelable before the deadline'}</small></article>
-            <article className={styles.panel}><div className={styles.panelHead}><div><span>Ledger cross-check</span><h3>{titleCase(data.chipPlan.entryVerification.status)}</h3></div><ShieldCheck /></div><p>{data.chipPlan.entryVerification.message}</p><small>This read-only check never records transfers or chips.</small></article>
+            <article className={styles.panel}><div className={styles.panelHead}><div><span>Can you use it now?</span><h3>{titleCase(data.chipPlan.activationGate.status)}</h3></div><ShieldCheck /></div><p>{data.chipPlan.activationGate.reason}</p><small>{data.chipPlan.activationGate.hoursToDeadline == null ? 'Deadline time unavailable' : `${data.chipPlan.activationGate.hoursToDeadline} hours to deadline`} · {data.chipPlan.activationGate.irreversible ? 'Cannot be undone after activation' : 'Can be cancelled before the deadline'}</small></article>
+            <article className={styles.panel}><div className={styles.panelHead}><div><span>Saved team check</span><h3>{data.ledger.stale ? 'Team update needed' : titleCase(data.chipPlan.entryVerification.status)}</h3></div><ShieldCheck /></div><p>{data.ledger.stale ? `Tell the app what you did in GW${data.ledger.nextGameweek} before using this advice.` : data.chipPlan.entryVerification.message}</p><small>This check never records transfers or chips by itself.</small></article>
           </section>
-          <section className={styles.panel}><div className={styles.panelHead}><div><span>Fixture uncertainty</span><h3>{titleCase(data.chipPlan.calendarUncertainty.level)} · {data.chipPlan.calendarUncertainty.unassignedFixtures} unassigned</h3></div><Layers3 /></div><p>{data.chipPlan.calendarUncertainty.explanation}</p></section>
-          <section className={styles.panel}><div className={styles.panelHead}><div><span>Method</span><h3>How each chip is valued</h3></div><ShieldCheck /></div><ul className={styles.notesList}>{data.chipPlan.modelNotes.map((note) => <li key={note}>{note}</li>)}</ul></section>
+          <section className={styles.panel}><div className={styles.panelHead}><div><span>Fixture changes</span><h3>{titleCase(data.chipPlan.calendarUncertainty.level)} · {data.chipPlan.calendarUncertainty.unassignedFixtures} not scheduled</h3></div><Layers3 /></div><p>{data.chipPlan.calendarUncertainty.explanation}</p></section>
+          <section className={styles.panel}><div className={styles.panelHead}><div><span>How it works</span><h3>How the chip scores are worked out</h3></div><ShieldCheck /></div><ul className={styles.notesList}>{data.chipPlan.modelNotes.map((note) => <li key={note}>{note}</li>)}</ul></section>
         </>}
 
         {tab === 'council' && <>
-          <section className={styles.councilIntro}><div><span>Decision Council</span><h2>Ten lenses. One accountable verdict.</h2><p>Different evidence is allowed to disagree. Scores are deterministic model views—not simulated personalities.</p></div><div><strong>{data.players.filter((player) => player.council.disagreement).length}</strong><span>material disagreements</span></div></section>
+          <section className={styles.councilIntro}><div><span>Player ratings</span><h2>Every available player, compared.</h2><p>The rating combines fixtures, minutes, form, value and risk. Open a player to see the reasons.</p></div><div><strong>{data.players.filter((player) => player.council.disagreement).length}</strong><span>mixed ratings</span></div></section>
           <div className={styles.searchBox}><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search every available player…" /></div>
           <section className={styles.councilTable}>
-            <div className={styles.tableHead}><span>Player</span><span>xPts 3</span><span>Minutes</span><span>Council</span><span>Verdict</span></div>
+            <div className={styles.tableHead}><span>Player</span><span>3-week points</span><span>Minutes</span><span>Rating</span><span>View</span></div>
             {filtered.map((player) => <button onClick={() => setSelectedPlayer(player)} key={player.id}><span><b>{player.name}</b><small>{player.team} · {player.position} · {price(player.price)}</small></span><strong>{player.xPts3}</strong><strong>{player.expectedMinutes}</strong><strong>{player.council.score}</strong><em className={styles[`verdict_${player.council.verdict}`]}>{titleCase(player.council.verdict)}</em></button>)}
           </section>
           <section className={styles.comparePanel}><div><span>Player comparison</span><h3>Put two decisions side by side</h3></div><div className={styles.selectRow}><select value={compareA ?? ''} onChange={(event) => setCompareA(Number(event.target.value) || null)}><option value="">Select player A</option>{data.players.slice().sort((a, b) => a.name.localeCompare(b.name)).map((player) => <option value={player.id} key={player.id}>{player.name} · {player.team}</option>)}</select><span>VS</span><select value={compareB ?? ''} onChange={(event) => setCompareB(Number(event.target.value) || null)}><option value="">Select player B</option>{data.players.slice().sort((a, b) => a.name.localeCompare(b.name)).map((player) => <option value={player.id} key={player.id}>{player.name} · {player.team}</option>)}</select></div>{compareFirst && compareSecond && <div className={styles.compareResult}><div><strong>{compareFirst.name}</strong><span>{compareFirst.xPts3} xPts · {price(compareFirst.price)}</span><em>Council {compareFirst.council.score}</em></div><div className={styles.compareDelta}><span>3GW edge</span><strong>{signed(compareFirst.xPts3 - compareSecond.xPts3)}</strong><small>{price(Math.abs(compareFirst.price - compareSecond.price))} price gap</small></div><div><strong>{compareSecond.name}</strong><span>{compareSecond.xPts3} xPts · {price(compareSecond.price)}</span><em>Council {compareSecond.council.score}</em></div></div>}</section>
@@ -335,7 +378,7 @@ export default function FplDashboard() {
         </>}
 
         {tab === 'context' && <>
-          <section className={styles.councilIntro}><div><span>Previous four Gameweeks</span><h2>What the scoreline did not say.</h2><p>Live match commentary is reduced to player-level role, threat, creativity, set-piece, defensive and availability signals. Repeat evidence can raise confidence slightly; it never creates xPts by itself.</p></div><div><strong>{commentaryInsights.filter((insight) => insight.status === 'corroborated').length}</strong><span>corroborated signals</span></div></section>
+          <section className={styles.councilIntro}><div><span>Last four gameweeks</span><h2>Useful details the score may miss.</h2><p>Match reports help spot role changes, attacking threat, set pieces, defensive work and injury news. They support the main stats but do not create points on their own.</p></div><div><strong>{commentaryInsights.filter((insight) => insight.status === 'corroborated').length}</strong><span>strong signals</span></div></section>
           <section className={styles.metricGrid}>
             <article><Activity /><span>Players flagged</span><strong>{commentaryInsights.length}</strong><small>whole player pool</small></article>
             <article><Check /><span>Corroborated</span><strong>{commentaryInsights.filter((insight) => insight.status === 'corroborated').length}</strong><small>repeat or structured support</small></article>
@@ -375,6 +418,9 @@ export default function FplDashboard() {
 
         <footer className={styles.footer}><span>Model {data.modelVersions.revision}</span><span>Updated daily and before each deadline</span></footer>
       </div>
+      <nav className={styles.mobileTabs} aria-label="FPL dashboard sections">
+        {tabs.map((item) => <button className={tab === item.id ? styles.activeTab : ''} onClick={() => setTab(item.id)} key={item.id}>{item.label}</button>)}
+      </nav>
       {selectedPlayer && <PlayerDrawer player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />}
     </main>
   );

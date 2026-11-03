@@ -1070,3 +1070,138 @@
   .councilIntro,
   .dataIntro { padding: 1rem; }
 }
+
+/* FPL colour system */
+.page {
+  --purple: #37003c;
+  --purple-light: #5b0063;
+  --pink: #e90052;
+  --fpl-green: #00ff87;
+  --cyan: #04f5ff;
+  --orange: var(--purple);
+  --green: #008f58;
+  --orange-soft: #f7edf8;
+  background: linear-gradient(180deg, var(--purple) 0, var(--purple) 15rem, #f7f4f8 15rem, #f7f4f8 100%);
+}
+
+.hero {
+  border-color: rgba(0, 255, 135, 0.45);
+  background: linear-gradient(135deg, var(--purple) 0%, var(--purple-light) 100%);
+  color: #fff;
+}
+.appIcon { border: 2px solid var(--fpl-green); }
+.kicker,
+.kicker span { color: var(--fpl-green); }
+.kicker i { background: rgba(255,255,255,0.3); }
+.hero > div:first-child > p,
+.heroMeta small { color: rgba(255,255,255,0.78); }
+.heroMeta > div { color: #fff; }
+.heroMeta button {
+  border-color: var(--fpl-green);
+  background: var(--fpl-green);
+  color: var(--purple);
+  font-weight: 750;
+}
+.heroMeta button:hover { border-color: #fff; color: var(--purple); }
+.status_healthy { background: var(--fpl-green); box-shadow: 0 0 0 4px rgba(0,255,135,0.18); }
+.status_degraded { background: var(--pink); box-shadow: 0 0 0 4px rgba(233,0,82,0.18); }
+
+.tabs {
+  border-color: rgba(0,255,135,0.45);
+  background: var(--purple);
+}
+.tabs button { color: rgba(255,255,255,0.78); }
+.tabs button:hover { color: #fff; }
+.tabs .activeTab { background: var(--fpl-green); color: var(--purple) !important; -webkit-text-fill-color: var(--purple); }
+
+.decisionCard { border-left-color: var(--fpl-green); }
+.waitDecision { border-left-color: var(--pink); }
+.decisionIcon,
+.decisionCard span,
+.panelHead svg,
+.metricGrid svg { color: var(--purple); }
+.decisionCard.waitDecision .decisionIcon,
+.decisionCard.waitDecision span { color: var(--pink); }
+.confidence strong { color: var(--purple); }
+
+.metricGrid article { border-top: 4px solid var(--purple); }
+.metricGrid article:nth-child(2) { border-top-color: var(--pink); }
+.metricGrid article:nth-child(3) { border-top-color: var(--fpl-green); }
+.metricGrid article:nth-child(4) { border-top-color: var(--cyan); }
+.metricGrid article:nth-child(2) svg { color: var(--pink); }
+.metricGrid article:nth-child(3) svg { color: #008f58; }
+.metricGrid article:nth-child(4) svg { color: #00899a; }
+
+.panelHead h3,
+.sectionHeading h3,
+.squadHeader h2,
+.transferHero h2,
+.councilIntro h2,
+.dataIntro h2,
+.comparePanel h3,
+.calibrationHead h3 { color: var(--purple); }
+.textButton { color: var(--pink); font-weight: 700; }
+.chipDecision {
+  border-left-color: var(--pink);
+  background: linear-gradient(110deg, rgba(0,255,135,0.1), #fff 48%, rgba(233,0,82,0.06));
+}
+.chipDecision .decisionIcon,
+.chipDecision > div:nth-child(2) > span { color: var(--pink); }
+.tileScore,
+.benchPanel > button > b,
+.evidenceChain b,
+.omissionGrid article > b,
+.compareDelta strong,
+.scenario > span,
+.comparisonNumbers { color: var(--pink); }
+.playerTile:hover,
+.benchPanel > button:hover,
+.councilTable > button:hover { border-color: var(--fpl-green); }
+.searchBox svg { color: var(--pink); }
+.verdict_strong_buy,
+.verdict_buy,
+.chipSquad small,
+.opportunityList em { color: #008f58; }
+.pitch { background: linear-gradient(180deg, #00a864 0%, #007c4b 100%); }
+.pitchPlayer { background: rgba(55, 0, 60, 0.94); }
+.drawerReason { border-left-color: var(--pink); background: #fff1f6; }
+.scoreOrb strong,
+.lensScore,
+.fixtureStrip em { color: var(--pink); }
+
+.mobileTabs { display: none; }
+
+@media (max-width: 760px) {
+  .page { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+  .tabs { display: none; }
+  .mobileTabs {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 80;
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.6rem 0.55rem calc(0.6rem + env(safe-area-inset-bottom));
+    overflow-x: auto;
+    border-top: 2px solid var(--fpl-green);
+    background: var(--purple);
+    box-shadow: 0 -8px 24px rgba(55,0,60,0.2);
+    scrollbar-width: none;
+  }
+  .mobileTabs::-webkit-scrollbar { display: none; }
+  .mobileTabs button {
+    min-width: 5.2rem;
+    padding: 0.75rem 0.65rem;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: rgba(255,255,255,0.78);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .mobileTabs .activeTab { background: var(--fpl-green); color: var(--purple); }
+  .hero { border-color: rgba(0,255,135,0.55); }
+}
