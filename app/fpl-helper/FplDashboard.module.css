@@ -1282,10 +1282,102 @@
 .drawerReason { background: #ffe4ee; }
 .loadingShell { background: #d5fbf6; }
 
+/* Team page: explain every score and give the content room to breathe. */
+.squadHeader {
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--gradient-fpl);
+}
+.squadLayout { gap: 1rem; }
+.benchPanel { border-radius: 12px; }
+
+.captainBlock { margin-top: 1.5rem; }
+.captainBlock > .captainBlockHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0 0 0.7rem;
+  border: 0;
+}
+.captainBlockHeading span {
+  color: var(--purple);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+.captainBlockHeading small {
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+.captainBlock > div:not(.captainBlockHeading) {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.42);
+}
+.captainBlock > div.captainTop {
+  border-color: #c99a18;
+  box-shadow: 0 0 0 2px #e7bd45, 0 7px 20px rgba(138,96,0,0.14);
+  background: linear-gradient(135deg, #fff7cf 0%, #f6fffb 50%, #ffe8f0 100%);
+}
+.captainBlock > div > b {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--purple);
+  color: #fff;
+}
+.captainTop > b { background: #c99a18 !important; }
+.captainCopy { display: flex; min-width: 0; flex-direction: column; gap: 0.22rem; }
+.captainCopy strong { font-size: 0.76rem; }
+.captainCopy small { color: var(--muted); font-size: 0.66rem; line-height: 1.4; }
+.captainBlock > div:not(.captainBlockHeading) > span {
+  display: flex;
+  min-width: 72px;
+  flex-direction: column;
+  gap: 0.15rem;
+  align-items: flex-end;
+}
+.captainBlock > div:not(.captainBlockHeading) > span small { color: var(--muted); font-size: 0.56rem; }
+.captainBlock > div:not(.captainBlockHeading) > span strong { color: var(--purple); font-size: 0.92rem; }
+
+.playerRatingsSection { margin-top: 2rem; }
+.ratingsHeader {
+  max-width: 720px;
+  padding: 0 0.25rem;
+}
+.ratingsHeader > span { color: var(--pink); font-size: 0.72rem; font-weight: 750; }
+.ratingsHeader h3 { margin: 0.25rem 0 0.35rem; color: var(--purple); font-size: 1.45rem; }
+.ratingsHeader p { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.55; }
+.ownedGrid { gap: 1rem; margin-top: 1rem; }
+.playerTile { padding: 1.25rem; }
+.playerTile p { line-height: 1.62; }
+.tileScore {
+  width: 48px;
+  height: 48px;
+  grid-template-rows: auto auto;
+  align-content: center;
+  gap: 0.05rem;
+}
+.tileScore strong { color: var(--pink); font-size: 0.83rem; line-height: 1; }
+.tileScore small { color: var(--muted); font-size: 0.52rem; line-height: 1; }
+
 .mobileTabs { display: none; }
 
 @media (max-width: 760px) {
-  .page { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+  .page {
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+    background: var(--aqua-page);
+  }
   .hero { gap: 0.85rem; padding: 0.9rem 1rem; }
   .heroMeta {
     display: grid;
@@ -1296,6 +1388,15 @@
   .heroMeta small { grid-column: 1 / -1; }
   .appIcon { width: 2.75rem; height: 2.75rem; }
   .hero h1 { font-size: 1.75rem; }
+  .squadHeader { gap: 0.6rem; margin: 1rem 0; padding: 1rem; }
+  .squadHeader h2 { font-size: 1.55rem; line-height: 1.18; }
+  .squadHeader p { margin-top: 0; font-size: 0.78rem; }
+  .squadLayout { gap: 1rem; }
+  .benchPanel { gap: 0.85rem; padding: 1rem; }
+  .captainBlock { margin-top: 0.75rem; }
+  .playerRatingsSection { margin-top: 2.25rem; }
+  .ratingsHeader { padding-inline: 0.15rem; }
+  .ownedGrid { gap: 1rem; }
   .tabs { display: none; }
   .mobileTabs {
     position: fixed;

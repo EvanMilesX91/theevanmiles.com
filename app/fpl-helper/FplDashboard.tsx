@@ -303,10 +303,29 @@ export default function FplDashboard() {
             <aside className={styles.benchPanel}>
               <div className={styles.sectionLabel}>Bench order</div>
               {bench.map((player, index) => <button onClick={() => setSelectedPlayer(player)} key={player.id}><b>{player.position === 'GK' ? 'GK' : index + 1}</b><span><strong>{player.name}</strong><small>{player.team} · {player.xPts1} xPts</small></span><ChevronRight size={15} /></button>)}
-              <div className={styles.captainBlock}><span>Captaincy shortlist</span>{data.lineup.captaincy.slice(0, 4).map((candidate, index) => <div key={candidate.playerId}><b>{index + 1}</b><strong>{candidate.playerName}</strong><span>{candidate.relativeScore}</span></div>)}</div>
+              <div className={styles.captainBlock}>
+                <div className={styles.captainBlockHeading}>
+                  <span>Captaincy shortlist</span>
+                  <small>Captain score combines expected points, upside, minutes and confidence. Higher is better.</small>
+                </div>
+                {data.lineup.captaincy.slice(0, 4).map((candidate, index) => (
+                  <div className={index === 0 ? styles.captainTop : ''} key={candidate.playerId}>
+                    <b>{index + 1}</b>
+                    <div className={styles.captainCopy}><strong>{candidate.playerName}</strong><small>{plainText(candidate.reason)}</small></div>
+                    <span><small>Captain score</small><strong>{candidate.relativeScore}</strong></span>
+                  </div>
+                ))}
+              </div>
             </aside>
           </section>
-          <section className={styles.ownedGrid}>{owned.sort((a, b) => b.council.score - a.council.score).map((player) => <button className={styles.playerTile} onClick={() => setSelectedPlayer(player)} key={player.id}><div><span>{player.position} · {player.team}</span><strong>{player.name}</strong></div><div className={styles.tileScore}>{player.council.score}</div><p>{plainText(player.oneLineReason)}</p>{player.council.disagreement && <em><AlertTriangle size={13} /> Mixed rating</em>}</button>)}</section>
+          <section className={styles.playerRatingsSection}>
+            <div className={styles.ratingsHeader}>
+              <span>Full squad</span>
+              <h3>Player ratings</h3>
+              <p>The rating is out of 100 and combines expected points, minutes, fixtures, value and risk. Higher is better.</p>
+            </div>
+            <div className={styles.ownedGrid}>{owned.sort((a, b) => b.council.score - a.council.score).map((player) => <button className={styles.playerTile} onClick={() => setSelectedPlayer(player)} key={player.id}><div><span>{player.position} · {player.team}</span><strong>{player.name}</strong></div><div className={styles.tileScore} aria-label={`${player.council.score} out of 100 rating`}><strong>{player.council.score}</strong><small>/100</small></div><p>{plainText(player.oneLineReason)}</p>{player.council.disagreement && <em><AlertTriangle size={13} /> Mixed rating</em>}</button>)}</div>
+          </section>
         </>}
 
         {tab === 'transfers' && <>
