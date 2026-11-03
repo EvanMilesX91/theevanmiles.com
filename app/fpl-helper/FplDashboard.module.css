@@ -1081,6 +1081,9 @@
   --aqua-page: #d5fbf6;
   --aqua-surface: #effffd;
   --aqua-strong: #c4f8ef;
+  --gradient-fpl: linear-gradient(125deg, #c9fff0 0%, #f3fffd 48%, #ffe0eb 100%);
+  --gradient-cool: linear-gradient(135deg, #d6fff6 0%, #e8ffff 55%, #e8e4ff 100%);
+  --gradient-pink: linear-gradient(135deg, #fff0f5 0%, #effffd 55%, #d7fff4 100%);
   --surface: var(--aqua-surface);
   --surface-solid: var(--aqua-surface);
   --line: #9bd8d2;
@@ -1092,10 +1095,17 @@
 
 .hero {
   border-color: rgba(0, 255, 135, 0.45);
-  background: linear-gradient(135deg, var(--purple) 0%, var(--purple-light) 100%);
+  padding: 1.1rem 1.25rem;
+  background:
+    radial-gradient(circle at 12% 15%, rgba(4,245,255,0.18), transparent 16rem),
+    radial-gradient(circle at 90% 100%, rgba(233,0,82,0.2), transparent 18rem),
+    linear-gradient(135deg, var(--purple) 0%, var(--purple-light) 100%);
   color: #fff;
 }
-.appIcon { border: 2px solid var(--fpl-green); }
+.brandStrip { gap: 0.8rem; margin: 0; }
+.appIcon { width: 3.1rem; height: 3.1rem; border: 2px solid var(--fpl-green); border-radius: 14px; }
+.hero h1 { margin-top: 0.12rem; font-size: clamp(1.9rem, 4vw, 2.75rem); letter-spacing: -0.045em; line-height: 1; }
+.brandStrip .kicker { margin: 0; }
 .kicker,
 .kicker span { color: var(--fpl-green); }
 .kicker i { background: rgba(255,255,255,0.3); }
@@ -1120,8 +1130,13 @@
 .tabs button:hover { color: #fff; }
 .tabs .activeTab { background: var(--fpl-green); color: var(--purple) !important; -webkit-text-fill-color: var(--purple); }
 
-.decisionCard { border-left-color: var(--fpl-green); }
-.waitDecision { border-left-color: var(--pink); }
+.decisionCard,
+.chipDecision {
+  border-left: 1px solid var(--line);
+  background: var(--gradient-fpl);
+}
+.waitDecision,
+.goDecision { border-left-color: var(--line); }
 .decisionIcon,
 .decisionCard span,
 .panelHead svg,
@@ -1130,10 +1145,12 @@
 .decisionCard.waitDecision span { color: var(--pink); }
 .confidence strong { color: var(--purple); }
 
-.metricGrid article { border-top: 4px solid var(--purple); }
+.metricGrid article { border-top: 1px solid var(--line); background: var(--gradient-cool); }
 .metricGrid article:nth-child(2) { border-top-color: var(--pink); }
 .metricGrid article:nth-child(3) { border-top-color: var(--fpl-green); }
 .metricGrid article:nth-child(4) { border-top-color: var(--cyan); }
+.metricGrid article:nth-child(2),
+.metricGrid article:nth-child(4) { background: var(--gradient-pink); }
 .metricGrid article:nth-child(2) svg { color: var(--pink); }
 .metricGrid article:nth-child(3) svg { color: #008f58; }
 .metricGrid article:nth-child(4) svg { color: #00899a; }
@@ -1148,8 +1165,8 @@
 .calibrationHead h3 { color: var(--purple); }
 .textButton { color: var(--pink); font-weight: 700; }
 .chipDecision {
-  border-left-color: var(--pink);
-  background: linear-gradient(110deg, var(--aqua-strong), var(--aqua-surface) 48%, #ffe4ee);
+  border-left-color: var(--line);
+  background: var(--gradient-fpl);
 }
 .chipDecision .decisionIcon,
 .chipDecision > div:nth-child(2) > span { color: var(--pink); }
@@ -1197,6 +1214,58 @@
   background: var(--aqua-surface);
 }
 
+.decisionCard,
+.chipDecision {
+  border-left: 1px solid var(--line);
+  background: var(--gradient-fpl);
+}
+
+.metricGrid article { border-top-width: 1px; background: var(--gradient-cool); }
+.metricGrid article:nth-child(2),
+.metricGrid article:nth-child(4) { background: var(--gradient-pink); }
+
+.twoColumn .panel:first-child,
+.transferHero,
+.councilIntro,
+.dataIntro,
+.comparePanel,
+.calibrationPanel { background: var(--gradient-cool); }
+
+.twoColumn .panel:nth-child(2),
+.panel:has(.evidenceChain),
+.scenario:nth-child(even),
+.playerTile:nth-child(even) { background: var(--gradient-pink); }
+
+.panel:has(.evidenceChain),
+.scenario:nth-child(odd),
+.playerTile:nth-child(odd) { background-image: var(--gradient-fpl); }
+
+.chipCard:nth-child(odd),
+.benchPanel,
+.comparisonCard:nth-of-type(odd),
+.omissionGrid article:nth-child(odd) { background: var(--gradient-cool); }
+
+.chipCard:nth-child(even),
+.comparisonCard:nth-of-type(even),
+.omissionGrid article:nth-child(even),
+.sourceList { background: var(--gradient-pink); }
+
+.decisionIcon { background: rgba(255,255,255,0.48); }
+.altRoute {
+  margin-top: 1rem;
+  padding: 0.75rem 0.85rem;
+  border-left: 0;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.46);
+}
+.evidenceChain > div {
+  border-left: 0;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.35);
+}
+.drawerReason { border-left: 0; border-radius: 10px; }
+.inlineError { border-left-width: 1px; }
+
 .chipNow,
 .chipSquad button,
 .selectRow select,
@@ -1217,6 +1286,16 @@
 
 @media (max-width: 760px) {
   .page { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+  .hero { gap: 0.85rem; padding: 0.9rem 1rem; }
+  .heroMeta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    align-items: center;
+  }
+  .heroMeta small { grid-column: 1 / -1; }
+  .appIcon { width: 2.75rem; height: 2.75rem; }
+  .hero h1 { font-size: 1.75rem; }
   .tabs { display: none; }
   .mobileTabs {
     position: fixed;

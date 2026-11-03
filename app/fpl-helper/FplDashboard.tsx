@@ -234,10 +234,11 @@ export default function FplDashboard() {
           <div>
             <div className={styles.brandStrip}>
               <Image className={styles.appIcon} src="/fpl/icon-192.png" alt="FPL Decision Room" width={72} height={72} priority />
-              <div className={styles.kicker}><span>Gameweek {data.nextGameweek}</span><i />Decision room</div>
+              <div>
+                <div className={styles.kicker}><span>Your FPL plan</span></div>
+                <h1>Gameweek {data.nextGameweek}</h1>
+              </div>
             </div>
-            <h1>FPL Decision Room</h1>
-            <p>Your team, transfer plan, captain and chip strategy in one place.</p>
           </div>
           <div className={styles.heroMeta}>
             <div><StatusDot status={data.ledger.stale ? 'degraded' : 'healthy'} /><span>{data.ledger.stale ? `Team update needed for GW${data.ledger.nextGameweek}` : 'Team is up to date'}</span></div>
